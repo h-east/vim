@@ -13,12 +13,16 @@
     <section class="page-header">
       <h1 class="project-name">Vim-CLPUM</h1>
       <h2 class="project-tagline">CLPUM (Command-Line mode PopUp Menu) for Vim</h2>
-      <a href="https://github.com/h-east/vim/tree/clpum/" class="btn">View on GitHub</a>
+      <a href="https://github.com/h-east/vim" class="btn">View on GitHub</a>
+      <a href="https://github.com/h-east/vim/zipball/master" class="btn">Download .zip</a>
+      <a href="https://github.com/h-east/vim/tarball/master" class="btn">Download .tar.gz</a>
     </section>
 
     <section class="main-content">
       <h3>
 <a id="what-is-vim-clpum" class="anchor" href="#what-is-vim-clpum" aria-hidden="true"><span class="octicon octicon-link"></span></a>What is Vim-CLPUM?</h3>
+
+<p>(Update: 2015-12-07)  </p>
 
 <p>vim-CLPUM is implementation of Command-Line mode PopUp Menu for Vim.<br>
 Modified Vim's C source code.  </p>
@@ -43,7 +47,7 @@ Modified Vim's C source code.  </p>
     <span class="pl-c1">set</span> clcompletefunc=UserDefinedClComplete
     <span class="pl-k">function</span>! <span class="pl-en">UserDefinedClComplete</span>(findstart, base)
         <span class="pl-k">if</span> <span class="pl-smi">a:findstart</span>
-            <span class="pl-k">return</span> <span class="pl-c1">0</span>
+            <span class="pl-k">return</span> <span class="pl-c1">getcmdpos</span>()
         <span class="pl-k">else</span>
             <span class="pl-k">return</span> [
             <span class="pl-k">\</span>   { <span class="pl-s">'word'</span>: <span class="pl-s">'Jan'</span>, <span class="pl-s">'menu'</span>: <span class="pl-s">'January'</span> },
@@ -114,7 +118,7 @@ CLPUM activate by pressing the &lt;Tab&gt; or &lt;C-D&gt; in command-line mode. 
 </tr>
 <tr>
 <td>Debug and refactor</td>
-<td>60</td>
+<td>65</td>
 </tr>
 <tr>
 <td>Write documents</td>
