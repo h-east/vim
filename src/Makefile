@@ -1515,6 +1515,9 @@ MEMFILE_TEST_TARGET = memfile_test$(EXEEXT)
 UNITTEST_SRC = $(MEMFILE_TEST_SRC)
 UNITTEST_TARGETS = $(MEMFILE_TEST_TARGET)
 
+# syntax/vim.vim generator & Vim source code sanity checker
+GEN_SYN_VIM_DIR = gen_syntax_vim
+
 # All sources, also the ones that are not configured
 ALL_SRC = $(BASIC_SRC) $(ALL_GUI_SRC) $(UNITTEST_SRC) $(EXTRA_SRC)
 
@@ -1666,7 +1669,7 @@ PRO_MANUAL = os_amiga.pro os_msdos.pro os_win16.pro os_win32.pro \
 	os_mswin.pro winclip.pro os_beos.pro os_vms.pro $(PERL_PRO)
 
 # Default target is making the executable and tools
-all: $(VIMTARGET) $(TOOLS) languages $(GUI_BUNDLE)
+all: $(VIMTARGET) $(TOOLS) languages $(GUI_BUNDLE) generator
 
 tools: $(TOOLS)
 
@@ -1778,6 +1781,10 @@ languages:
 # Update the *.po files for changes in the sources.  Only run manually.
 update-po:
 	cd $(PODIR); CC="$(CC)" $(MAKE) prefix=$(DESTDIR)$(prefix) update-po
+
+# Update the syntax/vim.vim, when changes the relevant source code.
+generator:
+	@$(MAKE) -C $(GEN_SYN_VIM_DIR) update
 
 # Generate function prototypes.  This is not needed to compile vim, but if
 # you want to use it, cproto is out there on the net somewhere -- Webb
@@ -2423,6 +2430,7 @@ clean celan: testclean
 	-rm -f runtime pixmaps
 	-rm -rf $(APPDIR)
 	-rm -rf mzscheme_base.c
+	-$(MAKE) -C $(GEN_SYN_VIM_DIR) clean
 	if test -d $(PODIR); then \
 		cd $(PODIR); $(MAKE) prefix=$(DESTDIR)$(prefix) clean; \
 	fi
