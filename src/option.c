@@ -3287,8 +3287,8 @@ set_init_1()
 	    if (opt_idx >= 0)
 	    {
 #if !defined(HAVE_AVAIL_MEM) && !defined(HAVE_TOTAL_MEM)
-		if ((long)options[opt_idx].def_val[VI_DEFAULT] > (long)n
-			|| (long)options[opt_idx].def_val[VI_DEFAULT] == 0L)
+		if ((long)(long_i)options[opt_idx].def_val[VI_DEFAULT] > (long)n
+		  || (long)(long_i)options[opt_idx].def_val[VI_DEFAULT] == 0L)
 #endif
 		    options[opt_idx].def_val[VI_DEFAULT] = (char_u *)n;
 	    }
@@ -4970,7 +4970,12 @@ do_set(arg, opt_flags)
 
 			/* If error detected, print the error message. */
 			if (errmsg != NULL)
+			{
+#if defined(FEAT_AUTOCMD) && defined(FEAT_EVAL)
+			    vim_free(saved_origval);
+#endif
 			    goto skip;
+			}
 #if defined(FEAT_AUTOCMD) && defined(FEAT_EVAL)
 			if (saved_origval != NULL)
 			{
