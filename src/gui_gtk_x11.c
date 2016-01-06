@@ -22,6 +22,9 @@
  */
 
 #include "vim.h"
+#ifdef USE_GRESOURCE
+#include "auto/gui_gtk_gresources.h"
+#endif
 
 #ifdef FEAT_GUI_GNOME
 /* Gnome redefines _() and N_().  Grrr... */
@@ -1434,6 +1437,9 @@ gui_mch_early_init_check(void)
 	EMSG(_((char *)e_opendisp));
 	return FAIL;
     }
+#ifdef USE_GRESOURCE
+    gui_gtk_register_resource();
+#endif
     return OK;
 }
 
@@ -1997,7 +2003,7 @@ sm_client_check_changed_any(GnomeClient	    *client UNUSED,
      * If there are changed buffers, present the user with
      * a dialog if possible, otherwise give an error message.
      */
-    shutdown_cancelled = check_changed_any(FALSE);
+    shutdown_cancelled = check_changed_any(FALSE, FALSE);
 
     exiting = FALSE;
     cmdmod = save_cmdmod;
@@ -3620,6 +3626,9 @@ mainwin_destroy_cb(GtkObject *object UNUSED, gpointer data UNUSED)
 		IOSIZE - 1);
 	preserve_exit();
     }
+#ifdef USE_GRESOURCE
+    gui_gtk_unregister_resource();
+#endif
 }
 
 
