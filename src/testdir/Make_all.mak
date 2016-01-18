@@ -89,6 +89,7 @@ SCRIPTS_ALL = \
 	test105.out \
 	test106.out \
 	test107.out \
+	test108.out \
 	test_argument_0count.out \
 	test_argument_count.out \
 	test_autocmd_option.out \
@@ -102,6 +103,7 @@ SCRIPTS_ALL = \
 	test_erasebackword.out \
 	test_eval.out \
 	test_fixeol.out \
+	test_getcwd.out \
 	test_insertcount.out \
 	test_listchars.out \
 	test_listlbr.out \
@@ -111,7 +113,6 @@ SCRIPTS_ALL = \
 	test_match_conceal.out \
 	test_nested_function.out \
 	test_options.out \
-	test_perl.out \
 	test_qf_title.out \
 	test_ruby.out \
 	test_search_mbyte.out \
@@ -138,7 +139,6 @@ SCRIPTS_MORE2 = \
 	test10.out \
 	test12.out \
 	test25.out \
-	test27.out \
 	test49.out \
 	test97.out
 
@@ -171,12 +171,15 @@ SCRIPTS_GUI = test16.out
 
 # Tests using runtest.vim.vim.
 # Keep test_alot.res as the last one, sort the others.
-NEW_TESTS = test_assert.res \
+NEW_TESTS = test_arglist.res \
+	    test_assert.res \
 	    test_cdo.res \
+	    test_hardcopy.res \
 	    test_increment.res \
 	    test_quickfix.res \
 	    test_viml.res \
-	    test_alot.res
+	    test_alot.res \
+	    test_perl.res
 
 
 # Explicit dependencies.

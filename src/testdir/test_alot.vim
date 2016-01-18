@@ -2,6 +2,9 @@
 " This makes testing go faster, since Vim doesn't need to restart.
 
 source test_backspace_opt.vim
+source test_cursor_func.vim
+source test_delete.vim
+source test_expand.vim
 source test_lispwords.vim
 source test_menu.vim
 source test_searchpos.vim

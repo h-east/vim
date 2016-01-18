@@ -1,6 +1,6 @@
 /* os_win32.c */
 HINSTANCE vimLoadLib __ARGS((char *name));
-int dyn_libintl_init __ARGS((char *libname));
+int dyn_libintl_init __ARGS((void));
 void dyn_libintl_end __ARGS((void));
 void PlatformId __ARGS((void));
 int mch_windows95 __ARGS((void));
@@ -21,7 +21,9 @@ int mch_setperm __ARGS((char_u *name, long perm));
 void mch_hide __ARGS((char_u *name));
 int mch_ishidden __ARGS((char_u *name));
 int mch_isdir __ARGS((char_u *name));
+int mch_isrealdir __ARGS((char_u *name));
 int mch_mkdir __ARGS((char_u *name));
+int mch_rmdir __ARGS((char_u *name));
 int mch_is_hard_link __ARGS((char_u *fname));
 int mch_is_symbolic_link __ARGS((char_u *fname));
 int mch_is_linked __ARGS((char_u *fname));

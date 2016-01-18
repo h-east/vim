@@ -2778,6 +2778,9 @@ changed()
 #endif
 		)
 	{
+	    int save_need_wait_return = need_wait_return;
+
+	    need_wait_return = FALSE;
 	    ml_open_file(curbuf);
 
 	    /* The ml_open_file() can cause an ATTENTION message.
@@ -2791,6 +2794,8 @@ changed()
 		wait_return(TRUE);
 		msg_scroll = save_msg_scroll;
 	    }
+	    else
+		need_wait_return = save_need_wait_return;
 	}
 	changed_int();
     }
@@ -10008,7 +10013,7 @@ dos_expandpath(
 	if (p[0] == '*' && p[1] == '*')
 	    starstar = TRUE;
 
-    starts_with_dot = (*s == '.');
+    starts_with_dot = *s == '.';
     pat = file_pat_to_reg_pat(s, e, NULL, FALSE);
     if (pat == NULL)
     {
@@ -10091,7 +10096,9 @@ dos_expandpath(
 #endif
 	/* Ignore entries starting with a dot, unless when asked for.  Accept
 	 * all entries found with "matchname". */
-	if ((p[0] != '.' || starts_with_dot)
+	if ((p[0] != '.' || starts_with_dot
+			 || ((flags & EW_DODOT)
+			     && p[1] != NUL && (p[1] != '.' || p[2] != NUL)))
 		&& (matchname == NULL
 		  || (regmatch.regprog != NULL
 				     && vim_regexec(&regmatch, p, (colnr_T)0))
@@ -10320,7 +10327,7 @@ unix_expandpath(gap, path, wildoff, flags, didstar)
 	    starstar = TRUE;
 
     /* convert the file pattern to a regexp pattern */
-    starts_with_dot = (*s == '.');
+    starts_with_dot = *s == '.';
     pat = file_pat_to_reg_pat(s, e, NULL, FALSE);
     if (pat == NULL)
     {
@@ -10369,7 +10376,10 @@ unix_expandpath(gap, path, wildoff, flags, didstar)
 	    dp = readdir(dirp);
 	    if (dp == NULL)
 		break;
-	    if ((dp->d_name[0] != '.' || starts_with_dot)
+	    if ((dp->d_name[0] != '.' || starts_with_dot
+			|| ((flags & EW_DODOT)
+			    && dp->d_name[1] != NUL
+			    && (dp->d_name[1] != '.' || dp->d_name[2] != NUL)))
 		 && ((regmatch.regprog != NULL && vim_regexec(&regmatch,
 					     (char_u *)dp->d_name, (colnr_T)0))
 		   || ((flags & EW_NOTWILD)
@@ -11077,7 +11087,7 @@ gen_expand_wildcards(num_pat, pat, num_file, file, flags)
 
     recursive = FALSE;
 
-    return (ga.ga_data != NULL) ? retval : FAIL;
+    return ((flags & EW_EMPTYOK) || ga.ga_data != NULL) ? retval : FAIL;
 }
 
 # ifdef VIM_BACKTICK

@@ -115,6 +115,8 @@ static char *e_illvar = N_("E461: Illegal variable name: %s");
 static char *e_float_as_string = N_("E806: using Float as a String");
 #endif
 
+#define NAMESPACE_CHAR	(char_u *)"abglstvw"
+
 static dictitem_T	globvars_var;		/* variable used for g: */
 #define globvarht globvardict.dv_hashtab
 
@@ -475,6 +477,8 @@ static void f_argidx __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_arglistid __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_argv __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_assert_equal __ARGS((typval_T *argvars, typval_T *rettv));
+static void f_assert_exception __ARGS((typval_T *argvars, typval_T *rettv));
+static void f_assert_fails __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_assert_false __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_assert_true __ARGS((typval_T *argvars, typval_T *rettv));
 #ifdef FEAT_FLOAT
@@ -653,6 +657,9 @@ static void f_nextnonblank __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_nr2char __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_or __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_pathshorten __ARGS((typval_T *argvars, typval_T *rettv));
+#ifdef FEAT_PERL
+static void f_perleval __ARGS((typval_T *argvars, typval_T *rettv));
+#endif
 #ifdef FEAT_FLOAT
 static void f_pow __ARGS((typval_T *argvars, typval_T *rettv));
 #endif
@@ -810,6 +817,7 @@ static char_u *get_tv_string_buf_chk __ARGS((typval_T *varp, char_u *buf));
 static dictitem_T *find_var __ARGS((char_u *name, hashtab_T **htp, int no_autoload));
 static dictitem_T *find_var_in_ht __ARGS((hashtab_T *ht, int htname, char_u *varname, int no_autoload));
 static hashtab_T *find_var_ht __ARGS((char_u *name, char_u **varname));
+static funccall_T *get_funccal __ARGS((void));
 static void vars_clear_ext __ARGS((hashtab_T *ht, int free_val));
 static void delete_var __ARGS((hashtab_T *ht, hashitem_T *hi));
 static void list_one_var __ARGS((dictitem_T *v, char_u *prefix, int *first));
@@ -853,6 +861,7 @@ static int can_free_funccal __ARGS((funccall_T *fc, int copyID)) ;
 static void free_funccal __ARGS((funccall_T *fc, int free_val));
 static void add_nr_var __ARGS((dict_T *dp, dictitem_T *v, char *name, varnumber_T nr));
 static win_T *find_win_by_nr __ARGS((typval_T *vp, tabpage_T *tp));
+static win_T *find_tabwin __ARGS((typval_T *wvp, typval_T *tvp));
 static void getwinvar __ARGS((typval_T *argvars, typval_T *rettv, int off));
 static int searchpair_cmn __ARGS((typval_T *argvars, pos_T *match_pos));
 static int search_cmn __ARGS((typval_T *argvars, pos_T *match_pos, int *flagsp));
@@ -971,8 +980,7 @@ eval_clear()
  * Return the name of the executed function.
  */
     char_u *
-func_name(cookie)
-    void *cookie;
+func_name(void *cookie)
 {
     return ((funccall_T *)cookie)->func->uf_name;
 }
@@ -991,8 +999,7 @@ func_breakpoint(cookie)
  * Return the address holding the debug tick for a funccall cookie.
  */
     int *
-func_dbg_tick(cookie)
-    void *cookie;
+func_dbg_tick(void *cookie)
 {
     return &((funccall_T *)cookie)->dbg_tick;
 }
@@ -1001,8 +1008,7 @@ func_dbg_tick(cookie)
  * Return the nesting level for a funccall cookie.
  */
     int
-func_level(cookie)
-    void *cookie;
+func_level(void *cookie)
 {
     return ((funccall_T *)cookie)->level;
 }
@@ -1029,9 +1035,7 @@ current_func_returned()
  * not already exist.
  */
     void
-set_internal_string_var(name, value)
-    char_u	*name;
-    char_u	*value;
+set_internal_string_var(char_u *name, char_u *value)
 {
     char_u	*val;
     typval_T	*tvp;
@@ -1055,12 +1059,11 @@ static char_u	*redir_varname = NULL;
 
 /*
  * Start recording command output to a variable
+ * When "append" is TRUE append to an existing variable.
  * Returns OK if successfully completed the setup.  FAIL otherwise.
  */
     int
-var_redir_start(name, append)
-    char_u	*name;
-    int		append;		/* append to an existing variable */
+var_redir_start(char_u *name, int append)
 {
     int		save_emsg;
     int		err;
@@ -1137,9 +1140,7 @@ var_redir_start(name, append)
  *   :redir END
  */
     void
-var_redir_str(value, value_len)
-    char_u	*value;
-    int		value_len;
+var_redir_str(char_u *value, int value_len)
 {
     int		len;
 
@@ -1199,11 +1200,11 @@ var_redir_stop()
 
 # if defined(FEAT_MBYTE) || defined(PROTO)
     int
-eval_charconvert(enc_from, enc_to, fname_from, fname_to)
-    char_u	*enc_from;
-    char_u	*enc_to;
-    char_u	*fname_from;
-    char_u	*fname_to;
+eval_charconvert(
+    char_u	*enc_from,
+    char_u	*enc_to,
+    char_u	*fname_from,
+    char_u	*fname_to)
 {
     int		err = FALSE;
 
@@ -3687,7 +3688,7 @@ do_unlet_var(lp, name_end, forceit)
     {
 	listitem_T    *li;
 	listitem_T    *ll_li = lp->ll_li;
-	int           ll_n1 = lp->ll_n1;
+	int	      ll_n1 = lp->ll_n1;
 
 	while (ll_li != NULL && (lp->ll_empty2 || lp->ll_n2 >= ll_n1))
 	{
@@ -8088,6 +8089,8 @@ static struct fst
     {"asin",		1, 1, f_asin},	/* WJMc */
 #endif
     {"assert_equal",	2, 3, f_assert_equal},
+    {"assert_exception", 1, 2, f_assert_exception},
+    {"assert_fails",	1, 2, f_assert_fails},
     {"assert_false",	1, 2, f_assert_false},
     {"assert_true",	1, 2, f_assert_true},
 #ifdef FEAT_FLOAT
@@ -8132,7 +8135,7 @@ static struct fst
     {"cscope_connection",0,3, f_cscope_connection},
     {"cursor",		1, 3, f_cursor},
     {"deepcopy",	1, 2, f_deepcopy},
-    {"delete",		1, 1, f_delete},
+    {"delete",		1, 2, f_delete},
     {"did_filetype",	0, 0, f_did_filetype},
     {"diff_filler",	1, 1, f_diff_filler},
     {"diff_hlID",	2, 2, f_diff_hlID},
@@ -8181,7 +8184,7 @@ static struct fst
     {"getcmdtype",	0, 0, f_getcmdtype},
     {"getcmdwintype",	0, 0, f_getcmdwintype},
     {"getcurpos",	0, 0, f_getcurpos},
-    {"getcwd",		0, 0, f_getcwd},
+    {"getcwd",		0, 2, f_getcwd},
     {"getfontname",	0, 1, f_getfontname},
     {"getfperm",	1, 1, f_getfperm},
     {"getfsize",	1, 1, f_getfsize},
@@ -8205,7 +8208,7 @@ static struct fst
     {"globpath",	2, 5, f_globpath},
     {"has",		1, 1, f_has},
     {"has_key",		2, 2, f_has_key},
-    {"haslocaldir",	0, 0, f_haslocaldir},
+    {"haslocaldir",	0, 2, f_haslocaldir},
     {"hasmapto",	1, 3, f_hasmapto},
     {"highlightID",	1, 1, f_hlID},		/* obsolete */
     {"highlight_exists",1, 1, f_hlexists},	/* obsolete */
@@ -8271,6 +8274,9 @@ static struct fst
     {"nr2char",		1, 2, f_nr2char},
     {"or",		2, 2, f_or},
     {"pathshorten",	1, 1, f_pathshorten},
+#ifdef FEAT_PERL
+    {"perleval",	1, 1, f_perleval},
+#endif
 #ifdef FEAT_FLOAT
     {"pow",		2, 2, f_pow},
 #endif
@@ -9007,8 +9013,11 @@ f_alloc_fail(argvars, rettv)
     else
     {
 	alloc_fail_id = argvars[0].vval.v_number;
+	if (alloc_fail_id >= aid_last)
+	    EMSG(_(e_invarg));
 	alloc_fail_countdown = argvars[1].vval.v_number;
 	alloc_fail_repeat = argvars[2].vval.v_number;
+	did_outofmem_msg = FALSE;
     }
 }
 
@@ -9119,30 +9128,11 @@ f_arglistid(argvars, rettv)
     typval_T	*rettv;
 {
     win_T	*wp;
-    tabpage_T	*tp = NULL;
-    long	n;
 
     rettv->vval.v_number = -1;
-    if (argvars[0].v_type != VAR_UNKNOWN)
-    {
-	if (argvars[1].v_type != VAR_UNKNOWN)
-	{
-	    n = get_tv_number(&argvars[1]);
-	    if (n >= 0)
-		tp = find_tabpage(n);
-	}
-	else
-	    tp = curtab;
-
-	if (tp != NULL)
-	{
-	    wp = find_win_by_nr(&argvars[0], tp);
-	    if (wp != NULL)
-		rettv->vval.v_number = wp->w_alist->id;
-	}
-    }
-    else
-	rettv->vval.v_number = curwin->w_alist->id;
+    wp = find_tabwin(&argvars[0], &argvars[1]);
+    if (wp != NULL)
+	rettv->vval.v_number = wp->w_alist->id;
 }
 
 /*
@@ -9267,6 +9257,80 @@ f_assert_equal(argvars, rettv)
 	assert_error(&ga);
 	ga_clear(&ga);
     }
+}
+
+/*
+ * "assert_exception(string[, msg])" function
+ */
+    static void
+f_assert_exception(argvars, rettv)
+    typval_T	*argvars;
+    typval_T	*rettv UNUSED;
+{
+    garray_T	ga;
+    char	*error;
+
+    error = (char *)get_tv_string_chk(&argvars[0]);
+    if (vimvars[VV_EXCEPTION].vv_str == NULL)
+    {
+	prepare_assert_error(&ga);
+	ga_concat(&ga, (char_u *)"v:exception is not set");
+	assert_error(&ga);
+	ga_clear(&ga);
+    }
+    else if (strstr((char *)vimvars[VV_EXCEPTION].vv_str, error) == NULL)
+    {
+	prepare_assert_error(&ga);
+	fill_assert_error(&ga, &argvars[1], NULL, &argvars[0],
+						&vimvars[VV_EXCEPTION].vv_tv);
+	assert_error(&ga);
+	ga_clear(&ga);
+    }
+}
+
+/*
+ * "assert_fails(cmd [, error])" function
+ */
+    static void
+f_assert_fails(argvars, rettv)
+    typval_T	*argvars;
+    typval_T	*rettv UNUSED;
+{
+    char_u	*cmd = get_tv_string_chk(&argvars[0]);
+    garray_T	ga;
+
+    called_emsg = FALSE;
+    suppress_errthrow = TRUE;
+    emsg_silent = TRUE;
+    do_cmdline_cmd(cmd);
+    if (!called_emsg)
+    {
+	prepare_assert_error(&ga);
+	ga_concat(&ga, (char_u *)"command did not fail: ");
+	ga_concat(&ga, cmd);
+	assert_error(&ga);
+	ga_clear(&ga);
+    }
+    else if (argvars[1].v_type != VAR_UNKNOWN)
+    {
+	char_u	buf[NUMBUFLEN];
+	char	*error = (char *)get_tv_string_buf_chk(&argvars[1], buf);
+
+	if (strstr((char *)vimvars[VV_ERRMSG].vv_str, error) == NULL)
+	{
+	    prepare_assert_error(&ga);
+	    fill_assert_error(&ga, &argvars[2], NULL, &argvars[1],
+						&vimvars[VV_ERRMSG].vv_tv);
+	    assert_error(&ga);
+	    ga_clear(&ga);
+	}
+    }
+
+    called_emsg = FALSE;
+    suppress_errthrow = FALSE;
+    emsg_silent = FALSE;
+    emsg_on_display = FALSE;
+    set_vim_var_string(VV_ERRMSG, NULL, 0);
 }
 
 /*
@@ -10212,7 +10276,8 @@ f_cscope_connection(argvars, rettv)
 }
 
 /*
- * "cursor(lnum, col)" function
+ * "cursor(lnum, col)" function, or
+ * "cursor(list)"
  *
  * Moves the cursor to the specified line and column.
  * Returns 0 when the position could be set, -1 otherwise.
@@ -10235,7 +10300,10 @@ f_cursor(argvars, rettv)
 	colnr_T	    curswant = -1;
 
 	if (list2fpos(argvars, &pos, NULL, &curswant) == FAIL)
+	{
+	    EMSG(_(e_invarg));
 	    return;
+	}
 	line = pos.lnum;
 	col = pos.col;
 #ifdef FEAT_VIRTUALEDIT
@@ -10311,10 +10379,37 @@ f_delete(argvars, rettv)
     typval_T	*argvars;
     typval_T	*rettv;
 {
+    char_u	nbuf[NUMBUFLEN];
+    char_u	*name;
+    char_u	*flags;
+
+    rettv->vval.v_number = -1;
     if (check_restricted() || check_secure())
-	rettv->vval.v_number = -1;
+	return;
+
+    name = get_tv_string(&argvars[0]);
+    if (name == NULL || *name == NUL)
+    {
+	EMSG(_(e_invarg));
+	return;
+    }
+
+    if (argvars[1].v_type != VAR_UNKNOWN)
+	flags = get_tv_string_buf(&argvars[1], nbuf);
     else
-	rettv->vval.v_number = mch_remove(get_tv_string(&argvars[0]));
+	flags = (char_u *)"";
+
+    if (*flags == NUL)
+	/* delete a file */
+	rettv->vval.v_number = mch_remove(name) == 0 ? 0 : -1;
+    else if (STRCMP(flags, "d") == 0)
+	/* delete an empty directory */
+	rettv->vval.v_number = mch_rmdir(name) == 0 ? 0 : -1;
+    else if (STRCMP(flags, "rf") == 0)
+	/* delete a directory recursively */
+	rettv->vval.v_number = delete_recursive(name);
+    else
+	EMSG2(_(e_invexpr2), flags);
 }
 
 /*
@@ -11948,25 +12043,36 @@ f_getcmdwintype(argvars, rettv)
  */
     static void
 f_getcwd(argvars, rettv)
-    typval_T	*argvars UNUSED;
+    typval_T	*argvars;
     typval_T	*rettv;
 {
+    win_T	*wp = NULL;
     char_u	*cwd;
 
     rettv->v_type = VAR_STRING;
     rettv->vval.v_string = NULL;
-    cwd = alloc(MAXPATHL);
-    if (cwd != NULL)
+
+    wp = find_tabwin(&argvars[0], &argvars[1]);
+    if (wp != NULL)
     {
-	if (mch_dirname(cwd, MAXPATHL) != FAIL)
+	if (wp->w_localdir != NULL)
+	    rettv->vval.v_string = vim_strsave(wp->w_localdir);
+	else if(globaldir != NULL)
+	    rettv->vval.v_string = vim_strsave(globaldir);
+	else
 	{
-	    rettv->vval.v_string = vim_strsave(cwd);
-#ifdef BACKSLASH_IN_FILENAME
-	    if (rettv->vval.v_string != NULL)
-		slash_adjust(rettv->vval.v_string);
-#endif
+	    cwd = alloc(MAXPATHL);
+	    if (cwd != NULL)
+	    {
+		if (mch_dirname(cwd, MAXPATHL) != FAIL)
+		    rettv->vval.v_string = vim_strsave(cwd);
+		vim_free(cwd);
+	    }
 	}
-	vim_free(cwd);
+#ifdef BACKSLASH_IN_FILENAME
+	if (rettv->vval.v_string != NULL)
+	    slash_adjust(rettv->vval.v_string);
+#endif
     }
 }
 
@@ -12596,6 +12702,38 @@ find_win_by_nr(vp, tp)
 }
 
 /*
+ * Find window specified by "wvp" in tabpage "tvp".
+ */
+    static win_T *
+find_tabwin(wvp, tvp)
+    typval_T	*wvp;	/* VAR_UNKNOWN for current window */
+    typval_T	*tvp;	/* VAR_UNKNOWN for current tab page */
+{
+    win_T	*wp = NULL;
+    tabpage_T	*tp = NULL;
+    long	n;
+
+    if (wvp->v_type != VAR_UNKNOWN)
+    {
+	if (tvp->v_type != VAR_UNKNOWN)
+	{
+	    n = get_tv_number(tvp);
+	    if (n >= 0)
+		tp = find_tabpage(n);
+	}
+	else
+	    tp = curtab;
+
+	if (tp != NULL)
+	    wp = find_win_by_nr(wvp, tp);
+    }
+    else
+	wp = curwin;
+
+    return wp;
+}
+
+/*
  * "getwinvar()" function
  */
     static void
@@ -12917,6 +13055,8 @@ f_has(argvars, rettv)
 #endif
 #ifdef FEAT_CRYPT
 	"cryptv",
+	"crypt-blowfish",
+	"crypt-blowfish2",
 #endif
 #ifdef FEAT_CSCOPE
 	"cscope",
@@ -13428,10 +13568,13 @@ f_has_key(argvars, rettv)
  */
     static void
 f_haslocaldir(argvars, rettv)
-    typval_T	*argvars UNUSED;
+    typval_T	*argvars;
     typval_T	*rettv;
 {
-    rettv->vval.v_number = (curwin->w_localdir != NULL);
+    win_T	*wp = NULL;
+
+    wp = find_tabwin(&argvars[0], &argvars[1]);
+    rettv->vval.v_number = (wp != NULL && wp->w_localdir != NULL);
 }
 
 /*
@@ -15370,6 +15513,23 @@ f_pathshorten(argvars, rettv)
 	    shorten_dir(p);
     }
 }
+
+#ifdef FEAT_PERL
+/*
+ * "perleval()" function
+ */
+    static void
+f_perleval(argvars, rettv)
+    typval_T *argvars;
+    typval_T *rettv;
+{
+    char_u	*str;
+    char_u	buf[NUMBUFLEN];
+
+    str = get_tv_string_buf(&argvars[0], buf);
+    do_perleval(str, rettv);
+}
+#endif
 
 #ifdef FEAT_FLOAT
 /*
@@ -20586,7 +20746,17 @@ get_id_len(arg)
 
     /* Find the end of the name. */
     for (p = *arg; eval_isnamec(*p); ++p)
-	;
+    {
+	if (*p == ':')
+	{
+	    /* "s:" is start of "s:var", but "n:" is not and can be used in
+	     * slice "[n:]".  Also "xx:" is not a namespace. */
+	    len = (int)(p - *arg);
+	    if ((len == 1 && vim_strchr(NAMESPACE_CHAR, **arg) == NULL)
+		    || len > 1)
+		break;
+	}
+    }
     if (p == *arg)	    /* no name found */
 	return 0;
 
@@ -20686,6 +20856,7 @@ find_name_end(arg, expr_start, expr_end, flags)
     int		mb_nest = 0;
     int		br_nest = 0;
     char_u	*p;
+    int		len;
 
     if (expr_start != NULL)
     {
@@ -20719,6 +20890,15 @@ find_name_end(arg, expr_start, expr_end, flags)
 		if (*p == '\\' && p[1] != NUL)
 		    ++p;
 	    if (*p == NUL)
+		break;
+	}
+	else if (br_nest == 0 && mb_nest == 0 && *p == ':')
+	{
+	    /* "s:" is start of "s:var", but "n:" is not and can be used in
+	     * slice "[n:]".  Also "xx:" is not a namespace. But {ns}: is. */
+	    len = (int)(p - arg);
+	    if ((len == 1 && vim_strchr(NAMESPACE_CHAR, *arg) == NULL)
+		    || (len > 1 && p[-1] != '}'))
 		break;
 	}
 
@@ -21656,7 +21836,7 @@ find_var_ht(name, varname)
 
 	if (current_funccal == NULL)
 	    return &globvarht;			/* global variable */
-	return &current_funccal->l_vars.dv_hashtab; /* l: variable */
+	return &get_funccal()->l_vars.dv_hashtab; /* l: variable */
     }
     *varname = name + 2;
     if (*name == 'g')				/* global variable */
@@ -21677,13 +21857,39 @@ find_var_ht(name, varname)
     if (*name == 'v')				/* v: variable */
 	return &vimvarht;
     if (*name == 'a' && current_funccal != NULL) /* function argument */
-	return &current_funccal->l_avars.dv_hashtab;
+	return &get_funccal()->l_avars.dv_hashtab;
     if (*name == 'l' && current_funccal != NULL) /* local function variable */
-	return &current_funccal->l_vars.dv_hashtab;
+	return &get_funccal()->l_vars.dv_hashtab;
     if (*name == 's'				/* script variable */
 	    && current_SID > 0 && current_SID <= ga_scripts.ga_len)
 	return &SCRIPT_VARS(current_SID);
     return NULL;
+}
+
+/*
+ * Get function call environment based on bactrace debug level
+ */
+    static funccall_T *
+get_funccal()
+{
+    int		i;
+    funccall_T	*funccal;
+    funccall_T	*temp_funccal;
+
+    funccal = current_funccal;
+    if (debug_backtrace_level > 0)
+    {
+	for (i = 0; i < debug_backtrace_level; i++)
+	{
+	    temp_funccal = funccal->caller;
+	    if (temp_funccal)
+		funccal = temp_funccal;
+	    else
+		/* backtrace level overflow. reset to max */
+		debug_backtrace_level = i;
+	}
+    }
+    return funccal;
 }
 
 /*
@@ -23201,8 +23407,8 @@ ret_free:
  * Also handles a Funcref in a List or Dictionary.
  * Returns the function name in allocated memory, or NULL for failure.
  * flags:
- * TFN_INT:         internal function name OK
- * TFN_QUIET:       be quiet
+ * TFN_INT:	    internal function name OK
+ * TFN_QUIET:	    be quiet
  * TFN_NO_AUTOLOAD: do not use script autoloading
  * Advances "pp" to just after the function name (if no error).
  */
