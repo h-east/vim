@@ -490,6 +490,11 @@ syn match	vimGroupAdd	contained	"add="	nextgroup=vimGroupList
 syn match	vimGroupRem	contained	"remove="	nextgroup=vimGroupList
 syn cluster vimFuncBodyList add=vimSynType,vimGroupAdd,vimGroupRem
 
+" Syntax: iskeyword {{{2
+syn keyword	vimSynType	contained	iskeyword	skipwhite nextgroup=vimIskList
+syn match	vimIskList	contained	'\S\+'	contains=vimIskSep
+syn match	vimIskSep	contained	','
+
 " Syntax: include {{{2
 syn keyword	vimSynType	contained	include	skipwhite nextgroup=vimGroupList
 syn cluster vimFuncBodyList add=vimSynType
@@ -877,6 +882,7 @@ hi def link vimHiTerm	Type
 hi def link vimHLGroup	vimGroup
 hi def link vimHLMod	PreProc
 hi def link vimInsert	vimString
+hi def link vimIskSep	Delimiter
 hi def link vimKeyCode	vimSpecFile
 hi def link vimKeyword	Statement
 hi def link vimLet	vimCommand
