@@ -39,7 +39,7 @@ GUI=yes
 DIRECTX=no
 # FEATURES=[TINY | SMALL | NORMAL | BIG | HUGE]
 # Set to TINY to make minimal version (few features).
-FEATURES=BIG
+FEATURES=HUGE
 # Set to one of i386, i486, i586, i686 as the minimum target processor.
 # For amd64/x64 architecture set ARCH=x86-64 .
 ARCH=i386
@@ -64,8 +64,10 @@ WINVER = 0x0500
 endif
 # Set to yes to enable Cscope support.
 CSCOPE=yes
-# Set to yes to enable Netbeans support.
+# Set to yes to enable Netbeans support (requires CHANNEL).
 NETBEANS=$(GUI)
+# Set to yes to enable inter process communication.
+CHANNEL=$(GUI)
 
 
 # Link against the shared version of libstdc++ by default.  Set
@@ -258,15 +260,23 @@ endif
 ifndef PYTHON3_VER
 PYTHON3_VER=31
 endif
-
-ifeq (no,$(DYNAMIC_PYTHON3))
-PYTHON3LIB=-L$(PYTHON3)/libs -lPYTHON$(PYTHON3_VER)
+ifndef DYNAMIC_PYTHON3_DLL
+DYNAMIC_PYTHON3_DLL=python$(PYTHON3_VER).dll
+endif
+ifdef PYTHON3_HOME
+PYTHON3_HOME_DEF=-DPYTHON3_HOME=\"$(PYTHON3_HOME)\"
 endif
 
+ifeq (no,$(DYNAMIC_PYTHON3))
+PYTHON3LIB=-L$(PYTHON3)/libs -lpython$(PYTHON3_VER)
+endif
+
+ifndef PYTHON3INC
 ifeq ($(CROSS),no)
 PYTHON3INC=-I $(PYTHON3)/include
 else
 PYTHON3INC=-I $(PYTHON3)/win32inc
+endif
 endif
 endif
 
@@ -482,7 +492,7 @@ endif
 ifdef PYTHON3 
 CFLAGS += -DFEAT_PYTHON3 
 ifeq (yes, $(DYNAMIC_PYTHON3))
-CFLAGS += -DDYNAMIC_PYTHON3 -DDYNAMIC_PYTHON3_DLL=\"PYTHON$(PYTHON3_VER).dll\"
+CFLAGS += -DDYNAMIC_PYTHON3 -DDYNAMIC_PYTHON3_DLL=\"$(DYNAMIC_PYTHON3_DLL)\"
 endif
 endif
 
@@ -516,6 +526,10 @@ NBDEBUG_INCL = nbdebug.h
 NBDEBUG_SRC = nbdebug.c
 endif
 endif
+endif
+
+ifeq ($(CHANNEL),yes)
+DEFINES += -DFEAT_CHANNEL
 endif
 
 # DirectWrite (DirectX)
@@ -593,6 +607,7 @@ OBJ = \
 	$(OUTDIR)/getchar.o \
 	$(OUTDIR)/hardcopy.o \
 	$(OUTDIR)/hashtab.o \
+	$(OUTDIR)/json.o \
 	$(OUTDIR)/main.o \
 	$(OUTDIR)/mark.o \
 	$(OUTDIR)/memfile.o \
@@ -658,13 +673,28 @@ endif
 ifeq ($(CSCOPE),yes)
 OBJ += $(OUTDIR)/if_cscope.o
 endif
+
 ifeq ($(NETBEANS),yes)
+ifneq ($(CHANNEL),yes)
+# Cannot use Netbeans without CHANNEL
+NETBEANS=no
+else
 # Only allow NETBEANS for a GUI build.
 ifeq (yes, $(GUI))
 OBJ += $(OUTDIR)/netbeans.o
 LIB += -lwsock32
 endif
 endif
+endif
+
+ifeq ($(CHANNEL),yes)
+OBJ += $(OUTDIR)/channel.o
+ifneq ($(NETBEANS),yes)
+LIB += -lwsock32
+endif
+endif
+endif
+
 ifeq ($(DIRECTX),yes)
 # Only allow DIRECTX for a GUI build.
 ifeq (yes, $(GUI))
@@ -814,7 +844,7 @@ $(OUTDIR)/if_python.o : if_python.c if_py_both.h $(INCL)
 	$(CC) -c $(CFLAGS) $(PYTHONINC) $(PYTHON_HOME_DEF) $< -o $@
 
 $(OUTDIR)/if_python3.o : if_python3.c if_py_both.h $(INCL)
-	$(CC) -c $(CFLAGS) $(PYTHON3INC) $< -o $@
+	$(CC) -c $(CFLAGS) $(PYTHON3INC) $(PYTHON3_HOME_DEF) $< -o $@
 
 $(OUTDIR)/%.o : %.c $(INCL)
 	$(CC) -c $(CFLAGS) $< -o $@
@@ -856,6 +886,9 @@ if_perl.c: if_perl.xs typemap
 
 $(OUTDIR)/netbeans.o:	netbeans.c $(INCL) $(NBDEBUG_INCL) $(NBDEBUG_SRC)
 	$(CC) -c $(CFLAGS) netbeans.c -o $(OUTDIR)/netbeans.o
+
+$(OUTDIR)/channel.o:	channel.c $(INCL)
+	$(CC) -c $(CFLAGS) channel.c -o $(OUTDIR)/channel.o
 
 $(OUTDIR)/regexp.o:		regexp.c regexp_nfa.c $(INCL)
 	$(CC) -c $(CFLAGS) regexp.c -o $(OUTDIR)/regexp.o

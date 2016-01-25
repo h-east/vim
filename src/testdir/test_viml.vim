@@ -922,6 +922,74 @@ func Test_curlies()
 endfunc
 
 "-------------------------------------------------------------------------------
+" Test 91:  using type().					    {{{1
+"-------------------------------------------------------------------------------
+
+func Test_type()
+    call assert_equal(0, type(0))
+    call assert_equal(1, type(""))
+    call assert_equal(2, type(function("tr")))
+    call assert_equal(3, type([]))
+    call assert_equal(4, type({}))
+    call assert_equal(5, type(0.0))
+    call assert_equal(6, type(v:false))
+    call assert_equal(6, type(v:true))
+    call assert_equal(7, type(v:none))
+    call assert_equal(7, type(v:null))
+
+    call assert_equal(0, 0 + v:false)
+    call assert_equal(1, 0 + v:true)
+    call assert_equal(0, 0 + v:none)
+    call assert_equal(0, 0 + v:null)
+
+    call assert_equal('v:false', '' . v:false)
+    call assert_equal('v:true', '' . v:true)
+    call assert_equal('v:none', '' . v:none)
+    call assert_equal('v:null', '' . v:null)
+
+    call assert_true(v:false == 0)
+    call assert_false(v:false != 0)
+    call assert_true(v:true == 1)
+    call assert_false(v:true != 1)
+    call assert_false(v:true == v:false)
+    call assert_true(v:true != v:false)
+
+    call assert_true(v:null == 0)
+    call assert_false(v:null != 0)
+    call assert_true(v:none == 0)
+    call assert_false(v:none != 0)
+
+    call assert_true(v:false is v:false)
+    call assert_true(v:true is v:true)
+    call assert_true(v:none is v:none)
+    call assert_true(v:null is v:null)
+
+    call assert_false(v:false isnot v:false)
+    call assert_false(v:true isnot v:true)
+    call assert_false(v:none isnot v:none)
+    call assert_false(v:null isnot v:null)
+
+    call assert_false(v:false is 0)
+    call assert_false(v:true is 1)
+    call assert_false(v:true is v:false)
+    call assert_false(v:none is 0)
+    call assert_false(v:null is 0)
+    call assert_false(v:null is v:none)
+
+    call assert_true(v:false isnot 0)
+    call assert_true(v:true isnot 1)
+    call assert_true(v:true isnot v:false)
+    call assert_true(v:none isnot 0)
+    call assert_true(v:null isnot 0)
+    call assert_true(v:null isnot v:none)
+
+    call assert_equal(v:false, eval(string(v:false)))
+    call assert_equal(v:true, eval(string(v:true)))
+    call assert_equal(v:none, eval(string(v:none)))
+    call assert_equal(v:null, eval(string(v:null)))
+endfunc
+
+"-------------------------------------------------------------------------------
 " Modelines								    {{{1
 " vim: ts=8 sw=4 tw=80 fdm=marker
 " vim: fdt=substitute(substitute(foldtext(),\ '\\%(^+--\\)\\@<=\\(\\s*\\)\\(.\\{-}\\)\:\ \\%(\"\ \\)\\=\\(Test\ \\d*\\)\:\\s*',\ '\\3\ (\\2)\:\ \\1',\ \"\"),\ '\\(Test\\s*\\)\\(\\d\\)\\D\\@=',\ '\\1\ \\2',\ "")

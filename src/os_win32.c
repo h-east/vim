@@ -101,6 +101,7 @@ typedef int CONSOLE_CURSOR_INFO;
 typedef int COORD;
 typedef int DWORD;
 typedef int HANDLE;
+typedef int LPHANDLE;
 typedef int HDC;
 typedef int HFONT;
 typedef int HICON;
@@ -499,9 +500,12 @@ dyn_libintl_init()
     if (hLibintlDLL)
 	return 1;
     /* Load gettext library (libintl.dll) */
-    hLibintlDLL = vimLoadLib(GETTEXT_DLL);
+#ifdef GETTEXT_DLL_ALT
     if (!hLibintlDLL)
 	hLibintlDLL = vimLoadLib(GETTEXT_DLL_ALT);
+#endif
+    if (!hLibintlDLL)
+	hLibintlDLL = vimLoadLib(GETTEXT_DLL);
     if (!hLibintlDLL)
     {
 	if (p_verbose > 0)

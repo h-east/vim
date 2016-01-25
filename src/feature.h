@@ -54,19 +54,25 @@
 #endif
 
 /*
- * These executables are made available with the +big feature, because they
- * are supposed to have enough RAM: Win32 (console & GUI), dos32, OS/2 and VMS.
+ * For Unix, Mac and Win32 use +huge by default.  These days CPUs are fast and
+ * Memory is cheap.
+ * Use +big for older systems: Other MS-Windows, dos32, OS/2 and VMS.
  * The dos16 version has very little RAM available, use +small.
+ * Otherwise use +normal
  */
 #if !defined(FEAT_TINY) && !defined(FEAT_SMALL) && !defined(FEAT_NORMAL) \
 	&& !defined(FEAT_BIG) && !defined(FEAT_HUGE)
-# if defined(MSWIN) || defined(DJGPP) || defined(VMS) || defined(MACOS) || defined(AMIGA)
-#  define FEAT_BIG
+# if defined(UNIX) || defined(WIN3264) || defined(MACOS)
+#  define FEAT_HUGE
 # else
-#  ifdef MSDOS
-#   define FEAT_SMALL
+#  if defined(MSWIN) || defined(DJGPP) || defined(VMS) || defined(MACOS) || defined(AMIGA)
+#   define FEAT_BIG
 #  else
-#   define FEAT_NORMAL
+#   ifdef MSDOS
+#    define FEAT_SMALL
+#   else
+#    define FEAT_NORMAL
+#   endif
 #  endif
 # endif
 #endif
@@ -1231,6 +1237,7 @@
  * +sniff		Sniff interface: "--enable-sniff"
  * +sun_workshop	Sun Workshop integration
  * +netbeans_intg	Netbeans integration
+ * +channel		Inter process communication
  */
 
 /*
@@ -1252,6 +1259,13 @@
 #if (!defined(FEAT_LISTCMDS) || !defined(FEAT_EVAL)) \
 	&& defined(FEAT_NETBEANS_INTG)
 # undef FEAT_NETBEANS_INTG
+#endif
+
+/*
+ * The Channel feature requires +eval.
+ */
+#if !defined(FEAT_EVAL) && defined(FEAT_CHANNEL)
+# undef FEAT_CHANNEL
 #endif
 
 /*
