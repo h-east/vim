@@ -500,12 +500,11 @@ dyn_libintl_init()
     if (hLibintlDLL)
 	return 1;
     /* Load gettext library (libintl.dll) */
+    hLibintlDLL = vimLoadLib(GETTEXT_DLL);
 #ifdef GETTEXT_DLL_ALT
     if (!hLibintlDLL)
 	hLibintlDLL = vimLoadLib(GETTEXT_DLL_ALT);
 #endif
-    if (!hLibintlDLL)
-	hLibintlDLL = vimLoadLib(GETTEXT_DLL);
     if (!hLibintlDLL)
     {
 	if (p_verbose > 0)
@@ -1444,6 +1443,11 @@ WaitForChar(long msec)
     INPUT_RECORD    ir;
     DWORD	    cRecords;
     WCHAR	    ch, ch2;
+#ifdef FEAT_CHANNEL
+    int		    ret;
+    fd_set	    rfds;
+    int		    maxfd;
+#endif
 
     if (msec > 0)
 	/* Wait until the specified time has elapsed. */
@@ -1460,9 +1464,22 @@ WaitForChar(long msec)
 #ifdef FEAT_MZSCHEME
 	mzvim_check_threads();
 #endif
+
 #ifdef FEAT_CLIENTSERVER
 	serverProcessPendingMessages();
 #endif
+
+#ifdef FEAT_CHANNEL
+	FD_ZERO(&rfds);
+	maxfd = channel_select_setup(-1, &rfds);
+	if (maxfd >= 0)
+	{
+	    ret = select(maxfd + 1, &rfds, NULL, NULL, NULL);
+	    if (ret > 0 && channel_select_check(ret, &rfds) > 0)
+		return TRUE;
+	}
+#endif
+
 	if (0
 #ifdef FEAT_MOUSE
 		|| g_nMouseClick != -1
@@ -1563,6 +1580,7 @@ WaitForChar(long msec)
     if (input_available())
 	return TRUE;
 #endif
+
     return FALSE;
 }
 

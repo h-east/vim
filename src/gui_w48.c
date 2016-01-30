@@ -320,8 +320,8 @@ static OSVERSIONINFO os_version;    /* like it says.  Init in gui_mch_init() */
 
 #ifdef FEAT_BEVAL
 /* balloon-eval WM_NOTIFY_HANDLER */
-static void Handle_WM_Notify __ARGS((HWND hwnd, LPNMHDR pnmh));
-static void TrackUserActivity __ARGS((UINT uMsg));
+static void Handle_WM_Notify(HWND hwnd, LPNMHDR pnmh);
+static void TrackUserActivity(UINT uMsg);
 #endif
 
 /*
@@ -1779,10 +1779,13 @@ process_message(void)
     }
 #endif
 
-#ifdef FEAT_NETBEANS_INTG
+#ifdef FEAT_CHANNEL
     if (msg.message == WM_NETBEANS)
     {
-	netbeans_read();
+	int channel_idx = channel_socket2idx((sock_T)msg.wParam);
+
+	if (channel_idx >= 0)
+	    channel_read(channel_idx);
 	return;
     }
 #endif
