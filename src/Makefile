@@ -1664,6 +1664,7 @@ PRO_AUTO = \
 	hangulin.pro \
 	if_cscope.pro \
 	if_lua.pro \
+	if_mzsch.pro \
 	if_python.pro \
 	if_python3.pro \
 	if_ruby.pro \
@@ -1671,6 +1672,7 @@ PRO_AUTO = \
 	json.pro \
 	main.pro \
 	mark.pro \
+	mbyte.pro \
 	memfile.pro \
 	memline.pro \
 	menu.pro \
@@ -1678,7 +1680,6 @@ PRO_AUTO = \
 	misc1.pro \
 	misc2.pro \
 	move.pro \
-	mbyte.pro \
 	normal.pro \
 	ops.pro \
 	option.pro \
@@ -2653,9 +2654,11 @@ GUI_GTK_RES_INPUTS = \
 	../pixmaps/stock_vim_window_split_vertical.png
 
 auto/gui_gtk_gresources.c: gui_gtk_res.xml $(GUI_GTK_RES_INPUTS)
-	$(GLIB_COMPILE_RESOURCES) --target=$@ --sourcedir=../pixmaps --generate --c-name=gui_gtk --manual-register $<
+	$(GLIB_COMPILE_RESOURCES) --target=$@ --sourcedir=../pixmaps --generate --c-name=gui_gtk --manual-register gui_gtk_res.xml
 auto/gui_gtk_gresources.h: gui_gtk_res.xml $(GUI_GTK_RES_INPUTS)
-	$(GLIB_COMPILE_RESOURCES) --target=$@ --sourcedir=../pixmaps --generate --c-name=gui_gtk --manual-register $<
+	if test -z "$(GLIB_COMPILE_RESOURCES)"; then touch $@; else \
+		$(GLIB_COMPILE_RESOURCES) --target=$@ --sourcedir=../pixmaps --generate --c-name=gui_gtk --manual-register gui_gtk_res.xml; \
+	fi
 
 # All the object files are put in the "objects" directory.  Since not all make
 # commands understand putting object files in another directory, it must be
