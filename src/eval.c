@@ -451,6 +451,9 @@ static dict_T *dict_copy(dict_T *orig, int deep, int copyID);
 static long dict_len(dict_T *d);
 static char_u *dict2string(typval_T *tv, int copyID);
 static int get_dict_tv(char_u **arg, typval_T *rettv, int evaluate);
+#ifdef FEAT_JOB
+static void job_free(job_T *job);
+#endif
 static char_u *echo_string(typval_T *tv, char_u **tofree, char_u *numbuf, int copyID);
 static char_u *tv2string(typval_T *tv, char_u **tofree, char_u *numbuf, int copyID);
 static char_u *string_quote(char_u *str, int function);
@@ -619,7 +622,14 @@ static void f_invert(typval_T *argvars, typval_T *rettv);
 static void f_isdirectory(typval_T *argvars, typval_T *rettv);
 static void f_islocked(typval_T *argvars, typval_T *rettv);
 static void f_items(typval_T *argvars, typval_T *rettv);
+#ifdef FEAT_JOB
+static void f_job_start(typval_T *argvars, typval_T *rettv);
+static void f_job_stop(typval_T *argvars, typval_T *rettv);
+static void f_job_status(typval_T *argvars, typval_T *rettv);
+#endif
 static void f_join(typval_T *argvars, typval_T *rettv);
+static void f_jsdecode(typval_T *argvars, typval_T *rettv);
+static void f_jsencode(typval_T *argvars, typval_T *rettv);
 static void f_jsondecode(typval_T *argvars, typval_T *rettv);
 static void f_jsonencode(typval_T *argvars, typval_T *rettv);
 static void f_keys(typval_T *argvars, typval_T *rettv);
@@ -680,6 +690,9 @@ static void f_pyeval(typval_T *argvars, typval_T *rettv);
 static void f_range(typval_T *argvars, typval_T *rettv);
 static void f_readfile(typval_T *argvars, typval_T *rettv);
 static void f_reltime(typval_T *argvars, typval_T *rettv);
+#ifdef FEAT_FLOAT
+static void f_reltimefloat(typval_T *argvars, typval_T *rettv);
+#endif
 static void f_reltimestr(typval_T *argvars, typval_T *rettv);
 static void f_remote_expr(typval_T *argvars, typval_T *rettv);
 static void f_remote_foreground(typval_T *argvars, typval_T *rettv);
@@ -3062,9 +3075,11 @@ tv_op(typval_T *tv1, typval_T *tv2, char_u *op)
     {
 	switch (tv1->v_type)
 	{
+	    case VAR_UNKNOWN:
 	    case VAR_DICT:
 	    case VAR_FUNC:
 	    case VAR_SPECIAL:
+	    case VAR_JOB:
 		break;
 
 	    case VAR_LIST:
@@ -3837,6 +3852,15 @@ item_lock(typval_T *tv, int deep, int lock)
 
     switch (tv->v_type)
     {
+	case VAR_UNKNOWN:
+	case VAR_NUMBER:
+	case VAR_STRING:
+	case VAR_FUNC:
+	case VAR_FLOAT:
+	case VAR_SPECIAL:
+	case VAR_JOB:
+	    break;
+
 	case VAR_LIST:
 	    if ((l = tv->vval.v_list) != NULL)
 	    {
@@ -5317,23 +5341,33 @@ eval_index(
     char_u	*s;
     char_u	*key = NULL;
 
-    if (rettv->v_type == VAR_FUNC)
+    switch (rettv->v_type)
     {
-	if (verbose)
-	    EMSG(_("E695: Cannot index a Funcref"));
-	return FAIL;
-    }
+	case VAR_FUNC:
+	    if (verbose)
+		EMSG(_("E695: Cannot index a Funcref"));
+	    return FAIL;
+	case VAR_FLOAT:
 #ifdef FEAT_FLOAT
-    else if (rettv->v_type == VAR_FLOAT)
-    {
-	if (verbose)
-	    EMSG(_(e_float_as_string));
-	return FAIL;
-    }
+	    if (verbose)
+		EMSG(_(e_float_as_string));
+	    return FAIL;
 #endif
-    else if (rettv->v_type == VAR_SPECIAL)
-    {
-	return FAIL;
+	case VAR_SPECIAL:
+	case VAR_JOB:
+	    if (verbose)
+		EMSG(_("E909: Cannot index a special variable"));
+	    return FAIL;
+	case VAR_UNKNOWN:
+	    if (evaluate)
+		return FAIL;
+	    /* FALLTHROUGH */
+
+	case VAR_STRING:
+	case VAR_NUMBER:
+	case VAR_LIST:
+	case VAR_DICT:
+	    break;
     }
 
     init_tv(&var1);
@@ -5428,6 +5462,13 @@ eval_index(
 
 	switch (rettv->v_type)
 	{
+	    case VAR_UNKNOWN:
+	    case VAR_FUNC:
+	    case VAR_FLOAT:
+	    case VAR_SPECIAL:
+	    case VAR_JOB:
+		break; /* not evaluating, skipping over subscript */
+
 	    case VAR_NUMBER:
 	    case VAR_STRING:
 		s = get_tv_string(rettv);
@@ -6163,11 +6204,6 @@ tv_equal(
 	case VAR_NUMBER:
 	    return tv1->vval.v_number == tv2->vval.v_number;
 
-#ifdef FEAT_FLOAT
-	case VAR_FLOAT:
-	    return tv1->vval.v_float == tv2->vval.v_float;
-#endif
-
 	case VAR_STRING:
 	    s1 = get_tv_string_buf(tv1, buf1);
 	    s2 = get_tv_string_buf(tv2, buf2);
@@ -6175,10 +6211,22 @@ tv_equal(
 
 	case VAR_SPECIAL:
 	    return tv1->vval.v_number == tv2->vval.v_number;
+
+	case VAR_FLOAT:
+#ifdef FEAT_FLOAT
+	    return tv1->vval.v_float == tv2->vval.v_float;
+#endif
+	case VAR_JOB:
+#ifdef FEAT_JOB
+	    return tv1->vval.v_job == tv2->vval.v_job;
+#endif
+	case VAR_UNKNOWN:
+	    break;
     }
 
-    EMSG2(_(e_intern2), "tv_equal()");
-    return TRUE;
+    /* VAR_UNKNOWN can be the result of a invalid expression, let's say it
+     * does not equal anything, not even itself. */
+    return FALSE;
 }
 
 /*
@@ -6896,7 +6944,7 @@ garbage_collect(void)
 }
 
 /*
- * Free lists and dictionaries that are no longer referenced.
+ * Free lists, dictionaries and jobs that are no longer referenced.
  */
     static int
 free_unref_items(int copyID)
@@ -6941,6 +6989,7 @@ free_unref_items(int copyID)
 	}
 	ll = ll_next;
     }
+
     return did_free;
 }
 
@@ -7047,59 +7096,56 @@ set_ref_in_item(
     list_T	*ll;
     int		abort = FALSE;
 
-    switch (tv->v_type)
+    if (tv->v_type == VAR_DICT)
     {
-	case VAR_DICT:
-	    dd = tv->vval.v_dict;
-	    if (dd != NULL && dd->dv_copyID != copyID)
+	dd = tv->vval.v_dict;
+	if (dd != NULL && dd->dv_copyID != copyID)
+	{
+	    /* Didn't see this dict yet. */
+	    dd->dv_copyID = copyID;
+	    if (ht_stack == NULL)
 	    {
-		/* Didn't see this dict yet. */
-		dd->dv_copyID = copyID;
-		if (ht_stack == NULL)
-		{
-		    abort = set_ref_in_ht(&dd->dv_hashtab, copyID, list_stack);
-		}
+		abort = set_ref_in_ht(&dd->dv_hashtab, copyID, list_stack);
+	    }
+	    else
+	    {
+		ht_stack_T *newitem = (ht_stack_T*)malloc(sizeof(ht_stack_T));
+		if (newitem == NULL)
+		    abort = TRUE;
 		else
 		{
-		    ht_stack_T *newitem = (ht_stack_T*)malloc(
-							  sizeof(ht_stack_T));
-		    if (newitem == NULL)
-			abort = TRUE;
-		    else
-		    {
-			newitem->ht = &dd->dv_hashtab;
-			newitem->prev = *ht_stack;
-			*ht_stack = newitem;
-		    }
+		    newitem->ht = &dd->dv_hashtab;
+		    newitem->prev = *ht_stack;
+		    *ht_stack = newitem;
 		}
 	    }
-	    break;
-
-	case VAR_LIST:
-	    ll = tv->vval.v_list;
-	    if (ll != NULL && ll->lv_copyID != copyID)
+	}
+    }
+    else if (tv->v_type == VAR_LIST)
+    {
+	ll = tv->vval.v_list;
+	if (ll != NULL && ll->lv_copyID != copyID)
+	{
+	    /* Didn't see this list yet. */
+	    ll->lv_copyID = copyID;
+	    if (list_stack == NULL)
 	    {
-		/* Didn't see this list yet. */
-		ll->lv_copyID = copyID;
-		if (list_stack == NULL)
-		{
-		    abort = set_ref_in_list(ll, copyID, ht_stack);
-		}
-		else
-		{
-		    list_stack_T *newitem = (list_stack_T*)malloc(
+		abort = set_ref_in_list(ll, copyID, ht_stack);
+	    }
+	    else
+	    {
+		list_stack_T *newitem = (list_stack_T*)malloc(
 							sizeof(list_stack_T));
-		    if (newitem == NULL)
-			abort = TRUE;
-		    else
-		    {
-			newitem->list = ll;
-			newitem->prev = *list_stack;
-			*list_stack = newitem;
-		    }
+		if (newitem == NULL)
+		    abort = TRUE;
+		else
+		{
+		    newitem->list = ll;
+		    newitem->prev = *list_stack;
+		    *list_stack = newitem;
 		}
 	    }
-	    break;
+	}
     }
     return abort;
 }
@@ -7669,6 +7715,40 @@ failret:
     return OK;
 }
 
+#ifdef FEAT_JOB
+    static void
+job_free(job_T *job)
+{
+    /* TODO: free any handles */
+
+    vim_free(job);
+}
+
+    static void
+job_unref(job_T *job)
+{
+    if (job != NULL && --job->jv_refcount <= 0)
+	job_free(job);
+}
+
+/*
+ * Allocate a job.  Sets the refcount to one.
+ */
+    static job_T *
+job_alloc(void)
+{
+    job_T *job;
+
+    job = (job_T *)alloc_clear(sizeof(job_T));
+    if (job != NULL)
+    {
+	job->jv_refcount = 1;
+    }
+    return job;
+}
+
+#endif
+
     static char *
 get_var_special_name(int nr)
 {
@@ -7763,12 +7843,14 @@ echo_string(
 
 	case VAR_STRING:
 	case VAR_NUMBER:
+	case VAR_UNKNOWN:
+	case VAR_JOB:
 	    *tofree = NULL;
 	    r = get_tv_string_buf(tv, numbuf);
 	    break;
 
-#ifdef FEAT_FLOAT
 	case VAR_FLOAT:
+#ifdef FEAT_FLOAT
 	    *tofree = NULL;
 	    vim_snprintf((char *)numbuf, NUMBUFLEN, "%g", tv->vval.v_float);
 	    r = numbuf;
@@ -7779,10 +7861,6 @@ echo_string(
 	    *tofree = NULL;
 	    r = (char_u *)get_var_special_name(tv->vval.v_number);
 	    break;
-
-	default:
-	    EMSG2(_(e_intern2), "echo_string()");
-	    *tofree = NULL;
     }
 
     if (--recurse == 0)
@@ -7822,9 +7900,9 @@ tv2string(
 	case VAR_LIST:
 	case VAR_DICT:
 	case VAR_SPECIAL:
+	case VAR_JOB:
+	case VAR_UNKNOWN:
 	    break;
-	default:
-	    EMSG2(_(e_intern2), "tv2string()");
     }
     return echo_string(tv, tofree, numbuf, copyID);
 }
@@ -8005,7 +8083,7 @@ static struct fst
 #endif
 #ifdef FEAT_CHANNEL
     {"ch_close",	1, 1, f_ch_close},
-    {"ch_open",		2, 3, f_ch_open},
+    {"ch_open",		1, 2, f_ch_open},
     {"ch_sendexpr",	2, 3, f_ch_sendexpr},
     {"ch_sendraw",	2, 3, f_ch_sendraw},
 #endif
@@ -8127,7 +8205,14 @@ static struct fst
     {"isdirectory",	1, 1, f_isdirectory},
     {"islocked",	1, 1, f_islocked},
     {"items",		1, 1, f_items},
+#ifdef FEAT_JOB
+    {"job_start",	1, 2, f_job_start},
+    {"job_status",	1, 1, f_job_status},
+    {"job_stop",	1, 2, f_job_stop},
+#endif
     {"join",		1, 2, f_join},
+    {"jsdecode",	1, 1, f_jsdecode},
+    {"jsencode",	1, 1, f_jsencode},
     {"jsondecode",	1, 1, f_jsondecode},
     {"jsonencode",	1, 1, f_jsonencode},
     {"keys",		1, 1, f_keys},
@@ -8188,6 +8273,7 @@ static struct fst
     {"range",		1, 3, f_range},
     {"readfile",	1, 3, f_readfile},
     {"reltime",		0, 2, f_reltime},
+    {"reltimefloat",	1, 1, f_reltimefloat},
     {"reltimestr",	1, 1, f_reltimestr},
     {"remote_expr",	2, 3, f_remote_expr},
     {"remote_foreground", 1, 1, f_remote_foreground},
@@ -9195,6 +9281,9 @@ assert_bool(typval_T *argvars, int isTrue)
     int		error = FALSE;
     garray_T	ga;
 
+    if (argvars[0].v_type == VAR_SPECIAL
+	    && argvars[0].vval.v_number == (isTrue ? VVAL_TRUE : VVAL_FALSE))
+	return;
     if (argvars[0].v_type != VAR_NUMBER
 	    || (get_tv_number_chk(&argvars[0], &error) == 0) == isTrue
 	    || error)
@@ -9743,21 +9832,23 @@ f_ch_open(typval_T *argvars, typval_T *rettv)
     char_u	*address;
     char_u	*mode;
     char_u	*callback = NULL;
-    char_u	buf1[NUMBUFLEN];
     char_u	*p;
+    char	*rest;
     int		port;
-    int		json_mode = FALSE;
+    int		waittime = 0;
+    int		timeout = 2000;
+    ch_mode_T	ch_mode = MODE_JSON;
+    int		ch_idx;
 
     /* default: fail */
     rettv->vval.v_number = -1;
 
     address = get_tv_string(&argvars[0]);
-    mode = get_tv_string_buf(&argvars[1], buf1);
-    if (argvars[2].v_type != VAR_UNKNOWN)
+    if (argvars[1].v_type != VAR_UNKNOWN
+	 && (argvars[1].v_type != VAR_DICT || argvars[1].vval.v_dict == NULL))
     {
-	callback = get_callback(&argvars[2]);
-	if (callback == NULL)
-	    return;
+	EMSG(_(e_invarg));
+	return;
     }
 
     /* parse address */
@@ -9768,30 +9859,56 @@ f_ch_open(typval_T *argvars, typval_T *rettv)
 	return;
     }
     *p++ = NUL;
-    port = atoi((char *)p);
-    if (*address == NUL || port <= 0)
+    port = strtol((char *)p, &rest, 10);
+    if (*address == NUL || port <= 0 || *rest != NUL)
     {
 	p[-1] = ':';
 	EMSG2(_(e_invarg2), address);
 	return;
     }
 
-    /* parse mode */
-    if (STRCMP(mode, "json") == 0)
-	json_mode = TRUE;
-    else if (STRCMP(mode, "raw") != 0)
+    if (argvars[1].v_type == VAR_DICT)
     {
-	EMSG2(_(e_invarg2), mode);
+	/* parse argdict */
+	dict_T	*dict = argvars[1].vval.v_dict;
+
+	if (dict_find(dict, (char_u *)"mode", -1) != NULL)
+	{
+	    mode = get_dict_string(dict, (char_u *)"mode", FALSE);
+	    if (STRCMP(mode, "raw") == 0)
+		ch_mode = MODE_RAW;
+	    else if (STRCMP(mode, "js") == 0)
+		ch_mode = MODE_JS;
+	    else if (STRCMP(mode, "json") == 0)
+		ch_mode = MODE_JSON;
+	    else
+	    {
+		EMSG2(_(e_invarg2), mode);
+		return;
+	    }
+	}
+	if (dict_find(dict, (char_u *)"waittime", -1) != NULL)
+	    waittime = get_dict_number(dict, (char_u *)"waittime");
+	if (dict_find(dict, (char_u *)"timeout", -1) != NULL)
+	    timeout = get_dict_number(dict, (char_u *)"timeout");
+	if (dict_find(dict, (char_u *)"callback", -1) != NULL)
+	    callback = get_dict_string(dict, (char_u *)"callback", FALSE);
+    }
+    if (waittime < 0 || timeout < 0)
+    {
+	EMSG(_(e_invarg));
 	return;
     }
 
-    rettv->vval.v_number = channel_open((char *)address, port, NULL);
-    if (rettv->vval.v_number >= 0)
+    ch_idx = channel_open((char *)address, port, waittime, NULL);
+    if (ch_idx >= 0)
     {
-	channel_set_json_mode(rettv->vval.v_number, json_mode);
+	channel_set_json_mode(ch_idx, ch_mode);
+	channel_set_timeout(ch_idx, timeout);
 	if (callback != NULL && *callback != NUL)
-	    channel_set_callback(rettv->vval.v_number, callback);
+	    channel_set_callback(ch_idx, callback);
     }
+    rettv->vval.v_number = ch_idx;
 }
 
 /*
@@ -9800,14 +9917,17 @@ f_ch_open(typval_T *argvars, typval_T *rettv)
  * Otherwise returns -1.
  */
     static int
-send_common(typval_T *argvars, char_u *text, char *fun)
+send_common(typval_T *argvars, char_u *text, int id, char *fun)
 {
     int		ch_idx;
     char_u	*callback = NULL;
 
     ch_idx = get_channel_arg(&argvars[0]);
     if (ch_idx < 0)
+    {
+	EMSG(_(e_invarg));
 	return -1;
+    }
 
     if (argvars[2].v_type != VAR_UNKNOWN)
     {
@@ -9815,10 +9935,10 @@ send_common(typval_T *argvars, char_u *text, char *fun)
 	if (callback == NULL)
 	    return -1;
     }
-    /* Set the callback or clear it. An empty callback means no callback and
-     * not reading the response. */
-    channel_set_req_callback(ch_idx,
-	    callback != NULL && *callback == NUL ? NULL : callback);
+    /* Set the callback. An empty callback means no callback and not reading
+     * the response. */
+    if (callback != NULL && *callback != NUL)
+	channel_set_req_callback(ch_idx, callback, id);
 
     if (channel_send(ch_idx, text, fun) == OK && callback == NULL)
 	return ch_idx;
@@ -9835,34 +9955,44 @@ f_ch_sendexpr(typval_T *argvars, typval_T *rettv)
     typval_T	*listtv;
     int		ch_idx;
     int		id;
+    ch_mode_T	ch_mode;
 
     /* return an empty string by default */
     rettv->v_type = VAR_STRING;
     rettv->vval.v_string = NULL;
 
+    ch_idx = get_channel_arg(&argvars[0]);
+    if (ch_idx < 0)
+    {
+	EMSG(_(e_invarg));
+	return;
+    }
+
+    ch_mode = channel_get_mode(ch_idx);
+    if (ch_mode == MODE_RAW)
+    {
+	EMSG(_("E912: cannot use ch_sendexpr() with a raw channel"));
+	return;
+    }
+
     id = channel_get_id();
-    text = json_encode_nr_expr(id, &argvars[1]);
+    text = json_encode_nr_expr(id, &argvars[1],
+					    ch_mode == MODE_JS ? JSON_JS : 0);
     if (text == NULL)
 	return;
 
-    ch_idx = send_common(argvars, text, "sendexpr");
+    ch_idx = send_common(argvars, text, id, "sendexpr");
     vim_free(text);
     if (ch_idx >= 0)
     {
 	if (channel_read_json_block(ch_idx, id, &listtv) == OK)
 	{
-	    if (listtv->v_type == VAR_LIST)
-	    {
-		list_T *list = listtv->vval.v_list;
+	    list_T *list = listtv->vval.v_list;
 
-		if (list->lv_len == 2)
-		{
-		    /* Move the item from the list and then change the type to
-		     * avoid the value being freed. */
-		    *rettv = list->lv_last->li_tv;
-		    list->lv_last->li_tv.v_type = VAR_NUMBER;
-		}
-	    }
+	    /* Move the item from the list and then change the type to
+	     * avoid the value being freed. */
+	    *rettv = list->lv_last->li_tv;
+	    list->lv_last->li_tv.v_type = VAR_NUMBER;
 	    clear_tv(listtv);
 	}
     }
@@ -9883,7 +10013,7 @@ f_ch_sendraw(typval_T *argvars, typval_T *rettv)
     rettv->vval.v_string = NULL;
 
     text = get_tv_string_buf(&argvars[1], buf);
-    ch_idx = send_common(argvars, text, "sendraw");
+    ch_idx = send_common(argvars, text, 0, "sendraw");
     if (ch_idx >= 0)
 	rettv->vval.v_string = channel_read_block(ch_idx);
 }
@@ -10493,8 +10623,8 @@ f_empty(typval_T *argvars, typval_T *rettv)
 	case VAR_NUMBER:
 	    n = argvars[0].vval.v_number == 0;
 	    break;
-#ifdef FEAT_FLOAT
 	case VAR_FLOAT:
+#ifdef FEAT_FLOAT
 	    n = argvars[0].vval.v_float == 0.0;
 	    break;
 #endif
@@ -10510,9 +10640,15 @@ f_empty(typval_T *argvars, typval_T *rettv)
 	    n = argvars[0].vval.v_number != VVAL_TRUE;
 	    break;
 
-	default:
-	    EMSG2(_(e_intern2), "f_empty()");
-	    n = 0;
+	case VAR_JOB:
+#ifdef FEAT_JOB
+	    n = argvars[0].vval.v_job->jv_status != JOB_STARTED;
+	    break;
+#endif
+	case VAR_UNKNOWN:
+	    EMSG2(_(e_intern2), "f_empty(UNKNOWN)");
+	    n = TRUE;
+	    break;
     }
 
     rettv->vval.v_number = n;
@@ -13017,6 +13153,9 @@ f_has(typval_T *argvars, typval_T *rettv)
 #ifdef FEAT_INS_EXPAND
 	"insert_expand",
 #endif
+#ifdef FEAT_JOB
+	"job",
+#endif
 #ifdef FEAT_JUMPLIST
 	"jumplist",
 #endif
@@ -14145,6 +14284,160 @@ f_items(typval_T *argvars, typval_T *rettv)
     dict_list(argvars, rettv, 2);
 }
 
+#ifdef FEAT_JOB
+/*
+ * "job_start()" function
+ */
+    static void
+f_job_start(typval_T *argvars UNUSED, typval_T *rettv)
+{
+    job_T *job;
+    char_u *cmd = NULL;
+#if defined(UNIX)
+# define USE_ARGV
+    char    **argv = NULL;
+    int	    argc = 0;
+#else
+    garray_T ga;
+#endif
+
+    rettv->v_type = VAR_JOB;
+    job = job_alloc();
+    rettv->vval.v_job = job;
+    if (job == NULL)
+	return;
+
+    rettv->vval.v_job->jv_status = JOB_FAILED;
+#ifndef USE_ARGV
+    ga_init2(&ga, (int)sizeof(char*), 20);
+#endif
+
+    if (argvars[0].v_type == VAR_STRING)
+    {
+	/* Command is a string. */
+	cmd = argvars[0].vval.v_string;
+#ifdef USE_ARGV
+	if (mch_parse_cmd(cmd, FALSE, &argv, &argc) == FAIL)
+	    return;
+	argv[argc] = NULL;
+#endif
+    }
+    else if (argvars[0].v_type != VAR_LIST
+	    || argvars[0].vval.v_list == NULL
+	    || argvars[0].vval.v_list->lv_len < 1)
+    {
+	EMSG(_(e_invarg));
+	return;
+    }
+    else
+    {
+	list_T	    *l = argvars[0].vval.v_list;
+	listitem_T  *li;
+	char_u	    *s;
+
+#ifdef USE_ARGV
+	/* Pass argv[] to mch_call_shell(). */
+	argv = (char **)alloc(sizeof(char *) * (l->lv_len + 1));
+	if (argv == NULL)
+	    return;
+#endif
+	for (li = l->lv_first; li != NULL; li = li->li_next)
+	{
+	    s = get_tv_string_chk(&li->li_tv);
+	    if (s == NULL)
+		goto theend;
+#ifdef USE_ARGV
+	    argv[argc++] = (char *)s;
+#else
+	    if (li != l->lv_first)
+	    {
+		s = vim_strsave_shellescape(s, FALSE, TRUE);
+		if (s == NULL)
+		    goto theend;
+	    }
+	    ga_concat(&ga, s);
+	    vim_free(s);
+	    if (li->li_next != NULL)
+		ga_append(&ga, ' ');
+#endif
+	}
+#ifdef USE_ARGV
+	argv[argc] = NULL;
+#else
+	cmd = ga.ga_data;
+#endif
+    }
+#ifdef USE_ARGV
+    mch_start_job(argv, job);
+#else
+    mch_start_job(cmd, job);
+#endif
+
+theend:
+#ifdef USE_ARGV
+    vim_free(argv);
+#else
+    vim_free(ga.ga_data);
+#endif
+}
+
+/*
+ * "job_status()" function
+ */
+    static void
+f_job_status(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
+{
+    char *result;
+
+    if (argvars[0].v_type != VAR_JOB)
+	EMSG(_(e_invarg));
+    else
+    {
+	job_T *job = argvars[0].vval.v_job;
+
+	if (job->jv_status == JOB_ENDED)
+	    /* No need to check, dead is dead. */
+	    result = "dead";
+	else if (job->jv_status == JOB_FAILED)
+	    result = "fail";
+	else
+	    result = mch_job_status(job);
+	rettv->v_type = VAR_STRING;
+	rettv->vval.v_string = vim_strsave((char_u *)result);
+    }
+}
+
+/*
+ * "job_stop()" function
+ */
+    static void
+f_job_stop(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
+{
+    if (argvars[0].v_type != VAR_JOB)
+	EMSG(_(e_invarg));
+    else
+    {
+	char_u *arg;
+
+	if (argvars[1].v_type == VAR_UNKNOWN)
+	    arg = (char_u *)"";
+	else
+	{
+	    arg = get_tv_string_chk(&argvars[1]);
+	    if (arg == NULL)
+	    {
+		EMSG(_(e_invarg));
+		return;
+	    }
+	}
+	if (mch_stop_job(argvars[0].vval.v_job, arg) == FAIL)
+	    rettv->vval.v_number = 0;
+	else
+	    rettv->vval.v_number = 1;
+    }
+}
+#endif
+
 /*
  * "join()" function
  */
@@ -14180,6 +14473,31 @@ f_join(typval_T *argvars, typval_T *rettv)
 }
 
 /*
+ * "jsdecode()" function
+ */
+    static void
+f_jsdecode(typval_T *argvars, typval_T *rettv)
+{
+    js_read_T	reader;
+
+    reader.js_buf = get_tv_string(&argvars[0]);
+    reader.js_fill = NULL;
+    reader.js_used = 0;
+    if (json_decode_all(&reader, rettv, JSON_JS) != OK)
+	EMSG(_(e_invarg));
+}
+
+/*
+ * "jsencode()" function
+ */
+    static void
+f_jsencode(typval_T *argvars, typval_T *rettv)
+{
+    rettv->v_type = VAR_STRING;
+    rettv->vval.v_string = json_encode(&argvars[0], JSON_JS);
+}
+
+/*
  * "jsondecode()" function
  */
     static void
@@ -14190,7 +14508,7 @@ f_jsondecode(typval_T *argvars, typval_T *rettv)
     reader.js_buf = get_tv_string(&argvars[0]);
     reader.js_fill = NULL;
     reader.js_used = 0;
-    if (json_decode_all(&reader, rettv) != OK)
+    if (json_decode_all(&reader, rettv, 0) != OK)
 	EMSG(_(e_invarg));
 }
 
@@ -14201,7 +14519,7 @@ f_jsondecode(typval_T *argvars, typval_T *rettv)
 f_jsonencode(typval_T *argvars, typval_T *rettv)
 {
     rettv->v_type = VAR_STRING;
-    rettv->vval.v_string = json_encode(&argvars[0]);
+    rettv->vval.v_string = json_encode(&argvars[0], 0);
 }
 
 /*
@@ -14248,7 +14566,11 @@ f_len(typval_T *argvars, typval_T *rettv)
 	case VAR_DICT:
 	    rettv->vval.v_number = dict_len(argvars[0].vval.v_dict);
 	    break;
-	default:
+	case VAR_UNKNOWN:
+	case VAR_SPECIAL:
+	case VAR_FLOAT:
+	case VAR_FUNC:
+	case VAR_JOB:
 	    EMSG(_("E701: Invalid type for len()"));
 	    break;
     }
@@ -15709,6 +16031,26 @@ f_reltime(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
     }
 #endif
 }
+
+#ifdef FEAT_FLOAT
+/*
+ * "reltimefloat()" function
+ */
+    static void
+f_reltimefloat(typval_T *argvars UNUSED, typval_T *rettv)
+{
+# ifdef FEAT_RELTIME
+    proftime_T	tm;
+# endif
+
+    rettv->v_type = VAR_FLOAT;
+    rettv->vval.v_float = 0;
+# ifdef FEAT_RELTIME
+    if (list2proftime(&argvars[0], &tm) == OK)
+	rettv->vval.v_float = profile_float(&tm);
+# endif
+}
+#endif
 
 /*
  * "reltimestr()" function
@@ -19602,17 +19944,19 @@ f_type(typval_T *argvars, typval_T *rettv)
 	case VAR_FUNC:   n = 2; break;
 	case VAR_LIST:   n = 3; break;
 	case VAR_DICT:   n = 4; break;
-#ifdef FEAT_FLOAT
 	case VAR_FLOAT:  n = 5; break;
-#endif
 	case VAR_SPECIAL:
-			 if (argvars[0].vval.v_number == VVAL_FALSE
-				 || argvars[0].vval.v_number == VVAL_TRUE)
-			     n = 6;
-			 else
-			     n = 7;
-			 break;
-	default: EMSG2(_(e_intern2), "f_type()"); n = 0; break;
+	     if (argvars[0].vval.v_number == VVAL_FALSE
+		     || argvars[0].vval.v_number == VVAL_TRUE)
+		 n = 6;
+	     else
+		 n = 7;
+	     break;
+	case VAR_JOB:    n = 8; break;
+	case VAR_UNKNOWN:
+	     EMSG2(_(e_intern2), "f_type(UNKNOWN)");
+	     n = -1;
+	     break;
     }
     rettv->vval.v_number = n;
 }
@@ -20975,15 +21319,15 @@ free_tv(typval_T *varp)
 	    case VAR_DICT:
 		dict_unref(varp->vval.v_dict);
 		break;
-	    case VAR_NUMBER:
-#ifdef FEAT_FLOAT
-	    case VAR_FLOAT:
+	    case VAR_JOB:
+#ifdef FEAT_JOB
+		job_unref(varp->vval.v_job);
+		break;
 #endif
+	    case VAR_NUMBER:
+	    case VAR_FLOAT:
 	    case VAR_UNKNOWN:
 	    case VAR_SPECIAL:
-		break;
-	    default:
-		EMSG2(_(e_intern2), "free_tv()");
 		break;
 	}
 	vim_free(varp);
@@ -21019,15 +21363,19 @@ clear_tv(typval_T *varp)
 	    case VAR_SPECIAL:
 		varp->vval.v_number = 0;
 		break;
-#ifdef FEAT_FLOAT
 	    case VAR_FLOAT:
+#ifdef FEAT_FLOAT
 		varp->vval.v_float = 0.0;
 		break;
 #endif
+	    case VAR_JOB:
+#ifdef FEAT_JOB
+		job_unref(varp->vval.v_job);
+		varp->vval.v_job = NULL;
+#endif
+		break;
 	    case VAR_UNKNOWN:
 		break;
-	    default:
-		EMSG2(_(e_intern2), "clear_tv()");
 	}
 	varp->v_lock = 0;
     }
@@ -21068,8 +21416,8 @@ get_tv_number_chk(typval_T *varp, int *denote)
     {
 	case VAR_NUMBER:
 	    return (long)(varp->vval.v_number);
-#ifdef FEAT_FLOAT
 	case VAR_FLOAT:
+#ifdef FEAT_FLOAT
 	    EMSG(_("E805: Using a Float as a Number"));
 	    break;
 #endif
@@ -21090,8 +21438,13 @@ get_tv_number_chk(typval_T *varp, int *denote)
 	case VAR_SPECIAL:
 	    return varp->vval.v_number == VVAL_TRUE ? 1 : 0;
 	    break;
-	default:
-	    EMSG2(_(e_intern2), "get_tv_number()");
+	case VAR_JOB:
+#ifdef FEAT_JOB
+	    EMSG(_("E910: Using a Job as a Number"));
+	    break;
+#endif
+	case VAR_UNKNOWN:
+	    EMSG2(_(e_intern2), "get_tv_number(UNKNOWN)");
 	    break;
     }
     if (denote == NULL)		/* useful for values that must be unsigned */
@@ -21109,11 +21462,8 @@ get_tv_float(typval_T *varp)
     {
 	case VAR_NUMBER:
 	    return (float_T)(varp->vval.v_number);
-#ifdef FEAT_FLOAT
 	case VAR_FLOAT:
 	    return varp->vval.v_float;
-	    break;
-#endif
 	case VAR_FUNC:
 	    EMSG(_("E891: Using a Funcref as a Float"));
 	    break;
@@ -21126,8 +21476,16 @@ get_tv_float(typval_T *varp)
 	case VAR_DICT:
 	    EMSG(_("E894: Using a Dictionary as a Float"));
 	    break;
-	default:
-	    EMSG2(_(e_intern2), "get_tv_float()");
+	case VAR_SPECIAL:
+	    EMSG(_("E907: Using a special value as a Float"));
+	    break;
+	case VAR_JOB:
+# ifdef FEAT_JOB
+	    EMSG(_("E911: Using a Job as a Float"));
+	    break;
+# endif
+	case VAR_UNKNOWN:
+	    EMSG2(_(e_intern2), "get_tv_float(UNKNOWN)");
 	    break;
     }
     return 0;
@@ -21226,8 +21584,8 @@ get_tv_string_buf_chk(typval_T *varp, char_u *buf)
 	case VAR_DICT:
 	    EMSG(_("E731: using Dictionary as a String"));
 	    break;
-#ifdef FEAT_FLOAT
 	case VAR_FLOAT:
+#ifdef FEAT_FLOAT
 	    EMSG(_(e_float_as_string));
 	    break;
 #endif
@@ -21238,9 +21596,26 @@ get_tv_string_buf_chk(typval_T *varp, char_u *buf)
 	case VAR_SPECIAL:
 	    STRCPY(buf, get_var_special_name(varp->vval.v_number));
 	    return buf;
-
-	default:
-	    EMSG2(_(e_intern2), "get_tv_string_buf()");
+	case VAR_JOB:
+#ifdef FEAT_JOB
+	    {
+		job_T *job = varp->vval.v_job;
+		char  *status = job->jv_status == JOB_FAILED ? "fail"
+				: job->jv_status == JOB_ENDED ? "dead"
+				: "run";
+# ifdef UNIX
+		vim_snprintf((char *)buf, NUMBUFLEN,
+			    "process %ld %s", (long)job->jv_pid, status);
+# else
+		/* TODO */
+		vim_snprintf((char *)buf, NUMBUFLEN, "process ? %s", status);
+# endif
+		return buf;
+	    }
+#endif
+	    break;
+	case VAR_UNKNOWN:
+	    EMSG(_("E908: using an invalid value as a String"));
 	    break;
     }
     return NULL;
@@ -21858,9 +22233,15 @@ copy_tv(typval_T *from, typval_T *to)
 	case VAR_SPECIAL:
 	    to->vval.v_number = from->vval.v_number;
 	    break;
-#ifdef FEAT_FLOAT
 	case VAR_FLOAT:
+#ifdef FEAT_FLOAT
 	    to->vval.v_float = from->vval.v_float;
+	    break;
+#endif
+	case VAR_JOB:
+#ifdef FEAT_JOB
+	    to->vval.v_job = from->vval.v_job;
+	    ++to->vval.v_job->jv_refcount;
 	    break;
 #endif
 	case VAR_STRING:
@@ -21892,8 +22273,8 @@ copy_tv(typval_T *from, typval_T *to)
 		++to->vval.v_dict->dv_refcount;
 	    }
 	    break;
-	default:
-	    EMSG2(_(e_intern2), "copy_tv()");
+	case VAR_UNKNOWN:
+	    EMSG2(_(e_intern2), "copy_tv(UNKNOWN)");
 	    break;
     }
 }
@@ -21925,12 +22306,11 @@ item_copy(
     switch (from->v_type)
     {
 	case VAR_NUMBER:
-#ifdef FEAT_FLOAT
 	case VAR_FLOAT:
-#endif
 	case VAR_STRING:
 	case VAR_FUNC:
 	case VAR_SPECIAL:
+	case VAR_JOB:
 	    copy_tv(from, to);
 	    break;
 	case VAR_LIST:
@@ -21965,8 +22345,8 @@ item_copy(
 	    if (to->vval.v_dict == NULL)
 		ret = FAIL;
 	    break;
-	default:
-	    EMSG2(_(e_intern2), "item_copy()");
+	case VAR_UNKNOWN:
+	    EMSG2(_(e_intern2), "item_copy(UNKNOWN)");
 	    ret = FAIL;
     }
     --recurse;
@@ -24514,6 +24894,7 @@ read_viminfo_varlist(vir_T *virp, int writing)
 #endif
 		case 'D': type = VAR_DICT; break;
 		case 'L': type = VAR_LIST; break;
+		case 'X': type = VAR_SPECIAL; break;
 	    }
 
 	    tab = vim_strchr(tab, '\t');
@@ -24594,12 +24975,15 @@ write_viminfo_varlist(FILE *fp)
 		{
 		    case VAR_STRING: s = "STR"; break;
 		    case VAR_NUMBER: s = "NUM"; break;
-#ifdef FEAT_FLOAT
 		    case VAR_FLOAT:  s = "FLO"; break;
-#endif
 		    case VAR_DICT:   s = "DIC"; break;
 		    case VAR_LIST:   s = "LIS"; break;
-		    default: continue;
+		    case VAR_SPECIAL: s = "XPL"; break;
+
+		    case VAR_UNKNOWN:
+		    case VAR_FUNC:
+		    case VAR_JOB:
+				     continue;
 		}
 		fprintf(fp, "!%s\t%s\t", this_var->di_key, s);
 		p = echo_string(&this_var->di_tv, &tofree, numbuf, 0);

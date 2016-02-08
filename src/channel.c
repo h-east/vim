@@ -42,6 +42,8 @@ static void chlog(int send, char_u *buf);
 # define SOCK_ERRNO errno = WSAGetLastError()
 # undef ECONNREFUSED
 # define ECONNREFUSED WSAECONNREFUSED
+# undef EWOULDBLOCK
+# define EWOULDBLOCK WSAEWOULDBLOCK
 # ifdef EINTR
 #  undef EINTR
 # endif
@@ -84,6 +86,15 @@ struct jsonqueue
 };
 typedef struct jsonqueue jsonq_T;
 
+struct cbqueue
+{
+    char_u		*callback;
+    int			seq_nr;
+    struct cbqueue	*next;
+    struct cbqueue	*prev;
+};
+typedef struct cbqueue cbq_T;
+
 typedef struct {
     sock_T    ch_fd;	/* the socket, -1 for a closed channel */
     int	      ch_idx;	/* used by channel_poll_setup() */
@@ -106,10 +117,12 @@ typedef struct {
     void      (*ch_close_cb)(void); /* callback for when channel is closed */
 
     char_u    *ch_callback;	/* function to call when a msg is not handled */
-    char_u    *ch_req_callback;	/* function to call for current request */
+    cbq_T     ch_cb_head;	/* dummy node for pre-request callbacks */
 
-    int	      ch_json_mode;	/* TRUE for a json channel */
+    ch_mode_T ch_mode;
     jsonq_T   ch_json_head;	/* dummy node, header for circular queue */
+
+    int       ch_timeout;	/* request timeout in msec */
 } channel_T;
 
 /*
@@ -123,6 +136,48 @@ static int channel_count = 0;
  * TODO: open debug file when desired.
  */
 FILE *debugfd = NULL;
+
+#ifdef _WIN32
+# undef PERROR
+# define PERROR(msg) (void)emsg3((char_u *)"%s: %s", \
+	(char_u *)msg, (char_u *)strerror_win32(errno))
+
+    static char *
+strerror_win32(int eno)
+{
+    static LPVOID msgbuf = NULL;
+    char_u *ptr;
+
+    if (msgbuf)
+	LocalFree(msgbuf);
+    FormatMessage(
+	FORMAT_MESSAGE_ALLOCATE_BUFFER |
+	FORMAT_MESSAGE_FROM_SYSTEM |
+	FORMAT_MESSAGE_IGNORE_INSERTS,
+	NULL,
+	eno,
+	MAKELANGID(LANG_ENGLISH, SUBLANG_DEFAULT),
+	(LPTSTR) &msgbuf,
+	0,
+	NULL);
+    /* chomp \r or \n */
+    for (ptr = (char_u *)msgbuf; *ptr; ptr++)
+	switch (*ptr)
+	{
+	    case '\r':
+		STRMOVE(ptr, ptr + 1);
+		ptr--;
+		break;
+	    case '\n':
+		if (*(ptr + 1) == '\0')
+		    *ptr = '\0';
+		else
+		    *ptr = ' ';
+		break;
+	}
+    return msgbuf;
+}
+#endif
 
 /*
  * Add a new channel slot, return the index.
@@ -168,8 +223,12 @@ add_channel(void)
     /* initialize circular queues */
     ch->ch_head.next = &ch->ch_head;
     ch->ch_head.prev = &ch->ch_head;
+    ch->ch_cb_head.next = &ch->ch_cb_head;
+    ch->ch_cb_head.prev = &ch->ch_cb_head;
     ch->ch_json_head.next = &ch->ch_json_head;
     ch->ch_json_head.prev = &ch->ch_json_head;
+
+    ch->ch_timeout = 2000;
 
     return channel_count++;
 }
@@ -292,17 +351,19 @@ channel_gui_unregister(int idx)
  * Returns a negative number for failure.
  */
     int
-channel_open(char *hostname, int port_in, void (*close_cb)(void))
+channel_open(char *hostname, int port_in, int waittime, void (*close_cb)(void))
 {
     int			sd;
     struct sockaddr_in	server;
     struct hostent *	host;
 #ifdef WIN32
     u_short		port = port_in;
+    u_long		val = 1;
 #else
     int			port = port_in;
 #endif
     int			idx;
+    int			ret;
 
 #ifdef WIN32
     channel_init_winsock();
@@ -337,62 +398,120 @@ channel_open(char *hostname, int port_in, void (*close_cb)(void))
     }
     memcpy((char *)&server.sin_addr, host->h_addr, host->h_length);
 
-    /* Connect to server */
-    if (connect(sd, (struct sockaddr *)&server, sizeof(server)))
+    if (waittime >= 0)
     {
-	SOCK_ERRNO;
-	CHERROR("channel_open: Connect failed with errno %d\n", errno);
-	if (errno == ECONNREFUSED)
+	/* Make connect non-blocking. */
+	if (
+#ifdef _WIN32
+	    ioctlsocket(sd, FIONBIO, &val) < 0
+#else
+	    fcntl(sd, F_SETFL, O_NONBLOCK) < 0
+#endif
+	   )
 	{
+	    SOCK_ERRNO;
+	    CHERROR("channel_open: Connect failed with errno %d\n", errno);
 	    sock_close(sd);
-	    if ((sd = (sock_T)socket(AF_INET, SOCK_STREAM, 0)) == (sock_T)-1)
-	    {
-		SOCK_ERRNO;
-		CHERROR("socket() retry in channel_open()\n", "");
-		PERROR("E900: socket() retry in channel_open()");
-		return -1;
-	    }
-	    if (connect(sd, (struct sockaddr *)&server, sizeof(server)))
-	    {
-		int retries = 36;
-		int success = FALSE;
-
-		SOCK_ERRNO;
-		while (retries-- && ((errno == ECONNREFUSED)
-							 || (errno == EINTR)))
-		{
-		    CHERROR("retrying...\n", "");
-		    mch_delay(3000L, TRUE);
-		    ui_breakcheck();
-		    if (got_int)
-		    {
-			errno = EINTR;
-			break;
-		    }
-		    if (connect(sd, (struct sockaddr *)&server,
-							 sizeof(server)) == 0)
-		    {
-			success = TRUE;
-			break;
-		    }
-		    SOCK_ERRNO;
-		}
-		if (!success)
-		{
-		    /* Get here when the server can't be found. */
-		    CHERROR("Cannot connect to port after retry\n", "");
-		    PERROR(_("E899: Cannot connect to port after retry2"));
-		    sock_close(sd);
-		    return -1;
-		}
-	    }
+	    return -1;
 	}
-	else
+    }
+
+    /* Try connecting to the server. */
+    ret = connect(sd, (struct sockaddr *)&server, sizeof(server));
+    SOCK_ERRNO;
+    if (ret < 0)
+    {
+	if (errno != EWOULDBLOCK && errno != EINPROGRESS)
 	{
+	    CHERROR("channel_open: Connect failed with errno %d\n", errno);
 	    CHERROR("Cannot connect to port\n", "");
 	    PERROR(_("E902: Cannot connect to port"));
 	    sock_close(sd);
 	    return -1;
+	}
+    }
+
+    if (waittime >= 0 && ret < 0)
+    {
+	struct timeval	tv;
+	fd_set		wfds;
+
+	FD_ZERO(&wfds);
+	FD_SET(sd, &wfds);
+	tv.tv_sec = waittime / 1000;
+	tv.tv_usec = (waittime % 1000) * 1000;
+	ret = select((int)sd + 1, NULL, &wfds, NULL, &tv);
+	if (ret < 0)
+	{
+	    SOCK_ERRNO;
+	    CHERROR("channel_open: Connect failed with errno %d\n", errno);
+	    CHERROR("Cannot connect to port\n", "");
+	    PERROR(_("E902: Cannot connect to port"));
+	    sock_close(sd);
+	    return -1;
+	}
+	if (!FD_ISSET(sd, &wfds))
+	{
+	    /* don't give an error, we just timed out. */
+	    sock_close(sd);
+	    return -1;
+	}
+    }
+
+    if (waittime >= 0)
+    {
+#ifdef _WIN32
+	val = 0;
+	ioctlsocket(sd, FIONBIO, &val);
+#else
+	(void)fcntl(sd, F_SETFL, 0);
+#endif
+    }
+
+    /* Only retry for netbeans.  TODO: can we use a waittime instead? */
+    if (errno == ECONNREFUSED && close_cb != NULL)
+    {
+	sock_close(sd);
+	if ((sd = (sock_T)socket(AF_INET, SOCK_STREAM, 0)) == (sock_T)-1)
+	{
+	    SOCK_ERRNO;
+	    CHERROR("socket() retry in channel_open()\n", "");
+	    PERROR("E900: socket() retry in channel_open()");
+	    return -1;
+	}
+	if (connect(sd, (struct sockaddr *)&server, sizeof(server)))
+	{
+	    int retries = 36;
+	    int success = FALSE;
+
+	    SOCK_ERRNO;
+	    while (retries-- && ((errno == ECONNREFUSED)
+						     || (errno == EINTR)))
+	    {
+		CHERROR("retrying...\n", "");
+		mch_delay(3000L, TRUE);
+		ui_breakcheck();
+		if (got_int)
+		{
+		    errno = EINTR;
+		    break;
+		}
+		if (connect(sd, (struct sockaddr *)&server,
+						     sizeof(server)) == 0)
+		{
+		    success = TRUE;
+		    break;
+		}
+		SOCK_ERRNO;
+	    }
+	    if (!success)
+	    {
+		/* Get here when the server can't be found. */
+		CHERROR("Cannot connect to port after retry\n", "");
+		PERROR(_("E899: Cannot connect to port after retry2"));
+		sock_close(sd);
+		return -1;
+	    }
 	}
     }
 
@@ -407,12 +526,21 @@ channel_open(char *hostname, int port_in, void (*close_cb)(void))
 }
 
 /*
- * Set the json mode of channel "idx" to TRUE or FALSE.
+ * Set the json mode of channel "idx" to "ch_mode".
  */
     void
-channel_set_json_mode(int idx, int json_mode)
+channel_set_json_mode(int idx, ch_mode_T ch_mode)
 {
-    channels[idx].ch_json_mode = json_mode;
+    channels[idx].ch_mode = ch_mode;
+}
+
+/*
+ * Set the read timeout of channel "idx".
+ */
+    void
+channel_set_timeout(int idx, int timeout)
+{
+    channels[idx].ch_timeout = timeout;
 }
 
 /*
@@ -426,15 +554,23 @@ channel_set_callback(int idx, char_u *callback)
 }
 
 /*
- * Set the callback for channel "idx" for the next response.
+ * Set the callback for channel "idx" for the response with "id".
  */
     void
-channel_set_req_callback(int idx, char_u *callback)
+channel_set_req_callback(int idx, char_u *callback, int id)
 {
-    /* TODO: make a list of callbacks */
-    vim_free(channels[idx].ch_req_callback);
-    channels[idx].ch_req_callback = callback == NULL
-					       ? NULL : vim_strsave(callback);
+    cbq_T *cbhead = &channels[idx].ch_cb_head;
+    cbq_T *item = (cbq_T *)alloc((int)sizeof(cbq_T));
+
+    if (item != NULL)
+    {
+	item->callback = vim_strsave(callback);
+	item->seq_nr = id;
+	item->prev = cbhead->prev;
+	cbhead->prev = item;
+	item->next = cbhead;
+	item->prev->next = item;
+    }
 }
 
 /*
@@ -536,7 +672,8 @@ channel_parse_json(int ch_idx)
     js_read_T	reader;
     typval_T	listtv;
     jsonq_T	*item;
-    jsonq_T	*head = &channels[ch_idx].ch_json_head;
+    channel_T	*channel = &channels[ch_idx];
+    jsonq_T	*head = &channel->ch_json_head;
     int		ret;
 
     if (channel_peek(ch_idx) == NULL)
@@ -549,10 +686,13 @@ channel_parse_json(int ch_idx)
     reader.js_fill = NULL;
     /* reader.js_fill = channel_fill; */
     reader.js_cookie = &ch_idx;
-    ret = json_decode(&reader, &listtv);
+    ret = json_decode(&reader, &listtv,
+				   channel->ch_mode == MODE_JS ? JSON_JS : 0);
     if (ret == OK)
     {
-	if (listtv.v_type != VAR_LIST)
+	/* Only accept the response when it is a list with at least two
+	 * items. */
+	if (listtv.v_type != VAR_LIST || listtv.vval.v_list->lv_len < 2)
 	{
 	    /* TODO: give error */
 	    clear_tv(&listtv);
@@ -599,6 +739,19 @@ channel_parse_json(int ch_idx)
 
 /*
  * Remove "node" from the queue that it is in and free it.
+ * Also frees the contained callback name.
+ */
+    static void
+remove_cb_node(cbq_T *node)
+{
+    node->prev->next = node->next;
+    node->next->prev = node->prev;
+    vim_free(node->callback);
+    vim_free(node);
+}
+
+/*
+ * Remove "node" from the queue that it is in and free it.
  * Caller should have freed or used node->value.
  */
     static void
@@ -628,8 +781,7 @@ channel_get_json(int ch_idx, int id, typval_T **rettv)
 	typval_T    *tv = &l->lv_first->li_tv;
 
 	if ((id > 0 && tv->v_type == VAR_NUMBER && tv->vval.v_number == id)
-	      || (id <= 0
-		      && (tv->v_type != VAR_NUMBER || tv->vval.v_number < 0)))
+	      || id <= 0)
 	{
 	    *rettv = item->value;
 	    remove_json_node(item);
@@ -703,24 +855,35 @@ channel_exe_cmd(int idx, char_u *cmd, typval_T *arg2, typval_T *arg3)
 	{
 	    typval_T	*tv;
 	    typval_T	err_tv;
-	    char_u	*json;
+	    char_u	*json = NULL;
+	    channel_T	*channel = &channels[idx];
+	    int		options = channel->ch_mode == MODE_JS ? JSON_JS : 0;
 
 	    /* Don't pollute the display with errors. */
 	    ++emsg_skip;
 	    tv = eval_expr(arg, NULL);
-	    --emsg_skip;
 	    if (is_eval)
 	    {
-		if (tv == NULL)
+		if (tv != NULL)
+		    json = json_encode_nr_expr(arg3->vval.v_number, tv,
+								     options);
+		if (tv == NULL || (json != NULL && *json == NUL))
 		{
+		    /* If evaluation failed or the result can't be encoded
+		     * then return the string "ERROR". */
 		    err_tv.v_type = VAR_STRING;
 		    err_tv.vval.v_string = (char_u *)"ERROR";
 		    tv = &err_tv;
+		    json = json_encode_nr_expr(arg3->vval.v_number, tv,
+								     options);
 		}
-		json = json_encode_nr_expr(arg3->vval.v_number, tv);
-		channel_send(idx, json, "eval");
-		vim_free(json);
+		if (json != NULL)
+		{
+		    channel_send(idx, json, "eval");
+		    vim_free(json);
+		}
 	    }
+	    --emsg_skip;
 	    if (tv != &err_tv)
 		free_tv(tv);
 	}
@@ -742,13 +905,14 @@ may_invoke_callback(int idx)
     typval_T	*typetv;
     typval_T	argv[3];
     int		seq_nr = -1;
-    int		json_mode = channels[idx].ch_json_mode;
+    channel_T	*channel = &channels[idx];
+    ch_mode_T	ch_mode = channel->ch_mode;
 
-    if (channels[idx].ch_close_cb != NULL)
+    if (channel->ch_close_cb != NULL)
 	/* this channel is handled elsewhere (netbeans) */
 	return FALSE;
 
-    if (json_mode)
+    if (ch_mode != MODE_RAW)
     {
 	/* Get any json message in the queue. */
 	if (channel_get_json(idx, -1, &listtv) == FAIL)
@@ -760,13 +924,6 @@ may_invoke_callback(int idx)
 	}
 
 	list = listtv->vval.v_list;
-	if (list->lv_len < 2)
-	{
-	    /* TODO: give error */
-	    clear_tv(listtv);
-	    return FALSE;
-	}
-
 	argv[1] = list->lv_first->li_next->li_tv;
 	typetv = &list->lv_first->li_tv;
 	if (typetv->v_type == VAR_STRING)
@@ -804,17 +961,27 @@ may_invoke_callback(int idx)
 	argv[1].vval.v_string = msg;
     }
 
-    if (channels[idx].ch_req_callback != NULL && seq_nr != 0)
+    if (seq_nr > 0)
     {
-	/* TODO: check the sequence number */
-	/* invoke the one-time callback */
-	invoke_callback(idx, channels[idx].ch_req_callback, argv);
-	channels[idx].ch_req_callback = NULL;
+	cbq_T *cbhead = &channel->ch_cb_head;
+	cbq_T *cbitem = cbhead->next;
+
+	/* invoke the one-time callback with the matching nr */
+	while (cbitem != cbhead)
+	{
+	    if (cbitem->seq_nr == seq_nr)
+	    {
+		invoke_callback(idx, cbitem->callback, argv);
+		remove_cb_node(cbitem);
+		break;
+	    }
+	    cbitem = cbitem->next;
+	}
     }
-    else if (channels[idx].ch_callback != NULL)
+    else if (channel->ch_callback != NULL)
     {
 	/* invoke the channel callback */
-	invoke_callback(idx, channels[idx].ch_callback, argv);
+	invoke_callback(idx, channel->ch_callback, argv);
     }
     /* else: drop the message TODO: give error */
 
@@ -844,6 +1011,7 @@ channel_close(int idx)
 {
     channel_T	*channel = &channels[idx];
     jsonq_T	*jhead;
+    cbq_T	*cbhead;
 
     if (channel->ch_fd >= 0)
     {
@@ -855,9 +1023,14 @@ channel_close(int idx)
 #endif
 	vim_free(channel->ch_callback);
 	channel->ch_callback = NULL;
+	channel->ch_timeout = 2000;
 
 	while (channel_peek(idx) != NULL)
 	    vim_free(channel_get(idx));
+
+	cbhead = &channel->ch_cb_head;
+	while (cbhead->next != cbhead)
+	    remove_cb_node(cbhead->next);
 
 	jhead = &channel->ch_json_head;
 	while (jhead->next != jhead)
@@ -1101,9 +1274,8 @@ channel_read_block(int idx)
 {
     if (channel_peek(idx) == NULL)
     {
-	/* Wait for up to 2 seconds.
-	 * TODO: use timeout set on the channel. */
-	if (channel_wait(channels[idx].ch_fd, 2000) == FAIL)
+	/* Wait for up to the channel timeout. */
+	if (channel_wait(channels[idx].ch_fd, channels[idx].ch_timeout) == FAIL)
 	    return NULL;
 	channel_read(idx);
     }
@@ -1114,7 +1286,7 @@ channel_read_block(int idx)
 /*
  * Read one JSON message from channel "ch_idx" with ID "id" and store the
  * result in "rettv".
- * Blocks until the message is received.
+ * Blocks until the message is received or the timeout is reached.
  */
     int
 channel_read_json_block(int ch_idx, int id, typval_T **rettv)
@@ -1136,10 +1308,10 @@ channel_read_json_block(int ch_idx, int id, typval_T **rettv)
 	    if (channel_parse_messages())
 		continue;
 
-	    /* Wait for up to 2 seconds.
-	     * TODO: use timeout set on the channel. */
+	    /* Wait for up to the channel timeout. */
 	    if (channels[ch_idx].ch_fd < 0
-			|| channel_wait(channels[ch_idx].ch_fd, 2000) == FAIL)
+			|| channel_wait(channels[ch_idx].ch_fd,
+					 channels[ch_idx].ch_timeout) == FAIL)
 		break;
 	    channel_read(ch_idx);
 	}
@@ -1315,6 +1487,9 @@ channel_parse_messages(void)
     return ret;
 }
 
+/*
+ * Mark references to lists used in channels.
+ */
     int
 set_ref_in_channel(int copyID)
 {
@@ -1340,4 +1515,17 @@ set_ref_in_channel(int copyID)
     }
     return abort;
 }
+
+/*
+ * Return the mode of channel "idx".
+ * If "idx" is invalid returns MODE_JSON.
+ */
+    ch_mode_T
+channel_get_mode(int idx)
+{
+    if (idx < 0 || idx >= channel_count)
+	return MODE_JSON;
+    return channels[idx].ch_mode;
+}
+
 #endif /* FEAT_CHANNEL */
