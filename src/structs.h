@@ -1110,7 +1110,12 @@ typedef double	float_T;
 
 typedef struct listvar_S list_T;
 typedef struct dictvar_S dict_T;
+
 typedef struct jobvar_S job_T;
+typedef struct readq_S readq_T;
+typedef struct jsonq_S jsonq_T;
+typedef struct cbq_S cbq_T;
+typedef struct channel_S channel_T;
 
 typedef enum
 {
@@ -1122,7 +1127,8 @@ typedef enum
     VAR_DICT,	 /* "v_dict" is used */
     VAR_FLOAT,	 /* "v_float" is used */
     VAR_SPECIAL, /* "v_number" is used */
-    VAR_JOB	 /* "v_job" is used */
+    VAR_JOB,	 /* "v_job" is used */
+    VAR_CHANNEL	 /* "v_channel" is used */
 } vartype_T;
 
 /*
@@ -1143,6 +1149,9 @@ typedef struct
 	dict_T		*v_dict;	/* dict value (can be NULL!) */
 #ifdef FEAT_JOB
 	job_T		*v_job;		/* job value (can be NULL!) */
+#endif
+#ifdef FEAT_CHANNEL
+	channel_T	*v_channel;	/* channel value (can be NULL!) */
 #endif
     }		vval;
 } typval_T;
@@ -1255,7 +1264,113 @@ struct jobvar_S
     jobstatus_T	jv_status;
 
     int		jv_refcount;	/* reference count */
+    channel_T	*jv_channel;	/* channel for I/O, reference counted */
 };
+
+/*
+ * Structures to hold info about a Channel.
+ */
+struct readq_S
+{
+    char_u	*rq_buffer;
+    readq_T	*rq_next;
+    readq_T	*rq_prev;
+};
+
+struct jsonq_S
+{
+    typval_T	*jq_value;
+    jsonq_T	*jq_next;
+    jsonq_T	*jq_prev;
+};
+
+struct cbq_S
+{
+    char_u	*cq_callback;
+    int		cq_seq_nr;
+    cbq_T	*cq_next;
+    cbq_T	*cq_prev;
+};
+
+/* mode for a channel */
+typedef enum
+{
+    MODE_NL = 0,
+    MODE_RAW,
+    MODE_JSON,
+    MODE_JS
+} ch_mode_T;
+
+/* Ordering matters, it is used in for loops: IN is last, only SOCK/OUT/ERR
+ * are polled. */
+#define CHAN_SOCK   0
+#define CH_SOCK	    ch_pfd[CHAN_SOCK].ch_fd
+
+#ifdef UNIX
+# define CHANNEL_PIPES
+
+# define CHAN_OUT   1
+# define CHAN_ERR   2
+# define CHAN_IN    3
+# define CH_OUT	    ch_pfd[CHAN_OUT].ch_fd
+# define CH_ERR	    ch_pfd[CHAN_ERR].ch_fd
+# define CH_IN	    ch_pfd[CHAN_IN].ch_fd
+#endif
+
+/* The per-fd info for a channel. */
+typedef struct {
+    sock_T	ch_fd;	    /* socket/stdin/stdout/stderr, -1 if not used */
+
+# if defined(UNIX) && !defined(HAVE_SELECT)
+    int		ch_poll_idx;	/* used by channel_poll_setup() */
+# endif
+
+#ifdef FEAT_GUI_X11
+    XtInputId	ch_inputHandler; /* Cookie for input */
+#endif
+#ifdef FEAT_GUI_GTK
+    gint	ch_inputHandler; /* Cookie for input */
+#endif
+#ifdef WIN32
+    int		ch_inputHandler; /* ret.value of WSAAsyncSelect() */
+#endif
+} chan_fd_T;
+
+struct channel_S {
+    channel_T	*ch_next;
+    channel_T	*ch_prev;
+
+    int		ch_id;		/* ID of the channel */
+
+    chan_fd_T	ch_pfd[4];	/* info for socket, out, err and in */
+
+    readq_T	ch_head;	/* dummy node, header for circular queue */
+
+    int		ch_error;	/* When TRUE an error was reported.  Avoids
+				 * giving pages full of error messages when
+				 * the other side has exited, only mention the
+				 * first error until the connection works
+				 * again. */
+
+    void	(*ch_close_cb)(void); /* callback for when channel is closed */
+
+    int		ch_block_id;	/* ID that channel_read_json_block() is
+				   waiting for */
+    char_u	*ch_callback;	/* function to call when a msg is not handled */
+    cbq_T	ch_cb_head;	/* dummy node for pre-request callbacks */
+
+    ch_mode_T	ch_mode;
+    jsonq_T	ch_json_head;	/* dummy node, header for circular queue */
+
+    int		ch_timeout;	/* request timeout in msec */
+
+    job_T	*ch_job;	/* Job that uses this channel; this does not
+				 * count as a reference to avoid a circular
+				 * reference. */
+
+    int		ch_refcount;	/* reference count */
+};
+
 
 /* structure used for explicit stack while garbage collecting hash tables */
 typedef struct ht_stack_S
@@ -2729,11 +2844,3 @@ struct js_reader
     void	*js_cookie;	/* can be used by js_fill */
 };
 typedef struct js_reader js_read_T;
-
-/* mode for a channel */
-typedef enum
-{
-    MODE_RAW = 0,
-    MODE_JSON,
-    MODE_JS
-} ch_mode_T;
