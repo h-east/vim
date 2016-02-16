@@ -5039,21 +5039,54 @@ mch_start_job(char *cmd, job_T *job)
     STARTUPINFO		si;
     PROCESS_INFORMATION	pi;
     HANDLE		jo;
+# ifdef FEAT_CHANNEL
+    channel_T		*channel;
+    HANDLE		ifd[2];
+    HANDLE		ofd[2];
+    HANDLE		efd[2];
+    SECURITY_ATTRIBUTES saAttr;
+
+    ifd[0] = INVALID_HANDLE_VALUE;
+    ifd[1] = INVALID_HANDLE_VALUE;
+    ofd[0] = INVALID_HANDLE_VALUE;
+    ofd[1] = INVALID_HANDLE_VALUE;
+    efd[0] = INVALID_HANDLE_VALUE;
+    efd[1] = INVALID_HANDLE_VALUE;
+
+    channel = add_channel();
+    if (channel == NULL)
+	return;
+# endif
 
     jo = CreateJobObject(NULL, NULL);
     if (jo == NULL)
     {
 	job->jv_status = JOB_FAILED;
-	return;
+	goto failed;
     }
 
     ZeroMemory(&pi, sizeof(pi));
     ZeroMemory(&si, sizeof(si));
     si.cb = sizeof(si);
-    si.dwFlags = STARTF_USESHOWWINDOW;
+    si.dwFlags |= STARTF_USESHOWWINDOW;
     si.wShowWindow = SW_HIDE;
 
-    if (!vim_create_process(cmd, FALSE,
+    saAttr.nLength = sizeof(SECURITY_ATTRIBUTES);
+    saAttr.bInheritHandle = TRUE;
+    saAttr.lpSecurityDescriptor = NULL;
+    if (!CreatePipe(&ifd[0], &ifd[1], &saAttr, 0)
+       || !pSetHandleInformation(ifd[1], HANDLE_FLAG_INHERIT, 0)
+       || !CreatePipe(&ofd[0], &ofd[1], &saAttr, 0)
+       || !pSetHandleInformation(ofd[0], HANDLE_FLAG_INHERIT, 0)
+       || !CreatePipe(&efd[0], &efd[1], &saAttr, 0)
+       || !pSetHandleInformation(efd[0], HANDLE_FLAG_INHERIT, 0))
+	goto failed;
+    si.dwFlags |= STARTF_USESTDHANDLES;
+    si.hStdInput = ifd[0];
+    si.hStdOutput = ofd[1];
+    si.hStdError = efd[1];
+
+    if (!vim_create_process(cmd, TRUE,
 	    CREATE_SUSPENDED |
 	    CREATE_DEFAULT_ERROR_MODE |
 	    CREATE_NEW_PROCESS_GROUP |
@@ -5062,22 +5095,49 @@ mch_start_job(char *cmd, job_T *job)
     {
 	CloseHandle(jo);
 	job->jv_status = JOB_FAILED;
+	goto failed;
     }
-    else
+
+    if (!AssignProcessToJobObject(jo, pi.hProcess))
     {
-	if (!AssignProcessToJobObject(jo, pi.hProcess))
-	{
-	    /* if failing, switch the way to terminate
-	     * process with TerminateProcess. */
-	    CloseHandle(jo);
-	    jo = NULL;
-	}
-	ResumeThread(pi.hThread);
-	CloseHandle(job->jv_proc_info.hThread);
-	job->jv_proc_info = pi;
-	job->jv_job_object = jo;
-	job->jv_status = JOB_STARTED;
+	/* if failing, switch the way to terminate
+	 * process with TerminateProcess. */
+	CloseHandle(jo);
+	jo = NULL;
     }
+    ResumeThread(pi.hThread);
+    CloseHandle(job->jv_proc_info.hThread);
+    job->jv_proc_info = pi;
+    job->jv_job_object = jo;
+    job->jv_status = JOB_STARTED;
+
+    CloseHandle(ifd[0]);
+    CloseHandle(ofd[1]);
+    CloseHandle(efd[1]);
+
+# ifdef FEAT_CHANNEL
+    job->jv_channel = channel;
+    channel_set_pipes(channel, (sock_T)ifd[1], (sock_T)ofd[0], (sock_T)efd[0]);
+    channel_set_job(channel, job);
+
+#   ifdef FEAT_GUI
+     channel_gui_register(channel);
+#   endif
+# endif
+    return;
+
+failed:
+# ifdef FEAT_CHANNEL
+    CloseHandle(ifd[0]);
+    CloseHandle(ofd[0]);
+    CloseHandle(efd[0]);
+    CloseHandle(ifd[1]);
+    CloseHandle(ofd[1]);
+    CloseHandle(efd[1]);
+    channel_free(channel);
+# else
+    ;  /* make compiler happy */
+# endif
 }
 
     char *

@@ -264,7 +264,7 @@ ifndef DYNAMIC_PYTHON3_DLL
 DYNAMIC_PYTHON3_DLL=python$(PYTHON3_VER).dll
 endif
 ifdef PYTHON3_HOME
-PYTHON3_HOME_DEF=-DPYTHON3_HOME=\"$(PYTHON3_HOME)\"
+PYTHON3_HOME_DEF=-DPYTHON3_HOME=L\"$(PYTHON3_HOME)\"
 endif
 
 ifeq (no,$(DYNAMIC_PYTHON3))
@@ -414,7 +414,7 @@ WINDRES_CC = $(CC)
 #>>>>> end of choices
 ###########################################################################
 
-CFLAGS = -Iproto $(DEFINES) -pipe -w -march=$(ARCH) -Wall
+CFLAGS = -Iproto $(DEFINES) -pipe -march=$(ARCH) -Wall
 WINDRES_FLAGS = --preprocessor="$(WINDRES_CC) -E -xc" -DRC_INVOKED
 EXTRA_LIBS =
 
@@ -679,19 +679,18 @@ ifneq ($(CHANNEL),yes)
 # Cannot use Netbeans without CHANNEL
 NETBEANS=no
 else
-# Only allow NETBEANS for a GUI build.
-ifeq (yes, $(GUI))
+ifneq (yes, $(GUI))
+# Cannot use Netbeans without GUI.
+NETBEANS=no
+else
 OBJ += $(OUTDIR)/netbeans.o
-LIB += -lwsock32
 endif
 endif
 endif
 
 ifeq ($(CHANNEL),yes)
 OBJ += $(OUTDIR)/channel.o
-ifneq ($(NETBEANS),yes)
 LIB += -lwsock32
-endif
 endif
 
 ifeq ($(DIRECTX),yes)

@@ -13,9 +13,14 @@ if has('unix')
   if !(executable('python') && (has('job') || executable('pkill')))
     finish
   endif
+  let s:python = 'python'
 elseif has('win32')
-  " Use Python Launcher for Windows (py.exe).
-  if !executable('py')
+  " Use Python Launcher for Windows (py.exe) if available.
+  if executable('py.exe')
+    let s:python = 'py.exe'
+  elseif executable('python.exe')
+    let s:python = 'python.exe'
+  else
     finish
   endif
 else
@@ -23,7 +28,7 @@ else
   finish
 endif
 
-let s:chopt = has('macunix') ? {'waittime' : 1} : {}
+let s:chopt = has('osx') ? {'waittime' : 1} : {}
 
 " Run "testfunc" after sarting the server and stop the server afterwards.
 func s:run_server(testfunc)
@@ -32,11 +37,11 @@ func s:run_server(testfunc)
 
   try
     if has('job')
-      let s:job = job_start("python test_channel.py")
+      let s:job = job_start(s:python . " test_channel.py")
     elseif has('win32')
-      silent !start cmd /c start "test_channel" py test_channel.py
+      exe 'silent !start cmd /c start "test_channel" ' . s:python . ' test_channel.py'
     else
-      silent !python test_channel.py&
+      exe 'silent !' . s:python . ' test_channel.py&'
     endif
 
     " Wait for up to 2 seconds for the port number to be there.
@@ -77,13 +82,12 @@ func s:kill_server()
       unlet s:job
     endif
   elseif has('win32')
-    call system('taskkill /IM py.exe /T /F /FI "WINDOWTITLE eq test_channel"')
+    call system('taskkill /IM ' . s:python . ' /T /F /FI "WINDOWTITLE eq test_channel"')
   else
     call system("pkill -f test_channel.py")
   endif
 endfunc
 
-let s:responseHandle = -1
 let s:responseMsg = ''
 func s:RequestHandler(handle, msg)
   let s:responseHandle = a:handle
@@ -92,7 +96,7 @@ endfunc
 
 func s:communicate(port)
   let handle = ch_open('localhost:' . a:port, s:chopt)
-  if handle < 0
+  if ch_status(handle) == "fail"
     call assert_false(1, "Can't open channel")
     return
   endif
@@ -115,14 +119,22 @@ func s:communicate(port)
   " Send a request with a specific handler.
   call ch_sendexpr(handle, 'hello!', 's:RequestHandler')
   sleep 10m
-  call assert_equal(handle, s:responseHandle)
+  if !exists('s:responseHandle')
+    call assert_false(1, 's:responseHandle was not set')
+  else
+    call assert_equal(handle, s:responseHandle)
+  endif
   call assert_equal('got it', s:responseMsg)
 
-  let s:responseHandle = -1
+  unlet s:responseHandle
   let s:responseMsg = ''
   call ch_sendexpr(handle, 'hello!', function('s:RequestHandler'))
   sleep 10m
-  call assert_equal(handle, s:responseHandle)
+  if !exists('s:responseHandle')
+    call assert_false(1, 's:responseHandle was not set')
+  else
+    call assert_equal(handle, s:responseHandle)
+  endif
   call assert_equal('got it', s:responseMsg)
 
   " Send an eval request that works.
@@ -169,7 +181,7 @@ endfunc
 " Test that we can open two channels.
 func s:two_channels(port)
   let handle = ch_open('localhost:' . a:port, s:chopt)
-  if handle < 0
+  if ch_status(handle) == "fail"
     call assert_false(1, "Can't open channel")
     return
   endif
@@ -177,7 +189,7 @@ func s:two_channels(port)
   call assert_equal('got it', ch_sendexpr(handle, 'hello!'))
 
   let newhandle = ch_open('localhost:' . a:port, s:chopt)
-  if newhandle < 0
+  if ch_status(newhandle) == "fail"
     call assert_false(1, "Can't open second channel")
     return
   endif
@@ -191,16 +203,13 @@ func s:two_channels(port)
 endfunc
 
 func Test_two_channels()
-  " TODO: make this work again with MS-Windows
-  if has('unix')
-    call s:run_server('s:two_channels')
-  endif
+  call s:run_server('s:two_channels')
 endfunc
 
 " Test that a server crash is handled gracefully.
 func s:server_crash(port)
   let handle = ch_open('localhost:' . a:port, s:chopt)
-  if handle < 0
+  if ch_status(handle) == "fail"
     call assert_false(1, "Can't open channel")
     return
   endif
@@ -211,10 +220,7 @@ func s:server_crash(port)
 endfunc
 
 func Test_server_crash()
-  " TODO: make this work again with MS-Windows
-  if has('unix')
-    call s:run_server('s:server_crash')
-  endif
+  call s:run_server('s:server_crash')
 endfunc
 
 let s:reply = ""
@@ -225,7 +231,7 @@ endfunc
 
 func s:channel_handler(port)
   let handle = ch_open('localhost:' . a:port, s:chopt)
-  if handle < 0
+  if ch_status(handle) == "fail"
     call assert_false(1, "Can't open channel")
     return
   endif
@@ -251,9 +257,13 @@ endfunc
 
 " Test that trying to connect to a non-existing port fails quickly.
 func Test_connect_waittime()
+  if !has('unix')
+    " TODO: Make this work again for MS-Windows.
+    return
+  endif
   let start = reltime()
   let handle = ch_open('localhost:9876', s:chopt)
-  if handle >= 0
+  if ch_status(handle) == "fail"
     " Oops, port does exists.
     call ch_close(handle)
   else
@@ -263,7 +273,7 @@ func Test_connect_waittime()
 
   let start = reltime()
   let handle = ch_open('localhost:9867', {'waittime': 2000})
-  if handle >= 0
+  if ch_status(handle) != "fail"
     " Oops, port does exists.
     call ch_close(handle)
   else
@@ -272,4 +282,69 @@ func Test_connect_waittime()
     let elapsed = reltime(start)
     call assert_true(reltimefloat(elapsed) < (has('unix') ? 1.0 : 3.0))
   endif
+endfunc
+
+func Test_pipe()
+  if !has('job')
+    return
+  endif
+  let job = job_start(s:python . " test_channel_pipe.py")
+  call assert_equal("run", job_status(job))
+  try
+    let handle = job_getchannel(job)
+    call ch_sendraw(handle, "echo something\n", 0)
+    call assert_equal("something\n", ch_readraw(handle))
+    let reply = ch_sendraw(handle, "quit\n")
+    call assert_equal("Goodbye!\n", reply)
+  finally
+    call job_stop(job)
+  endtry
+endfunc
+
+""""""""""
+
+let s:unletResponse = ''
+func s:UnletHandler(handle, msg)
+  let s:unletResponse = a:msg
+  unlet s:channelfd
+endfunc
+
+" Test that "unlet handle" in a handler doesn't crash Vim.
+func s:unlet_handle(port)
+  let s:channelfd = ch_open('localhost:' . a:port, s:chopt)
+  call ch_sendexpr(s:channelfd, "test", function('s:UnletHandler'))
+  sleep 10m
+  call assert_equal('what?', s:unletResponse)
+endfunc
+
+func Test_unlet_handle()
+  call s:run_server('s:unlet_handle')
+endfunc
+
+""""""""""
+
+let s:unletResponse = ''
+func s:CloseHandler(handle, msg)
+  let s:unletResponse = a:msg
+  call ch_close(s:channelfd)
+endfunc
+
+" Test that "unlet handle" in a handler doesn't crash Vim.
+func s:close_handle(port)
+  let s:channelfd = ch_open('localhost:' . a:port, s:chopt)
+  call ch_sendexpr(s:channelfd, "test", function('s:CloseHandler'))
+  sleep 10m
+  call assert_equal('what?', s:unletResponse)
+endfunc
+
+func Test_close_handle()
+  call s:run_server('s:close_handle')
+endfunc
+
+""""""""""
+
+func Test_open_fail()
+  silent! let ch = ch_open("noserver")
+  echo ch
+  let d = ch
 endfunc
