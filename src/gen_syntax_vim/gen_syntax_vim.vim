@@ -17,7 +17,7 @@ function! s:parse_vim_option(opt, missing_opt, term_out_code)
 		new
 		exec 'read ' . file_name
 		norm! gg
-		exec '/^\s*options\[\]\s*=\s*$/+1;/^\s*#\s*define\s*p_term(/-1yank a'
+		exec '/^.*\s*options\[\]\s*=\s*$/+1;/^\s*#\s*define\s*p_term(/-1yank a'
 		exec '/^#define\s\+p_term(/+1;/^};$/-1yank b'
 		%delete _
 
@@ -105,7 +105,7 @@ function! s:parse_vim_command(cmd)
 		new
 		exec 'read ' . file_name
 		norm! gg
-		exec '/^\s*cmdnames\[\]\s*=\s*$/+1;/^};/-1yank'
+		exec '/^}\?\s*cmdnames\[\]\s*=\s*$/+1;/^};/-1yank'
 		%delete _
 		put
 		g!/^EX(/d
@@ -543,12 +543,12 @@ try
 	let s:vim_info.hlgroup = []
 
 	set lazyredraw
-	call s:parse_vim_option(s:vim_info.opt, s:vim_info.missing_opt,
+	silent call s:parse_vim_option(s:vim_info.opt, s:vim_info.missing_opt,
 	\						s:vim_info.term_out_code)
-	call s:parse_vim_command(s:vim_info.cmd)
-	call s:parse_vim_event(s:vim_info.event)
-	call s:parse_vim_function(s:vim_info.func)
-	call s:parse_vim_hlgroup(s:vim_info.hlgroup)
+	silent call s:parse_vim_command(s:vim_info.cmd)
+	silent call s:parse_vim_event(s:vim_info.event)
+	silent call s:parse_vim_function(s:vim_info.func)
+	silent call s:parse_vim_hlgroup(s:vim_info.hlgroup)
 
 	call s:update_syntax_vim_file(s:vim_info)
 	set nolazyredraw
