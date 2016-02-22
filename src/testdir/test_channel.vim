@@ -44,7 +44,8 @@ func s:run_server(testfunc, ...)
 
   try
     if has('job')
-      let s:job = job_start(cmd)
+      let s:job = job_start(cmd, {"stoponexit": "hup"})
+      call job_setoptions(s:job, {"stoponexit": "kill"})
     elseif has('win32')
       exe 'silent !start cmd /c start "test_channel" ' . cmd
     else
@@ -304,16 +305,26 @@ func Test_connect_waittime()
     call assert_true(reltimefloat(elapsed) < 1.0)
   endif
 
+  " We intend to use a socket that doesn't exist and wait for half a second
+  " before giving up.  If the socket does exist it can fail in various ways.
+  " Check for "Connection reset by peer" to avoid flakyness.
   let start = reltime()
-  let handle = ch_open('localhost:9867', {'waittime': 500})
-  if ch_status(handle) != "fail"
-    " Oops, port does exists.
-    call ch_close(handle)
-  else
-    " Failed connection should wait about 500 msec.
-    let elapsed = reltime(start)
-    call assert_true(reltimefloat(elapsed) < 1.0)
-  endif
+  try
+    let handle = ch_open('localhost:9867', {'waittime': 500})
+    if ch_status(handle) != "fail"
+      " Oops, port does exists.
+      call ch_close(handle)
+    else
+      " Failed connection should wait about 500 msec.
+      let elapsed = reltime(start)
+      call assert_true(reltimefloat(elapsed) > 0.3)
+      call assert_true(reltimefloat(elapsed) < 1.0)
+    endif
+  catch
+    if v:exception !~ 'Connection reset by peer'
+      call assert_false(1, "Caught exception: " . v:exception)
+    endif
+  endtry
 endfunc
 
 func Test_raw_pipe()
@@ -456,4 +467,29 @@ endfunc
 func Test_call()
   call ch_log('Test_call()')
   call s:run_server('s:test_call')
+endfunc
+
+"""""""""
+
+let s:job_ret = 'not yet'
+function MyExitCb(job, status)
+  let s:job_ret = 'done'
+endfunc
+
+function s:test_exit_callback(port)
+  call job_setoptions(s:job, {'exit-cb': 'MyExitCb'})
+  let s:exit_job = s:job
+endfunc
+
+func Test_exit_callback()
+  if has('job')
+    call s:run_server('s:test_exit_callback')
+
+    " the job may take a little while to exit
+    sleep 50m
+
+    " calling job_status() triggers the callback
+    call job_status(s:exit_job)
+    call assert_equal('done', s:job_ret)
+  endif
 endfunc

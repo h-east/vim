@@ -6239,6 +6239,11 @@ has_non_ascii(char_u *s)
     void
 parse_queued_messages(void)
 {
+    /* For Win32 mch_breakcheck() does not check for input, do it here. */
+# if defined(WIN32) && defined(FEAT_CHANNEL)
+    channel_handle_events();
+# endif
+
 # ifdef FEAT_NETBEANS_INTG
     /* Process the queued netbeans messages. */
     netbeans_parse_messages();
@@ -6250,6 +6255,10 @@ parse_queued_messages(void)
 # if defined(FEAT_CLIENTSERVER) && defined(FEAT_X11)
     /* Process the queued clientserver messages. */
     server_parse_messages();
+# endif
+# ifdef FEAT_JOB
+    /* Check if any jobs have ended. */
+    job_check_ended();
 # endif
 }
 #endif

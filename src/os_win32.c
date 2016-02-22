@@ -1470,10 +1470,6 @@ WaitForChar(long msec)
 	serverProcessPendingMessages();
 #endif
 
-#ifdef FEAT_CHANNEL
-	channel_handle_events();
-#endif
-
 	if (0
 #ifdef FEAT_MOUSE
 		|| g_nMouseClick != -1
@@ -5131,6 +5127,7 @@ mch_job_status(job_T *job)
 	    || dwExitCode != STILL_ACTIVE)
     {
 	job->jv_status = JOB_ENDED;
+	job->jv_exitval = (int)dwExitCode;
 	return "dead";
     }
     return "run";

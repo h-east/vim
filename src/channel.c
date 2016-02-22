@@ -833,6 +833,8 @@ invoke_callback(channel_T *channel, char_u *callback, typval_T *argv)
 
     call_func(callback, (int)STRLEN(callback),
 			     &rettv, 2, argv, 0L, 0L, &dummy, TRUE, NULL);
+    clear_tv(&rettv);
+
     /* If an echo command was used the cursor needs to be put back where
      * it belongs. */
     setcursor();
@@ -1582,7 +1584,7 @@ channel_wait(channel_T *channel, sock_T fd, int timeout)
 								 && nread > 0)
 		return OK;
 	    diff = deadline - GetTickCount();
-	    if (diff < 0)
+	    if (diff <= 0)
 		break;
 	    /* Wait for 5 msec.
 	     * TODO: increase the sleep time when looping more often */
@@ -1881,17 +1883,19 @@ channel_fd2channel(sock_T fd, int *partp)
 	}
     return NULL;
 }
+# endif
 
+# if defined(WIN32) || defined(PROTO)
+/*
+ * Check the channels for anything that is ready to be read.
+ * The data is put in the read queue.
+ */
     void
 channel_handle_events(void)
 {
     channel_T	*channel;
     int		part;
-    static int	loop = 0;
-
-    /* Skip heavily polling */
-    if (loop++ % 2)
-	return;
+    sock_T	fd;
 
     for (channel = first_channel; channel != NULL; channel = channel->ch_next)
     {
@@ -1907,7 +1911,11 @@ channel_handle_events(void)
 	part = PART_SOCK;
 #   endif
 #  endif
-	channel_read(channel, part, "channel_handle_events");
+	{
+	    fd = channel->ch_part[part].ch_fd;
+	    if (fd != INVALID_FD && channel_wait(channel, fd, 0) == OK)
+		channel_read(channel, part, "channel_handle_events");
+	}
     }
 }
 # endif
