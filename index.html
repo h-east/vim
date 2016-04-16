@@ -13,14 +13,16 @@
     <section class="page-header">
       <h1 class="project-name">Vim-CLPUM</h1>
       <h2 class="project-tagline">CLPUM (Command-Line mode PopUp Menu) for Vim</h2>
-      <a href="https://github.com/h-east/vim/tree/clpum/" class="btn">View on GitHub</a>
+      <a href="https://github.com/h-east/vim" class="btn">View on GitHub</a>
+      <a href="https://github.com/h-east/vim/zipball/master" class="btn">Download .zip</a>
+      <a href="https://github.com/h-east/vim/tarball/master" class="btn">Download .tar.gz</a>
     </section>
 
     <section class="main-content">
-      <h3>
-<a id="what-is-vim-clpum" class="anchor" href="#what-is-vim-clpum" aria-hidden="true"><span class="octicon octicon-link"></span></a>What is Vim-CLPUM?</h3>
+      <p>Update: 2016-04-17 (Since 2015-12-07)  </p>
 
-<p>(Update: 2015-12-07)  </p>
+<h3>
+<a id="what-is-vim-clpum" class="anchor" href="#what-is-vim-clpum" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>What is Vim-CLPUM?</h3>
 
 <p>vim-CLPUM is implementation of Command-Line mode PopUp Menu for Vim.<br>
 Modified Vim's C source code.  </p>
@@ -32,14 +34,15 @@ Modified Vim's C source code.  </p>
 <hr>
 
 <h3>
-<a id="how-to-use" class="anchor" href="#how-to-use" aria-hidden="true"><span class="octicon octicon-link"></span></a>How to Use</h3>
+<a id="how-to-use" class="anchor" href="#how-to-use" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>How to Use</h3>
 
 <ul>
 <li>Add the following sample code to your <code>.vimrc</code>.</li>
 </ul>
 
-<div class="highlight highlight-source-viml"><pre><span class="pl-k">if</span> <span class="pl-c1">exists</span>(<span class="pl-s">'+clpum'</span>)
-    <span class="pl-c1">set</span> clpum
+<div class="highlight highlight-source-viml"><pre><span class="pl-k">if</span> <span class="pl-c1">has</span>(<span class="pl-s">'clpum'</span>)
+    <span class="pl-c1">set</span> wildmode=clpum
+    <span class="pl-c1">set</span> wildmenu
     <span class="pl-c1">set</span> clpumheight=<span class="pl-c1">40</span>
     <span class="pl-c1">set</span> clcompleteopt+=noinsert
     <span class="pl-c1">set</span> clcompletefunc=UserDefinedClComplete
@@ -60,8 +63,8 @@ Modified Vim's C source code.  </p>
 
 <ul>
 <li>Run patched Vim.</li>
-<li>Type &lt;Tab&gt; or &lt;C-D&gt; in command-line mode.<br>
-CLPUM activate by pressing the &lt;Tab&gt; or &lt;C-D&gt; in command-line mode. (When 'clpum' option is on)</li>
+<li>Type &lt;Tab&gt; in command-line mode.  (&lt;Tab&gt; has been set by 'wildchar' option)<br>
+CLPUM activate by pressing the &lt;Tab&gt; in command-line mode. (When 'wildmode' option include 'clpum', and 'wildmenu' is on)</li>
 </ul>
 
 <p>example:  </p>
@@ -89,7 +92,7 @@ CLPUM activate by pressing the &lt;Tab&gt; or &lt;C-D&gt; in command-line mode. 
 <hr>
 
 <h3>
-<a id="added-options-event-and-etc" class="anchor" href="#added-options-event-and-etc" aria-hidden="true"><span class="octicon octicon-link"></span></a>Added Options, Event and etc.</h3>
+<a id="added-options-event-and-etc" class="anchor" href="#added-options-event-and-etc" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Added Options, Event and etc.</h3>
 
 <p><strong>Option:</strong> 'clcompletefunc', 'clcompleteopt', 'clpum', 'clpumheight'<br>
 <strong>Built-in Function:</strong> clpumvisible()<br>
@@ -100,7 +103,7 @@ CLPUM activate by pressing the &lt;Tab&gt; or &lt;C-D&gt; in command-line mode. 
 <hr>
 
 <h3>
-<a id="progress" class="anchor" href="#progress" aria-hidden="true"><span class="octicon octicon-link"></span></a>Progress</h3>
+<a id="progress" class="anchor" href="#progress" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Progress</h3>
 
 <table>
 <thead>
@@ -140,17 +143,17 @@ CLPUM activate by pressing the &lt;Tab&gt; or &lt;C-D&gt; in command-line mode. 
 <hr>
 
 <h3>
-<a id="goal" class="anchor" href="#goal" aria-hidden="true"><span class="octicon octicon-link"></span></a>Goal</h3>
+<a id="goal" class="anchor" href="#goal" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Goal</h3>
 
 <p>Want to be included this patch to Vim.</p>
 
 <h3>
-<a id="license" class="anchor" href="#license" aria-hidden="true"><span class="octicon octicon-link"></span></a>License</h3>
+<a id="license" class="anchor" href="#license" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>License</h3>
 
 <p>Follow the <a href="https://github.com/vim/vim/blob/master/README.md#copying">Vim license</a>.</p>
 
 <h3>
-<a id="author" class="anchor" href="#author" aria-hidden="true"><span class="octicon octicon-link"></span></a>Author</h3>
+<a id="author" class="anchor" href="#author" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Author</h3>
 
 <p>h_east (<a href="https://github.com/h-east" class="user-mention">@h-east</a>)<br>
 <a href="https://groups.google.com/forum/#!searchin/vim_dev/hirohito-higashi%7Csort:date">Search me in vim_dev</a></p>
