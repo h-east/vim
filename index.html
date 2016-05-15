@@ -13,11 +13,16 @@
     <section class="page-header">
       <h1 class="project-name">Vim-CLPUM</h1>
       <h2 class="project-tagline">CLPUM (Command-Line mode PopUp Menu) for Vim</h2>
-      <a href="https://github.com/h-east/vim/tree/clpum" class="btn">View on GitHub</a>
+      <a href="https://github.com/h-east/vim" class="btn">View on GitHub</a>
+      <a href="https://github.com/h-east/vim/zipball/master" class="btn">Download .zip</a>
+      <a href="https://github.com/h-east/vim/tarball/master" class="btn">Download .tar.gz</a>
     </section>
 
     <section class="main-content">
-      <p>Update: 2016-04-17 (Since 2015-12-07)  </p>
+      <p>(Since 2015-12-07)<br>
+Update: 2016-05-15<br>
+The 'wildmode' option value name <code>clpum</code> change to <code>popup</code>.<br>
+Remove 'clcompleteopt' options value <code>longest</code>.</p>
 
 <h3>
 <a id="what-is-vim-clpum" class="anchor" href="#what-is-vim-clpum" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>What is Vim-CLPUM?</h3>
@@ -39,10 +44,9 @@ Modified Vim's C source code.  </p>
 </ul>
 
 <div class="highlight highlight-source-viml"><pre><span class="pl-k">if</span> <span class="pl-c1">has</span>(<span class="pl-s">'clpum'</span>)
-    <span class="pl-c1">set</span> wildmode=clpum
+    <span class="pl-c1">set</span> wildmode=popup
     <span class="pl-c1">set</span> wildmenu
     <span class="pl-c1">set</span> clpumheight=<span class="pl-c1">40</span>
-    <span class="pl-c1">set</span> clcompleteopt+=noinsert
     <span class="pl-c1">set</span> clcompletefunc=UserDefinedClComplete
     <span class="pl-k">function</span>! <span class="pl-en">UserDefinedClComplete</span>(findstart, base)
         <span class="pl-k">if</span> <span class="pl-smi">a:findstart</span>
@@ -62,7 +66,7 @@ Modified Vim's C source code.  </p>
 <ul>
 <li>Run patched Vim.</li>
 <li>Type &lt;Tab&gt; in command-line mode.  (&lt;Tab&gt; has been set by 'wildchar' option)<br>
-CLPUM activate by pressing the &lt;Tab&gt; in command-line mode. (When 'wildmode' option include 'clpum', and 'wildmenu' is on)</li>
+CLPUM activate by pressing the &lt;Tab&gt; in command-line mode. (When 'wildmode' option include 'popup', and 'wildmenu' is on)</li>
 </ul>
 
 <p>example:  </p>
@@ -90,9 +94,9 @@ CLPUM activate by pressing the &lt;Tab&gt; in command-line mode. (When 'wildmode
 <hr>
 
 <h3>
-<a id="added-options-event-and-etc" class="anchor" href="#added-options-event-and-etc" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Added Options, Event and etc.</h3>
+<a id="addedchanged-options-event-and-etc" class="anchor" href="#addedchanged-options-event-and-etc" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Added/Changed Options, Event and etc.</h3>
 
-<p><strong>Option:</strong> 'clcompletefunc', 'clcompleteopt', 'clpumheight'<br>
+<p><strong>Option:</strong> 'wildmenu', 'clcompletefunc', 'clcompleteopt', 'clpumheight'<br>
 <strong>Built-in Function:</strong> clpumvisible()<br>
 <strong>Event:</strong> ClCompleteDone<br>
 <strong>Predefined Vim variables:</strong> v:clcompleted_item<br>
@@ -117,7 +121,7 @@ CLPUM activate by pressing the &lt;Tab&gt; in command-line mode. (When 'wildmode
 </tr>
 <tr>
 <td>Debug and refactor</td>
-<td>65</td>
+<td>70</td>
 </tr>
 <tr>
 <td>Write documents</td>
