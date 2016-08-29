@@ -13,12 +13,17 @@
     <section class="page-header">
       <h1 class="project-name">Vim-CLPUM</h1>
       <h2 class="project-tagline">CLPUM (Command-Line mode PopUp Menu) for Vim</h2>
-      <a href="https://github.com/h-east/vim/tree/clpum" class="btn">View on GitHub</a>
+      <a href="https://github.com/h-east/vim" class="btn">View on GitHub</a>
+      <a href="https://github.com/h-east/vim/zipball/master" class="btn">Download .zip</a>
+      <a href="https://github.com/h-east/vim/tarball/master" class="btn">Download .tar.gz</a>
     </section>
 
     <section class="main-content">
       <p>(Since 2015-12-07)<br>
-Update: 2016-05-15<br>
+Update: 2016-08-29<br>
+Add <code>How to get the patch</code>.  </p>
+
+<p>Update: 2016-05-15<br>
 The 'wildmode' option value name <code>clpum</code> change to <code>popup</code>.<br>
 Remove 'clcompleteopt' options value <code>longest</code>.</p>
 
@@ -49,7 +54,7 @@ Modified Vim's C source code.  </p>
     <span class="pl-c1">set</span> clpumheight=<span class="pl-c1">40</span>
     <span class="pl-c1">set</span> clcompletefunc=UserDefinedClComplete
     <span class="pl-k">function</span>! <span class="pl-en">UserDefinedClComplete</span>(findstart, base)
-        <span class="pl-k">if</span> <span class="pl-smi">a:findstart</span>
+        <span class="pl-k">if</span> <span class="pl-c1">a</span><span class="pl-k">:</span>findstart
             <span class="pl-k">return</span> <span class="pl-c1">getcmdpos</span>()
         <span class="pl-k">else</span>
             <span class="pl-k">return</span> [
@@ -141,6 +146,13 @@ CLPUM activate by pressing the &lt;Tab&gt; in command-line mode. (When 'wildmode
 </tr>
 </tbody>
 </table>
+
+<hr>
+
+<h3>
+<a id="how-to-get-the-patch" class="anchor" href="#how-to-get-the-patch" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>How to get the patch</h3>
+
+<div class="highlight highlight-source-shell"><pre>$ curl -L https://github.com/h-east/vim/compare/master...h-east:clpum.patch <span class="pl-k">&gt;</span> clpum.patch</pre></div>
 
 <hr>
 
