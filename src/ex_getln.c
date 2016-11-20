@@ -141,8 +141,8 @@ static int  clpum_compl_restarting = FALSE;	/* don't insert match */
  * FALSE the word to be completed must be located. */
 static int  clpum_compl_started = FALSE;
 
-/* Set when doing something for completion that may call edit() recursively,
- * which is not allowed. */
+/* Set when doing something for completion that may call getcmdline()
+ * recursively, which is not allowed. */
 static int  clpum_compl_busy = FALSE;
 
 static int  clpum_compl_matches = 0;
@@ -2298,26 +2298,38 @@ cmdline_changed:
 	;
 #endif
 
-#ifdef FEAT_RIGHTLEFT
-	if (cmdmsg_rl
-# ifdef FEAT_ARABIC
-		|| (p_arshape && !p_tbidi && enc_utf8)
-# endif
-		)
-	    /* Always redraw the whole command line to fix shaping and
-	     * right-left typing.  Not efficient, but it works.
-	     * Do it only when there are no characters left to read
-	     * to avoid useless intermediate redraws. */
-	    if (vpeekc() == NUL)
-		redrawcmd();
-#endif
 #ifdef FEAT_CLPUM
 	if (clpum_compl_started)
 	{
+	    int cmdline_row_save = cmdline_row;
+
 	    redrawcmd();
+	    if (cmdline_row_save != cmdline_row)
+	    {
+		win_redraw_last_status(topframe);
+		redraw_statuslines();
+		clpum_compl_upd_pum();
+		redrawcmd();
+	    }
 	    showmode();
 	}
+	else
 #endif
+	{
+#ifdef FEAT_RIGHTLEFT
+	    if (cmdmsg_rl
+# ifdef FEAT_ARABIC
+		    || (p_arshape && !p_tbidi && enc_utf8)
+# endif
+	       )
+		/* Always redraw the whole command line to fix shaping and
+		 * right-left typing.  Not efficient, but it works.
+		 * Do it only when there are no characters left to read
+		 * to avoid useless intermediate redraws. */
+		if (vpeekc() == NUL)
+		    redrawcmd();
+#endif
+	}
     }
 
 returncmd:
@@ -3747,6 +3759,12 @@ redrawcmd(void)
     void
 compute_cmdrow(void)
 {
+    if (State == CMDLINE)
+	return;
+#ifdef FEAT_CLPUM
+    if (clpum_compl_started)
+	return;
+#endif
     if (exmode_active || msg_scrolled != 0)
 	cmdline_row = Rows - 1;
     else
@@ -8473,8 +8491,8 @@ clpum_compl_addfrommatch(void)
 }
 
 /*
- * Prepare for Insert mode completion, or stop it.
- * Called just after typing a character in Insert mode.
+ * Prepare for Command-line mode completion, or stop it.
+ * Called just after typing a character in Command-line mode.
  * Returns TRUE when the character is not to be inserted;
  */
     static int
