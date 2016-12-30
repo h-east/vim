@@ -76,6 +76,7 @@ static void f_call(typval_T *argvars, typval_T *rettv);
 static void f_ceil(typval_T *argvars, typval_T *rettv);
 #endif
 #ifdef FEAT_JOB_CHANNEL
+static void f_ch_canread(typval_T *argvars, typval_T *rettv);
 static void f_ch_close(typval_T *argvars, typval_T *rettv);
 static void f_ch_close_in(typval_T *argvars, typval_T *rettv);
 static void f_ch_evalexpr(typval_T *argvars, typval_T *rettv);
@@ -473,7 +474,7 @@ static struct fst
     {"assert_exception", 1, 2, f_assert_exception},
     {"assert_fails",	1, 2, f_assert_fails},
     {"assert_false",	1, 2, f_assert_false},
-    {"assert_inrange",	2, 3, f_assert_inrange},
+    {"assert_inrange",	3, 4, f_assert_inrange},
     {"assert_match",	2, 3, f_assert_match},
     {"assert_notequal",	2, 3, f_assert_notequal},
     {"assert_notmatch",	2, 3, f_assert_notmatch},
@@ -502,6 +503,7 @@ static struct fst
     {"ceil",		1, 1, f_ceil},
 #endif
 #ifdef FEAT_JOB_CHANNEL
+    {"ch_canread",	1, 1, f_ch_canread},
     {"ch_close",	1, 1, f_ch_close},
     {"ch_close_in",	1, 1, f_ch_close_in},
     {"ch_evalexpr",	2, 3, f_ch_evalexpr},
@@ -1784,6 +1786,21 @@ f_ceil(typval_T *argvars, typval_T *rettv)
 #endif
 
 #ifdef FEAT_JOB_CHANNEL
+/*
+ * "ch_canread()" function
+ */
+    static void
+f_ch_canread(typval_T *argvars, typval_T *rettv)
+{
+    channel_T *channel = get_channel_arg(&argvars[0], FALSE, FALSE, 0);
+
+    rettv->vval.v_number = 0;
+    if (channel != NULL)
+	rettv->vval.v_number = channel_has_readahead(channel, PART_SOCK)
+			    || channel_has_readahead(channel, PART_OUT)
+			    || channel_has_readahead(channel, PART_ERR);
+}
+
 /*
  * "ch_close()" function
  */
@@ -5982,6 +5999,10 @@ f_has(typval_T *argvars, typval_T *rettv)
 	}
 	else if (STRICMP(name, "vim_starting") == 0)
 	    n = (starting != 0);
+	else if (STRICMP(name, "ttyin") == 0)
+	    n = mch_input_isatty();
+	else if (STRICMP(name, "ttyout") == 0)
+	    n = stdout_isatty;
 #ifdef FEAT_MBYTE
 	else if (STRICMP(name, "multi_byte_encoding") == 0)
 	    n = has_mbyte;
