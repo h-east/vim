@@ -1,4 +1,4 @@
-*options.txt*	For Vim version 8.0.  Last change: 2016 Nov 26
+*options.txt*	For Vim version 8.0.  Last change: 2017 Jan 28
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -3455,7 +3455,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 						*'formatprg'* *'fp'*
 'formatprg' 'fp'	string (default "")
-			global
+			global or local to buffer |global-local|
 			{not in Vi}
 	The name of an external program that will be used to format the lines
 	selected with the |gq| operator.  The program must take the input on
@@ -5059,6 +5059,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 	catches endless recursion.  When using a recursive function with
 	more depth, set 'maxfuncdepth' to a bigger number.  But this will use
 	more memory, there is the danger of failing when memory is exhausted.
+	Increasing this limit above 200 also changes the maximum for Ex
+	command resursion, see |E169|.
 	See also |:function|.
 
 						*'maxmapdepth'* *'mmd'* *E223*
@@ -5180,7 +5182,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 			{not in Vi}		*E21*
 	When off the buffer contents cannot be changed.  The 'fileformat' and
 	'fileencoding' options also can't be changed.
-	Can be reset with the |-M| command line argument.
+	Can be reset on startup with the |-M| command line argument.
 
 				*'modified'* *'mod'* *'nomodified'* *'nomod'*
 'modified' 'mod'	boolean	(default off)
@@ -5825,6 +5827,34 @@ A jump table for the options with a short description can be found at |Q_op|.
 	This option cannot be set from a |modeline| or in the |sandbox|, for
 	security reasons.
 
+						*'pyxversion'* *'pyx'*
+'pyxversion' 'pyx'	number	(default depends on the build)
+			global
+			{not in Vi}
+			{only available when compiled with the |+python| or
+			the |+python3| feature}
+	Specifies the python version used for pyx* functions and commands
+	|python_x|.  The default value is as follows:
+
+		Compiled with		     Default ~
+		|+python| and |+python3|	0
+		only |+python|			2
+		only |+python3|			3
+
+	Available values are 0, 2 and 3.
+	If 'pyxversion' is 0, it is set to 2 or 3 after the first execution of
+	any python2/3 commands or functions.  E.g. `:py` sets to 2, and `:py3`
+	sets to 3. `:pyx` sets it to 3 if Python 3 is available, otherwise sets
+	to 2 if Python 2 is available.
+	See also: |has-pythonx|
+
+	If Vim is compiled with only |+python| or |+python3| setting
+	'pyxversion' has no effect.  The pyx* functions and commands are
+	always the same as the compiled version.
+
+	This option cannot be set from a |modeline| or in the |sandbox|, for
+	security reasons.
+
 						*'quoteescape'* *'qe'*
 'quoteescape' 'qe'	string	(default "\")
 			local to buffer
@@ -5845,6 +5875,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	buffer, unless the 'Z' flag is in 'cpoptions'.
 	{not in Vi:}  When using the ":view" command the 'readonly' option is
 	set for the newly edited buffer.
+	See 'modifiable' for disallowing changes to the buffer.
 
 						*'redrawtime'* *'rdt'*
 'redrawtime' 'rdt'	number	(default 2000)

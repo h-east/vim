@@ -425,6 +425,84 @@ vimLoadLib(char *name)
     return dll;
 }
 
+#if defined(DYNAMIC_ICONV) || defined(DYNAMIC_GETTEXT) || defined(PROTO)
+/*
+ * Get related information about 'funcname' which is imported by 'hInst'.
+ * If 'info' is 0, return the function address.
+ * If 'info' is 1, return the module name which the function is imported from.
+ */
+    static void *
+get_imported_func_info(HINSTANCE hInst, const char *funcname, int info)
+{
+    PBYTE			pImage = (PBYTE)hInst;
+    PIMAGE_DOS_HEADER		pDOS = (PIMAGE_DOS_HEADER)hInst;
+    PIMAGE_NT_HEADERS		pPE;
+    PIMAGE_IMPORT_DESCRIPTOR	pImpDesc;
+    PIMAGE_THUNK_DATA		pIAT;	    /* Import Address Table */
+    PIMAGE_THUNK_DATA		pINT;	    /* Import Name Table */
+    PIMAGE_IMPORT_BY_NAME	pImpName;
+
+    if (pDOS->e_magic != IMAGE_DOS_SIGNATURE)
+	return NULL;
+    pPE = (PIMAGE_NT_HEADERS)(pImage + pDOS->e_lfanew);
+    if (pPE->Signature != IMAGE_NT_SIGNATURE)
+	return NULL;
+    pImpDesc = (PIMAGE_IMPORT_DESCRIPTOR)(pImage
+	    + pPE->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT]
+							    .VirtualAddress);
+    for (; pImpDesc->FirstThunk; ++pImpDesc)
+    {
+	if (!pImpDesc->OriginalFirstThunk)
+	    continue;
+	pIAT = (PIMAGE_THUNK_DATA)(pImage + pImpDesc->FirstThunk);
+	pINT = (PIMAGE_THUNK_DATA)(pImage + pImpDesc->OriginalFirstThunk);
+	for (; pIAT->u1.Function; ++pIAT, ++pINT)
+	{
+	    if (IMAGE_SNAP_BY_ORDINAL(pINT->u1.Ordinal))
+		continue;
+	    pImpName = (PIMAGE_IMPORT_BY_NAME)(pImage
+					+ (UINT_PTR)(pINT->u1.AddressOfData));
+	    if (strcmp((char *)pImpName->Name, funcname) == 0)
+	    {
+		switch (info)
+		{
+		    case 0:
+			return (void *)pIAT->u1.Function;
+		    case 1:
+			return (void *)(pImage + pImpDesc->Name);
+		    default:
+			return NULL;
+		}
+	    }
+	}
+    }
+    return NULL;
+}
+
+/*
+ * Get the module handle which 'funcname' in 'hInst' is imported from.
+ */
+    HINSTANCE
+find_imported_module_by_funcname(HINSTANCE hInst, const char *funcname)
+{
+    char    *modulename;
+
+    modulename = (char *)get_imported_func_info(hInst, funcname, 1);
+    if (modulename != NULL)
+	return GetModuleHandleA(modulename);
+    return NULL;
+}
+
+/*
+ * Get the address of 'funcname' which is imported by 'hInst' DLL.
+ */
+    void *
+get_dll_import_func(HINSTANCE hInst, const char *funcname)
+{
+    return get_imported_func_info(hInst, funcname, 0);
+}
+#endif
+
 #if defined(DYNAMIC_GETTEXT) || defined(PROTO)
 # ifndef GETTEXT_DLL
 #  define GETTEXT_DLL "libintl.dll"
@@ -436,6 +514,8 @@ static char *null_libintl_ngettext(const char *, const char *, unsigned long n);
 static char *null_libintl_textdomain(const char *);
 static char *null_libintl_bindtextdomain(const char *, const char *);
 static char *null_libintl_bind_textdomain_codeset(const char *, const char *);
+static int null_libintl_putenv(const char *);
+static int null_libintl_wputenv(const wchar_t *);
 
 static HINSTANCE hLibintlDLL = NULL;
 char *(*dyn_libintl_gettext)(const char *) = null_libintl_gettext;
@@ -446,6 +526,8 @@ char *(*dyn_libintl_bindtextdomain)(const char *, const char *)
 						= null_libintl_bindtextdomain;
 char *(*dyn_libintl_bind_textdomain_codeset)(const char *, const char *)
 				       = null_libintl_bind_textdomain_codeset;
+int (*dyn_libintl_putenv)(const char *) = null_libintl_putenv;
+int (*dyn_libintl_wputenv)(const wchar_t *) = null_libintl_wputenv;
 
     int
 dyn_libintl_init(void)
@@ -463,6 +545,7 @@ dyn_libintl_init(void)
 	{"bindtextdomain", (FARPROC*)&dyn_libintl_bindtextdomain},
 	{NULL, NULL}
     };
+    HINSTANCE hmsvcrt;
 
     /* No need to initialize twice. */
     if (hLibintlDLL)
@@ -507,6 +590,18 @@ dyn_libintl_init(void)
 	dyn_libintl_bind_textdomain_codeset =
 					 null_libintl_bind_textdomain_codeset;
 
+    /* _putenv() function for the libintl.dll is optional. */
+    hmsvcrt = find_imported_module_by_funcname(hLibintlDLL, "getenv");
+    if (hmsvcrt != NULL)
+    {
+	dyn_libintl_putenv = (void *)GetProcAddress(hmsvcrt, "_putenv");
+	dyn_libintl_wputenv = (void *)GetProcAddress(hmsvcrt, "_wputenv");
+    }
+    if (dyn_libintl_putenv == NULL || dyn_libintl_putenv == _putenv)
+	dyn_libintl_putenv = null_libintl_putenv;
+    if (dyn_libintl_wputenv == NULL || dyn_libintl_wputenv == _wputenv)
+	dyn_libintl_wputenv = null_libintl_wputenv;
+
     return 1;
 }
 
@@ -521,16 +616,16 @@ dyn_libintl_end(void)
     dyn_libintl_textdomain	= null_libintl_textdomain;
     dyn_libintl_bindtextdomain	= null_libintl_bindtextdomain;
     dyn_libintl_bind_textdomain_codeset = null_libintl_bind_textdomain_codeset;
+    dyn_libintl_putenv		= null_libintl_putenv;
+    dyn_libintl_wputenv		= null_libintl_wputenv;
 }
 
-/*ARGSUSED*/
     static char *
 null_libintl_gettext(const char *msgid)
 {
     return (char*)msgid;
 }
 
-/*ARGSUSED*/
     static char *
 null_libintl_ngettext(
 	const char *msgid,
@@ -540,26 +635,38 @@ null_libintl_ngettext(
     return (char *)(n == 1 ? msgid : msgid_plural);
 }
 
-/*ARGSUSED*/
     static char *
-null_libintl_bindtextdomain(const char *domainname, const char *dirname)
+null_libintl_bindtextdomain(
+	const char *domainname UNUSED,
+	const char *dirname UNUSED)
 {
     return NULL;
 }
 
-/*ARGSUSED*/
     static char *
-null_libintl_bind_textdomain_codeset(const char *domainname,
-							  const char *codeset)
+null_libintl_bind_textdomain_codeset(
+	const char *domainname UNUSED,
+	const char *codeset UNUSED)
 {
     return NULL;
 }
 
-/*ARGSUSED*/
     static char *
-null_libintl_textdomain(const char *domainname)
+null_libintl_textdomain(const char *domainname UNUSED)
 {
     return NULL;
+}
+
+    int
+null_libintl_putenv(const char *envstring UNUSED)
+{
+    return 0;
+}
+
+    int
+null_libintl_wputenv(const wchar_t *envstring UNUSED)
+{
+    return 0;
 }
 
 #endif /* DYNAMIC_GETTEXT */
@@ -949,9 +1056,8 @@ decode_key_event(
  * For the GUI the mouse handling is in gui_w32.c.
  */
 # ifdef FEAT_GUI_W32
-/*ARGSUSED*/
     void
-mch_setmouse(int on)
+mch_setmouse(int on UNUSED)
 {
 }
 # else
@@ -1547,13 +1653,12 @@ tgetch(int *pmodifiers, WCHAR *pch2)
  * If time == -1, wait forever for characters.
  * Returns the number of characters read into buf.
  */
-/*ARGSUSED*/
     int
 mch_inchar(
-    char_u	*buf,
-    int		maxlen,
-    long	time,
-    int		tb_change_cnt)
+    char_u	*buf UNUSED,
+    int		maxlen UNUSED,
+    long	time UNUSED,
+    int		tb_change_cnt UNUSED)
 {
 #ifndef FEAT_GUI_W32	    /* this isn't used for the GUI */
 
@@ -2433,8 +2538,9 @@ mch_init(void)
     void
 mch_exit(int r)
 {
-    stoptermcap();
+    exiting = TRUE;
 
+    stoptermcap();
     if (g_fWindInitCalled)
 	settmode(TMODE_COOK);
 
@@ -2481,11 +2587,10 @@ mch_exit(int r)
 /*
  * Do we have an interactive window?
  */
-/*ARGSUSED*/
     int
 mch_check_win(
-    int argc,
-    char **argv)
+    int argc UNUSED,
+    char **argv UNUSED)
 {
     get_exe_name();
 
@@ -4781,32 +4886,32 @@ mch_call_shell(
 #if defined(FEAT_JOB_CHANNEL) || defined(PROTO)
     static HANDLE
 job_io_file_open(
-        char_u *fname,
-        DWORD dwDesiredAccess,
-        DWORD dwShareMode,
-        LPSECURITY_ATTRIBUTES lpSecurityAttributes,
-        DWORD dwCreationDisposition,
-        DWORD dwFlagsAndAttributes)
+	char_u *fname,
+	DWORD dwDesiredAccess,
+	DWORD dwShareMode,
+	LPSECURITY_ATTRIBUTES lpSecurityAttributes,
+	DWORD dwCreationDisposition,
+	DWORD dwFlagsAndAttributes)
 {
     HANDLE h;
 # ifdef FEAT_MBYTE
     WCHAR *wn = NULL;
     if (enc_codepage >= 0 && (int)GetACP() != enc_codepage)
     {
-        wn = enc_to_utf16(fname, NULL);
-        if (wn != NULL)
-        {
-            h = CreateFileW(wn, dwDesiredAccess, dwShareMode,
-                     lpSecurityAttributes, dwCreationDisposition,
-                     dwFlagsAndAttributes, NULL);
-            vim_free(wn);
-        }
+	wn = enc_to_utf16(fname, NULL);
+	if (wn != NULL)
+	{
+	    h = CreateFileW(wn, dwDesiredAccess, dwShareMode,
+		    lpSecurityAttributes, dwCreationDisposition,
+		    dwFlagsAndAttributes, NULL);
+	    vim_free(wn);
+	}
     }
     if (wn == NULL)
 # endif
-        h = CreateFile((LPCSTR)fname, dwDesiredAccess, dwShareMode,
-                     lpSecurityAttributes, dwCreationDisposition,
-                     dwFlagsAndAttributes, NULL);
+	h = CreateFile((LPCSTR)fname, dwDesiredAccess, dwShareMode,
+		lpSecurityAttributes, dwCreationDisposition,
+		dwFlagsAndAttributes, NULL);
     return h;
 }
 
@@ -5237,11 +5342,10 @@ termcap_mode_end(void)
 
 
 #ifdef FEAT_GUI_W32
-/*ARGSUSED*/
     void
 mch_write(
-    char_u  *s,
-    int	    len)
+    char_u  *s UNUSED,
+    int	    len UNUSED)
 {
     /* never used */
 }
@@ -5939,11 +6043,10 @@ mch_write(
 /*
  * Delay for "msec" milliseconds.
  */
-/*ARGSUSED*/
     void
 mch_delay(
     long    msec,
-    int	    ignoreinput)
+    int	    ignoreinput UNUSED)
 {
 #ifdef FEAT_GUI_W32
     Sleep((int)msec);	    /* never wait for input */
@@ -6032,9 +6135,8 @@ mch_breakcheck(int force)
 /*
  * How much main memory in KiB that can be used by VIM.
  */
-/*ARGSUSED*/
     long_u
-mch_total_mem(int special)
+mch_total_mem(int special UNUSED)
 {
     MEMORYSTATUSEX  ms;
 
@@ -6889,3 +6991,43 @@ fix_arg_enc(void)
     set_alist_count();
 }
 #endif
+
+    int
+mch_setenv(char *var, char *value, int x)
+{
+    char_u	*envbuf;
+
+    envbuf = alloc((unsigned)(STRLEN(var) + STRLEN(value) + 2));
+    if (envbuf == NULL)
+	return -1;
+
+    sprintf((char *)envbuf, "%s=%s", var, value);
+
+#ifdef FEAT_MBYTE
+    if (enc_codepage >= 0 && (int)GetACP() != enc_codepage)
+    {
+	WCHAR	    *p = enc_to_utf16(envbuf, NULL);
+
+	vim_free(envbuf);
+	if (p == NULL)
+	    return -1;
+	_wputenv(p);
+# ifdef libintl_wputenv
+	libintl_wputenv(p);
+# endif
+	/* Unlike Un*x systems, we can free the string for _wputenv(). */
+	vim_free(p);
+    }
+    else
+#endif
+    {
+	_putenv((char *)envbuf);
+# ifdef libintl_putenv
+	libintl_putenv((char *)envbuf);
+# endif
+	/* Unlike Un*x systems, we can free the string for _putenv(). */
+	vim_free(envbuf);
+    }
+
+    return 0;
+}

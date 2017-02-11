@@ -1313,7 +1313,7 @@ do_filter(
 	if (otmp != NULL)
 	{
 	    if (readfile(otmp, NULL, line2, (linenr_T)0, (linenr_T)MAXLNUM,
-						    eap, READ_FILTER) == FAIL)
+						    eap, READ_FILTER) != OK)
 	    {
 #if defined(FEAT_AUTOCMD) && defined(FEAT_EVAL)
 		if (!aborting())
@@ -5263,6 +5263,10 @@ do_sub(exarg_T *eap)
 		    setmouse();		/* disable mouse in xterm */
 #endif
 		    curwin->w_cursor.col = regmatch.startpos[0].col;
+#ifdef FEAT_CURSORBIND
+		    if (curwin->w_p_crb)
+			do_check_cursorbind();
+#endif
 
 		    /* When 'cpoptions' contains "u" don't sync undo when
 		     * asking for confirmation. */
@@ -6499,18 +6503,20 @@ find_help_tags(
     static char *(mtable[]) = {"*", "g*", "[*", "]*", ":*",
 			       "/*", "/\\*", "\"*", "**",
 			       "cpo-*", "/\\(\\)", "/\\%(\\)",
-			       "?", ":?", "?<CR>", "g?", "g?g?", "g??", "z?",
+			       "?", ":?", "?<CR>", "g?", "g?g?", "g??",
 			       "/\\?", "/\\z(\\)", "\\=", ":s\\=",
-			       "[count]", "[quotex]", "[range]",
+			       "[count]", "[quotex]",
+			       "[range]", ":[range]",
 			       "[pattern]", "\\|", "\\%$",
 			       "s/\\~", "s/\\U", "s/\\L",
 			       "s/\\1", "s/\\2", "s/\\3", "s/\\9"};
     static char *(rtable[]) = {"star", "gstar", "[star", "]star", ":star",
 			       "/star", "/\\\\star", "quotestar", "starstar",
 			       "cpo-star", "/\\\\(\\\\)", "/\\\\%(\\\\)",
-			       "?", ":?", "?<CR>", "g?", "g?g?", "g??", "z?",
+			       "?", ":?", "?<CR>", "g?", "g?g?", "g??",
 			       "/\\\\?", "/\\\\z(\\\\)", "\\\\=", ":s\\\\=",
-			       "\\[count]", "\\[quotex]", "\\[range]",
+			       "\\[count]", "\\[quotex]",
+			       "\\[range]", ":\\[range]",
 			       "\\[pattern]", "\\\\bar", "/\\\\%\\$",
 			       "s/\\\\\\~", "s/\\\\U", "s/\\\\L",
 			       "s/\\\\1", "s/\\\\2", "s/\\\\3", "s/\\\\9"};

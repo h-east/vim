@@ -574,6 +574,7 @@ extern char *(*dyn_libintl_ngettext)(const char *msgid, const char *msgid_plural
 extern char *(*dyn_libintl_bindtextdomain)(const char *domainname, const char *dirname);
 extern char *(*dyn_libintl_bind_textdomain_codeset)(const char *domainname, const char *codeset);
 extern char *(*dyn_libintl_textdomain)(const char *domainname);
+extern int (*dyn_libintl_putenv)(const char *envstring);
 #endif
 
 
@@ -592,6 +593,8 @@ extern char *(*dyn_libintl_textdomain)(const char *domainname);
 #   define HAVE_BIND_TEXTDOMAIN_CODESET 1
 #  endif
 #  define textdomain(domain) (*dyn_libintl_textdomain)(domain)
+#  define libintl_putenv(envstring) (*dyn_libintl_putenv)(envstring)
+#  define libintl_wputenv(envstring) (*dyn_libintl_wputenv)(envstring)
 # else
 #  include <libintl.h>
 #  define _(x) gettext((char *)(x))
@@ -1718,15 +1721,8 @@ typedef unsigned short disptick_T;	/* display tick type */
 
 typedef void	    *vim_acl_T;		/* dummy to pass an ACL to a function */
 
-/*
- * Include a prototype for mch_memmove(), it may not be in alloc.pro.
- */
-#ifdef VIM_MEMMOVE
-void mch_memmove(void *, void *, size_t);
-#else
-# ifndef mch_memmove
-#  define mch_memmove(to, from, len) memmove(to, from, len)
-# endif
+#ifndef mch_memmove
+# define mch_memmove(to, from, len) memmove((char*)(to), (char*)(from), (size_t)(len))
 #endif
 
 /*
@@ -2112,6 +2108,14 @@ typedef enum
     ASSERT_NOTMATCH,
     ASSERT_OTHER
 } assert_type_T;
+
+/* Mode for bracketed_paste(). */
+typedef enum {
+    PASTE_INSERT,	/* insert mode */
+    PASTE_CMDLINE,	/* command line */
+    PASTE_EX,		/* ex mode line */
+    PASTE_ONE_CHAR	/* return first character */
+} paste_mode_T;
 
 #include "ex_cmds.h"	    /* Ex command defines */
 #include "spell.h"	    /* spell checking stuff */

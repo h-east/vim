@@ -141,8 +141,10 @@ static int  clpum_compl_restarting = FALSE;	/* don't insert match */
  * FALSE the word to be completed must be located. */
 static int  clpum_compl_started = FALSE;
 
-/* Set when doing something for completion that may call getcmdline()
- * recursively, which is not allowed. */
+static int  clpum_ctrl_x_mode = 0;	/* Which Ctrl-X mode are we in? */
+
+/* Set when doing something for completion that may call edit() recursively,
+ * which is not allowed. */
 static int  clpum_compl_busy = FALSE;
 
 static int  clpum_compl_matches = 0;
@@ -2123,6 +2125,10 @@ docomplete:
 		goto cmdline_not_changed;
 #endif
 
+	case K_PS:
+		bracketed_paste(PASTE_CMDLINE, FALSE, NULL);
+		goto cmdline_changed;
+
 	default:
 #ifdef UNIX
 		if (c == intr_char)
@@ -2721,8 +2727,7 @@ getexmodeline(
 	if (ga_grow(&line_ga, 40) == FAIL)
 	    break;
 
-	/* Get one character at a time.  Don't use inchar(), it can't handle
-	 * special characters. */
+	/* Get one character at a time. */
 	prev_char = c1;
 	c1 = vgetc();
 
@@ -2735,6 +2740,12 @@ getexmodeline(
 	{
 	    msg_putchar('\n');
 	    break;
+	}
+
+	if (c1 == K_PS)
+	{
+	    bracketed_paste(PASTE_EX, FALSE, &line_ga);
+	    goto redraw;
 	}
 
 	if (!escaped)
@@ -4749,7 +4760,9 @@ addstar(
 		|| context == EXPAND_OWNSYNTAX
 		|| context == EXPAND_FILETYPE
 		|| context == EXPAND_PACKADD
-		|| (context == EXPAND_TAGS && fname[0] == '/'))
+		|| ((context == EXPAND_TAGS_LISTFILES
+			|| context == EXPAND_TAGS)
+		    && fname[0] == '/'))
 	    retval = vim_strnsave(fname, len);
 	else
 	{
@@ -7311,9 +7324,7 @@ ex_window(void)
     redraw_later(SOME_VALID);
 
     /* Save the command line info, can be used recursively. */
-    save_ccline = ccline;
-    ccline.cmdbuff = NULL;
-    ccline.cmdprompt = NULL;
+    save_cmdline(&save_ccline);
 
     /* No Ex mode here! */
     exmode_active = 0;
@@ -7360,7 +7371,7 @@ ex_window(void)
 # endif
 
     /* Restore the command line info. */
-    ccline = save_ccline;
+    restore_cmdline(&save_ccline);
     cmdwin_type = 0;
 
     exmode_active = save_exmode;
@@ -8516,13 +8527,13 @@ clpum_compl_prep(int c)
 	clpum_compl_used_match = TRUE;
     else
     {
-	if (c == Ctrl_X && !ctrl_x_mode)
+	if (c == Ctrl_X && !clpum_ctrl_x_mode)
 	    return TRUE;
     }
 
     if (!clpum_compl_started)
     {
-	ctrl_x_mode = (c == Ctrl_X);
+	clpum_ctrl_x_mode = (c == Ctrl_X);
 	edit_submode = NULL;
 	showmode();
     }
@@ -8561,7 +8572,7 @@ clpum_compl_prep(int c)
 	    clpum_compl_matches = 0;
 	    if (!shortmess(SHM_COMPLETIONMENU))
 		msg_clr_cmdline();	/* necessary for "noshowmode" */
-	    ctrl_x_mode = 0;
+	    clpum_ctrl_x_mode = 0;
 	    clpum_compl_enter_selects = FALSE;
 	    if (edit_submode != NULL)
 	    {
@@ -8780,7 +8791,7 @@ clpum_compl_get_exp(pos_T *ini UNUSED)
     {
 	found_new_match = FAIL;
 
-	if (ctrl_x_mode)
+	if (clpum_ctrl_x_mode)
 	    expand_by_function(clpum_compl_pattern);
 	else
 	{
@@ -8796,7 +8807,7 @@ clpum_compl_get_exp(pos_T *ini UNUSED)
 	    found_new_match = OK;
 
 	/* break the loop for specialized modes (use 'complete' just for the
-	 * generic ctrl_x_mode == 0) or when we've found a new match */
+	 * generic clpum_ctrl_x_mode == 0) or when we've found a new match */
 	if (got_int)
 	    break;
 	/* Fill the popup menu as soon as possible. */
@@ -9275,7 +9286,7 @@ clpum_complete(int c)
 							- clpum_compl_pattern);
 	clpum_compl_length = ccline.cmdpos - clpum_compl_col;
 	clpum_compl_startpos.col = clpum_compl_col;
-	if (ctrl_x_mode)
+	if (clpum_ctrl_x_mode)
 	{
 	    /*
 	     * Call user defined function 'clcompletefunc' with "a:findstart"
@@ -9318,7 +9329,7 @@ clpum_complete(int c)
 	     * Return value -3 does the same as -2 and leaves CTRL-X mode.*/
 	    if (col == -2 || col == -3)
 	    {
-		ctrl_x_mode = 0;
+		clpum_ctrl_x_mode = 0;
 		edit_submode = NULL;
 		if (!shortmess(SHM_COMPLETIONMENU))
 		    msg_clr_cmdline();

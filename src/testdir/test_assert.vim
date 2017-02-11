@@ -32,7 +32,7 @@ func Test_assert_notequal()
   call assert_notequal([1, 2, 3], s)
 
   call assert_notequal('foo', s)
-  call assert_match("Expected 'foo' differs from 'foo'", v:errors[0])
+  call assert_match("Expected not equal to 'foo'", v:errors[0])
   call remove(v:errors, 0)
 endfunc
 
@@ -119,6 +119,12 @@ func Test_assert_inrange()
   call remove(v:errors, 0)
 
   call assert_fails('call assert_inrange(1, 1)', 'E119:')
+endfunc
+
+func Test_assert_with_msg()
+  call assert_equal('foo', 'bar', 'testing')
+  call assert_match("testing: Expected 'foo' but got 'bar'", v:errors[0])
+  call remove(v:errors, 0)
 endfunc
 
 func Test_user_is_happy()

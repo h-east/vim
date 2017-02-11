@@ -107,6 +107,7 @@
 #if defined(FEAT_BEVAL) && defined(FEAT_EVAL)
 # define PV_BEXPR	OPT_BOTH(OPT_BUF(BV_BEXPR))
 #endif
+#define PV_FP		OPT_BOTH(OPT_BUF(BV_FP))
 #ifdef FEAT_EVAL
 # define PV_FEX		OPT_BUF(BV_FEX)
 #endif
@@ -477,6 +478,17 @@ struct vimoption
 # define HIGHLIGHT_INIT "8:SpecialKey,~:EndOfBuffer,@:NonText,d:Directory,e:ErrorMsg,i:IncSearch,l:Search,m:MoreMsg,M:ModeMsg,n:LineNr,N:CursorLineNr,r:Question,s:StatusLine,S:StatusLineNC,c:VertSplit,t:Title,v:Visual,V:VisualNOS,w:WarningMsg,W:WildMenu,f:Folded,F:FoldColumn,A:DiffAdd,C:DiffChange,D:DiffDelete,T:DiffText,>:SignColumn,-:Conceal,B:SpellBad,P:SpellCap,R:SpellRare,L:SpellLocal,+:Pmenu,=:PmenuSel,x:PmenuSbar,X:PmenuThumb,0:ClPmenu,1:ClPmenuSel,y:ClPmenuSbar,Y:ClPmenuThumb,*:TabLine,#:TabLineSel,_:TabLineFill,!:CursorColumn,.:CursorLine,o:ColorColumn"
 #else
 # define HIGHLIGHT_INIT "8:SpecialKey,@:NonText,d:Directory,e:ErrorMsg,i:IncSearch,l:Search,m:MoreMsg,M:ModeMsg,n:LineNr,N:CursorLineNr,r:Question,s:StatusLine,S:StatusLineNC,t:Title,v:Visual,w:WarningMsg,W:WildMenu,>:SignColumn,*:TabLine,#:TabLineSel,_:TabLineFill"
+#endif
+
+/* Default python version for pyx* commands */
+#if defined(FEAT_PYTHON) && defined(FEAT_PYTHON3)
+# define DEFAULT_PYTHON_VER	0
+#elif defined(FEAT_PYTHON3)
+# define DEFAULT_PYTHON_VER	3
+#elif defined(FEAT_PYTHON)
+# define DEFAULT_PYTHON_VER	2
+#else
+# define DEFAULT_PYTHON_VER	0
 #endif
 
 /*
@@ -1284,7 +1296,7 @@ static struct vimoption options[] =
 			    {(char_u *)"^\\s*\\d\\+[\\]:.)}\\t ]\\s*",
 						 (char_u *)0L} SCRIPTID_INIT},
     {"formatprg",   "fp",   P_STRING|P_EXPAND|P_VI_DEF|P_SECURE,
-			    (char_u *)&p_fp, PV_NONE,
+			    (char_u *)&p_fp, PV_FP,
 			    {(char_u *)"", (char_u *)0L} SCRIPTID_INIT},
     {"fsync",       "fs",   P_BOOL|P_SECURE|P_VI_DEF,
 #ifdef HAVE_FSYNC
@@ -2168,6 +2180,14 @@ static struct vimoption options[] =
 			    {(char_u *)DYNAMIC_PYTHON_DLL, (char_u *)0L}
 			    SCRIPTID_INIT},
 #endif
+    {"pyxversion", "pyx",   P_NUM|P_VI_DEF|P_SECURE,
+#if defined(FEAT_PYTHON) || defined(FEAT_PYTHON3)
+			    (char_u *)&p_pyx, PV_NONE,
+#else
+			    (char_u *)NULL, PV_NONE,
+#endif
+			    {(char_u *)DEFAULT_PYTHON_VER, (char_u *)0L}
+			    SCRIPTID_INIT},
     {"quoteescape", "qe",   P_STRING|P_ALLOCED|P_VI_DEF,
 #ifdef FEAT_TEXTOBJ
 			    (char_u *)&p_qe, PV_QE,
@@ -3065,6 +3085,8 @@ static struct vimoption options[] =
     p_term("t_ZR", T_CZR)
     p_term("t_8f", T_8F)
     p_term("t_8b", T_8B)
+    p_term("t_BE", T_BE)
+    p_term("t_BD", T_BD)
 
 /* terminal key codes are not in here */
 
@@ -4961,7 +4983,7 @@ do_set(
 			    if (flags & P_FLAGLIST)
 			    {
 				/* Remove flags that appear twice. */
-				for (s = newval; *s; ++s)
+				for (s = newval; *s;)
 				{
 				    /* if options have P_FLAGLIST and
 				     * P_ONECOMMA such as 'whichwrap' */
@@ -4973,7 +4995,7 @@ do_set(
 					    /* Remove the duplicated value and
 					     * the next comma. */
 					    STRMOVE(s, s + 2);
-					    s -= 2;
+					    continue;
 					}
 				    }
 				    else
@@ -4982,9 +5004,10 @@ do_set(
 					      && vim_strchr(s + 1, *s) != NULL)
 					{
 					    STRMOVE(s, s + 1);
-					    --s;
+					    continue;
 					}
 				    }
+				    ++s;
 				}
 			    }
 
@@ -5510,6 +5533,7 @@ check_buf_options(buf_T *buf)
 #if defined(FEAT_CRYPT)
     check_string_option(&buf->b_p_cm);
 #endif
+    check_string_option(&buf->b_p_fp);
 #if defined(FEAT_EVAL)
     check_string_option(&buf->b_p_fex);
 #endif
@@ -6654,6 +6678,15 @@ did_set_string_option(
 	     * background/foreground colors. */
 	    mch_set_normal_colors();
 #endif
+	}
+	if (varp == &T_BE && termcap_active)
+	{
+	    if (*T_BE == NUL)
+		/* When clearing t_BE we assume the user no longer wants
+		 * bracketed paste, thus disable it by writing t_BD. */
+		out_str(T_BD);
+	    else
+		out_str(T_BE);
 	}
     }
 
@@ -8853,6 +8886,15 @@ set_num_option(
 	mzvim_reset_timer();
 #endif
 
+#if defined(FEAT_PYTHON) || defined(FEAT_PYTHON3)
+    /* 'pyxversion' */
+    else if (pp == &p_pyx)
+    {
+	if (p_pyx != 0 && p_pyx != 2 && p_pyx != 3)
+	    errmsg = e_invarg;
+    }
+#endif
+
     /* sync undo before 'undolevels' changes */
     else if (pp == &p_ul)
     {
@@ -9196,7 +9238,35 @@ get_option_value(
 
     opt_idx = findoption(name);
     if (opt_idx < 0)		    /* unknown option */
+    {
+	int key;
+
+	if (STRLEN(name) == 4 && name[0] == 't' && name[1] == '_'
+		&& (key = find_key_option(name)) != 0)
+	{
+	    char_u key_name[2];
+	    char_u *p;
+
+	    if (key < 0)
+	    {
+		key_name[0] = KEY2TERMCAP0(key);
+		key_name[1] = KEY2TERMCAP1(key);
+	    }
+	    else
+	    {
+		key_name[0] = KS_KEY;
+		key_name[1] = (key & 0xff);
+	    }
+	    p = find_termcode(key_name);
+	    if (p != NULL)
+	    {
+		if (stringval != NULL)
+		    *stringval = vim_strsave(p);
+		return 0;
+	    }
+	}
 	return -3;
+    }
 
     varp = get_varp_scope(&(options[opt_idx]), opt_flags);
 
@@ -9454,7 +9524,33 @@ set_option_value(
 
     opt_idx = findoption(name);
     if (opt_idx < 0)
+    {
+	int key;
+
+	if (STRLEN(name) == 4 && name[0] == 't' && name[1] == '_'
+		&& (key = find_key_option(name)) != 0)
+	{
+	    char_u key_name[2];
+
+	    if (key < 0)
+	    {
+		key_name[0] = KEY2TERMCAP0(key);
+		key_name[1] = KEY2TERMCAP1(key);
+	    }
+	    else
+	    {
+		key_name[0] = KS_KEY;
+		key_name[1] = (key & 0xff);
+	    }
+	    add_termcode(key_name, string, FALSE);
+	    if (full_screen)
+		ttest(FALSE);
+	    redraw_all_later(CLEAR);
+	    return NULL;
+	}
+
 	EMSG2(_("E355: Unknown option: %s"), name);
+    }
     else
     {
 	flags = options[opt_idx].flags;
@@ -10215,6 +10311,9 @@ unset_global_local_option(char_u *name, void *from)
 	    clear_string_option(&buf->b_p_tsr);
 	    break;
 #endif
+	case PV_FP:
+	    clear_string_option(&buf->b_p_fp);
+	    break;
 #ifdef FEAT_QUICKFIX
 	case PV_EFM:
 	    clear_string_option(&buf->b_p_efm);
@@ -10268,6 +10367,7 @@ get_varp_scope(struct vimoption *p, int opt_flags)
     {
 	switch ((int)p->indir)
 	{
+	    case PV_FP:   return (char_u *)&(curbuf->b_p_fp);
 #ifdef FEAT_QUICKFIX
 	    case PV_EFM:  return (char_u *)&(curbuf->b_p_efm);
 	    case PV_GP:   return (char_u *)&(curbuf->b_p_gp);
@@ -10348,6 +10448,8 @@ get_varp(struct vimoption *p)
 	case PV_TSR:	return *curbuf->b_p_tsr != NUL
 				    ? (char_u *)&(curbuf->b_p_tsr) : p->var;
 #endif
+	case PV_FP:	return *curbuf->b_p_fp != NUL
+				    ? (char_u *)&(curbuf->b_p_fp) : p->var;
 #ifdef FEAT_QUICKFIX
 	case PV_EFM:	return *curbuf->b_p_efm != NUL
 				    ? (char_u *)&(curbuf->b_p_efm) : p->var;
@@ -10913,6 +11015,7 @@ buf_copy_options(buf_T *buf, int flags)
 	    buf->b_p_inde = vim_strsave(p_inde);
 	    buf->b_p_indk = vim_strsave(p_indk);
 #endif
+	    buf->b_p_fp = empty_option;
 #if defined(FEAT_EVAL)
 	    buf->b_p_fex = vim_strsave(p_fex);
 #endif

@@ -243,13 +243,37 @@ static void list_one_var(dictitem_T *v, char_u *prefix, int *first);
 static void list_one_var_a(char_u *prefix, char_u *name, int type, char_u *string, int *first);
 static char_u *find_option_end(char_u **arg, int *opt_flags);
 
-#ifdef EBCDIC
-static int compare_func_name(const void *s1, const void *s2);
-static void sortFunctions();
-#endif
-
 /* for VIM_VERSION_ defines */
 #include "version.h"
+
+
+#if defined(EBCDIC) || defined(PROTO)
+/*
+ * Compare struct fst by function name.
+ */
+    static int
+compare_func_name(const void *s1, const void *s2)
+{
+    struct fst *p1 = (struct fst *)s1;
+    struct fst *p2 = (struct fst *)s2;
+
+    return STRCMP(p1->f_name, p2->f_name);
+}
+
+/*
+ * Sort the function table by function name.
+ * The sorting of the table above is ASCII dependant.
+ * On machines using EBCDIC we have to sort it.
+ */
+    static void
+sortFunctions(void)
+{
+    int		funcCnt = (int)(sizeof(functions) / sizeof(struct fst)) - 1;
+
+    qsort(functions, (size_t)funcCnt, sizeof(struct fst), compare_func_name);
+}
+#endif
+
 
 /*
  * Initialize the global and v: variables.
@@ -271,7 +295,7 @@ eval_init(void)
 	p = &vimvars[i];
 	if (STRLEN(p->vv_name) > 16)
 	{
-	    EMSG("INTERNAL: name too long, increase size of dictitem16_T");
+	    IEMSG("INTERNAL: name too long, increase size of dictitem16_T");
 	    getout(1);
 	}
 	STRCPY(p->vv_di.di_key, p->vv_name);
@@ -4087,21 +4111,12 @@ eval6(
 		{
 		    if (n2 == 0)	/* give an error message? */
 		    {
-#ifdef FEAT_NUM64
 			if (n1 == 0)
-			    n1 = -0x7fffffffffffffffLL - 1; /* similar to NaN */
+			    n1 = VARNUM_MIN; /* similar to NaN */
 			else if (n1 < 0)
-			    n1 = -0x7fffffffffffffffLL;
+			    n1 = -VARNUM_MAX;
 			else
-			    n1 = 0x7fffffffffffffffLL;
-#else
-			if (n1 == 0)
-			    n1 = -0x7fffffffL - 1L;	/* similar to NaN */
-			else if (n1 < 0)
-			    n1 = -0x7fffffffL;
-			else
-			    n1 = 0x7fffffffL;
-#endif
+			    n1 = VARNUM_MAX;
 		    }
 		    else
 			n1 = n1 / n2;
@@ -5973,6 +5988,22 @@ string2float(
     char	*s = (char *)text;
     float_T	f;
 
+    /* MS-Windows does not deal with "inf" and "nan" properly. */
+    if (STRNICMP(text, "inf", 3) == 0)
+    {
+	*value = INFINITY;
+	return 3;
+    }
+    if (STRNICMP(text, "-inf", 3) == 0)
+    {
+	*value = -INFINITY;
+	return 4;
+    }
+    if (STRNICMP(text, "nan", 3) == 0)
+    {
+	*value = NAN;
+	return 3;
+    }
     f = strtod(s, &s);
     *value = f;
     return (int)((char_u *)s - text);
@@ -9211,28 +9242,30 @@ fill_assert_error(
 
     if (opt_msg_tv->v_type != VAR_UNKNOWN)
     {
-	ga_concat(gap, tv2string(opt_msg_tv, &tofree, numbuf, 0));
+	ga_concat(gap, echo_string(opt_msg_tv, &tofree, numbuf, 0));
+	vim_free(tofree);
+	ga_concat(gap, (char_u *)": ");
+    }
+
+    if (atype == ASSERT_MATCH || atype == ASSERT_NOTMATCH)
+	ga_concat(gap, (char_u *)"Pattern ");
+    else if (atype == ASSERT_NOTEQUAL)
+	ga_concat(gap, (char_u *)"Expected not equal to ");
+    else
+	ga_concat(gap, (char_u *)"Expected ");
+    if (exp_str == NULL)
+    {
+	ga_concat_esc(gap, tv2string(exp_tv, &tofree, numbuf, 0));
 	vim_free(tofree);
     }
     else
+	ga_concat_esc(gap, exp_str);
+    if (atype != ASSERT_NOTEQUAL)
     {
-	if (atype == ASSERT_MATCH || atype == ASSERT_NOTMATCH)
-	    ga_concat(gap, (char_u *)"Pattern ");
-	else
-	    ga_concat(gap, (char_u *)"Expected ");
-	if (exp_str == NULL)
-	{
-	    ga_concat_esc(gap, tv2string(exp_tv, &tofree, numbuf, 0));
-	    vim_free(tofree);
-	}
-	else
-	    ga_concat_esc(gap, exp_str);
 	if (atype == ASSERT_MATCH)
 	    ga_concat(gap, (char_u *)" does not match ");
 	else if (atype == ASSERT_NOTMATCH)
 	    ga_concat(gap, (char_u *)" does match ");
-	else if (atype == ASSERT_NOTEQUAL)
-	    ga_concat(gap, (char_u *)" differs from ");
 	else
 	    ga_concat(gap, (char_u *)" but got ");
 	ga_concat_esc(gap, tv2string(got_tv, &tofree, numbuf, 0));
