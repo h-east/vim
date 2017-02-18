@@ -1102,7 +1102,7 @@ EXTERN pos_T	last_cursormoved	      /* for CursorMoved event */
 			= INIT_POS_T(0, 0, 0)
 # endif
 			;
-EXTERN int	last_changedtick INIT(= 0);   /* for TextChanged event */
+EXTERN varnumber_T last_changedtick INIT(= 0);   /* for TextChanged event */
 EXTERN buf_T	*last_changedtick_buf INIT(= NULL);
 #endif
 
@@ -1595,7 +1595,7 @@ EXTERN char_u e_winheight[]	INIT(= N_("E591: 'winheight' cannot be smaller than 
 EXTERN char_u e_winwidth[]	INIT(= N_("E592: 'winwidth' cannot be smaller than 'winminwidth'"));
 #endif
 EXTERN char_u e_write[]		INIT(= N_("E80: Error while writing"));
-EXTERN char_u e_zerocount[]	INIT(= N_("Zero count"));
+EXTERN char_u e_zerocount[]	INIT(= N_("E939: Positive count required"));
 #ifdef FEAT_EVAL
 EXTERN char_u e_usingsid[]	INIT(= N_("E81: Using <SID> not in a script context"));
 #endif

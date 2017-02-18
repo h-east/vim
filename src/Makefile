@@ -2102,6 +2102,7 @@ test_arglist \
 	test_cdo \
 	test_channel \
 	test_charsearch \
+	test_changedtick \
 	test_clpum \
 	test_cmdline \
 	test_command_count \
@@ -2136,6 +2137,7 @@ test_arglist \
 	test_goto \
 	test_gui \
 	test_hardcopy \
+	test_help \
 	test_help_tagjump \
 	test_hide \
 	test_history \
