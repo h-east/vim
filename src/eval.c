@@ -2081,7 +2081,10 @@ get_lval(
 	    }
 	    /* existing variable, need to check if it can be changed */
 	    else if (var_check_ro(lp->ll_di->di_flags, name, FALSE))
+	    {
+		clear_tv(&var1);
 		return NULL;
+	    }
 
 	    if (len == -1)
 		clear_tv(&var1);
@@ -2884,6 +2887,12 @@ do_lock_var(
 	di = find_var(lp->ll_name, NULL, TRUE);
 	if (di == NULL)
 	    ret = FAIL;
+	else if ((di->di_flags & DI_FLAGS_FIX)
+			&& di->di_tv.v_type != VAR_DICT
+			&& di->di_tv.v_type != VAR_LIST)
+	    /* For historic reasons this error is not given for a list or dict.
+	     * E.g., the b: dict could be locked/unlocked. */
+	    EMSG2(_("E940: Cannot lock or unlock variable %s"), lp->ll_name);
 	else
 	{
 	    if (lock)
