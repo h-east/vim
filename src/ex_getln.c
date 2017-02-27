@@ -2727,9 +2727,16 @@ getexmodeline(
 	if (ga_grow(&line_ga, 40) == FAIL)
 	    break;
 
-	/* Get one character at a time. */
+	/*
+	 * Get one character at a time.
+	 */
 	prev_char = c1;
-	c1 = vgetc();
+
+	/* Check for a ":normal" command and no more characters left. */
+	if (ex_normal_busy > 0 && typebuf.tb_len == 0)
+	    c1 = '\n';
+	else
+	    c1 = vgetc();
 
 	/*
 	 * Handle line editing.
@@ -5535,8 +5542,8 @@ expand_shellcmd(
 static void * call_user_expand_func(void *(*user_expand_func)(char_u *, int, char_u **, int), expand_T	*xp, int *num_file, char_u ***file);
 
 /*
- * Call "user_expand_func()" to invoke a user defined VimL function and return
- * the result (either a string or a List).
+ * Call "user_expand_func()" to invoke a user defined Vim script function and
+ * return the result (either a string or a List).
  */
     static void *
 call_user_expand_func(

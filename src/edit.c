@@ -1038,8 +1038,10 @@ doESCkey:
 	    if (!p_im)
 		goto normalchar;	/* insert CTRL-Z as normal char */
 	    do_cmdline_cmd((char_u *)"stop");
-	    c = Ctrl_O;
-	    /*FALLTHROUGH*/
+#ifdef CURSOR_SHAPE
+	    ui_cursor_shape();		/* may need to update cursor shape */
+#endif
+	    continue;
 
 	case Ctrl_O:	/* execute one command */
 #ifdef FEAT_COMPL_FUNC
@@ -1668,7 +1670,7 @@ ins_redraw(
 #ifdef FEAT_AUTOCMD
     /* Trigger TextChangedI if b_changedtick differs. */
     if (ready && has_textchangedI()
-	    && last_changedtick != *curbuf->b_changedtick
+	    && last_changedtick != CHANGEDTICK(curbuf)
 # ifdef FEAT_INS_EXPAND
 	    && !pum_visible()
 # endif
@@ -1677,7 +1679,7 @@ ins_redraw(
 	if (last_changedtick_buf == curbuf)
 	    apply_autocmds(EVENT_TEXTCHANGEDI, NULL, NULL, FALSE, curbuf);
 	last_changedtick_buf = curbuf;
-	last_changedtick = *curbuf->b_changedtick;
+	last_changedtick = CHANGEDTICK(curbuf);
     }
 #endif
 
@@ -5095,6 +5097,7 @@ ins_complete(int c, int enable_pum)
     int		n;
     int		save_w_wrow;
     int		insert_match;
+    int		save_did_ai = did_ai;
 
     compl_direction = ins_compl_key2dir(c);
     insert_match = ins_compl_use_match(c);
@@ -5378,6 +5381,8 @@ ins_complete(int c, int enable_pum)
 	    {
 		EMSG2(_(e_notset), ctrl_x_mode == CTRL_X_FUNCTION
 					     ? "completefunc" : "omnifunc");
+		/* restore did_ai, so that adding comment leader works */
+		did_ai = save_did_ai;
 		return FAIL;
 	    }
 
@@ -8178,7 +8183,8 @@ in_cinkeys(
 	{
 	    if (try_match && *look == keytyped)
 		return TRUE;
-	    ++look;
+	    if (*look != NUL)
+		++look;
 	}
 
 	/*

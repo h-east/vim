@@ -22,6 +22,26 @@ function! Test_whichwrap()
   set whichwrap&
 endfunction
 
+function! Test_isfname()
+  " This used to cause Vim to access uninitialized memory.
+  set isfname=
+  call assert_equal("~X", expand("~X"))
+  set isfname&
+endfunction
+
+function Test_wildchar()
+  " Empty 'wildchar' used to access invalid memory.
+  call assert_fails('set wildchar=', 'E521:')
+  call assert_fails('set wildchar=abc', 'E521:')
+  set wildchar=<Esc>
+  let a=execute('set wildchar?')
+  call assert_equal("\n  wildchar=<Esc>", a)
+  set wildchar=27
+  let a=execute('set wildchar?')
+  call assert_equal("\n  wildchar=<Esc>", a)
+  set wildchar&
+endfunction
+
 function Test_options()
   let caught = 'ok'
   try
@@ -128,6 +148,13 @@ func Check_dir_option(name)
   call assert_fails("set " . a:name . "=/not.*there", "E474:")
 endfunc
 
+func Test_cinkeys()
+  " This used to cause invalid memory access
+  set cindent cinkeys=0
+  norm a
+  set cindent& cinkeys&
+endfunc
+
 func Test_dictionary()
   call Check_dir_option('dictionary')
 endfunc
@@ -228,7 +255,14 @@ func Test_set_errors()
   call assert_fails('set statusline=%{', 'E540:')
   call assert_fails('set statusline=' . repeat("%p", 81), 'E541:')
   call assert_fails('set statusline=%(', 'E542:')
-  call assert_fails('set guicursor=x', 'E545:')
+  if has('cursorshape')
+    " This invalid value for 'guicursor' used to cause Vim to crash.
+    call assert_fails('set guicursor=i-ci,r-cr:h', 'E545:')
+    call assert_fails('set guicursor=i-ci', 'E545:')
+    call assert_fails('set guicursor=x', 'E545:')
+    call assert_fails('set guicursor=r-cr:horx', 'E548:')
+    call assert_fails('set guicursor=r-cr:hor0', 'E549:')
+  endif
   call assert_fails('set backupext=~ patchmode=~', 'E589:')
   call assert_fails('set winminheight=10 winheight=9', 'E591:')
   call assert_fails('set winminwidth=10 winwidth=9', 'E592:')
@@ -252,5 +286,23 @@ func Test_set_ttytype()
     call assert_fails('set ttytype=xxx', 'E522:')
     set ttytype&
     call assert_equal(&ttytype, &term)
+  endif
+endfunc
+
+func Test_set_all()
+  set tw=75
+  set iskeyword=a-z,A-Z
+  set nosplitbelow
+  let out = execute('set all')
+  call assert_match('textwidth=75', out)
+  call assert_match('iskeyword=a-z,A-Z', out)
+  call assert_match('nosplitbelow', out)
+  set tw& iskeyword& splitbelow&
+endfunc
+
+func Test_set_values()
+  " The file is only generated when running "make test" in the src directory.
+  if filereadable('opt_test.vim')
+    source opt_test.vim
   endif
 endfunc

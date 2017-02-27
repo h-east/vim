@@ -4194,6 +4194,8 @@ win_line(
 	}
 	else
 	{
+	    int c0;
+
 	    if (p_extra_free != NULL)
 	    {
 		vim_free(p_extra_free);
@@ -4202,7 +4204,7 @@ win_line(
 	    /*
 	     * Get a character from the line itself.
 	     */
-	    c = *ptr;
+	    c0 = c = *ptr;
 #ifdef FEAT_MBYTE
 	    if (has_mbyte)
 	    {
@@ -4219,7 +4221,7 @@ win_line(
 			/* Overlong encoded ASCII or ASCII with composing char
 			 * is displayed normally, except a NUL. */
 			if (mb_c < 0x80)
-			    c = mb_c;
+			    c0 = c = mb_c;
 			mb_utf8 = TRUE;
 
 			/* At start of the line we can have a composing char.
@@ -4543,7 +4545,8 @@ win_line(
 		/*
 		 * Found last space before word: check for line break.
 		 */
-		if (wp->w_p_lbr && vim_isbreak(c) && !vim_isbreak(*ptr))
+		if (wp->w_p_lbr && c0 == c
+				      && vim_isbreak(c) && !vim_isbreak(*ptr))
 		{
 # ifdef FEAT_MBYTE
 		    int mb_off = has_mbyte ? (*mb_head_off)(line, ptr - 1) : 0;
@@ -6740,7 +6743,7 @@ win_redr_status(win_T *wp)
 	if (wp->w_buffer->b_p_ro)
 	{
 	    STRCPY(p + len, _("[RO]"));
-	    len += 4;
+	    len += (int)STRLEN(p + len);
 	}
 
 	this_ru_col = ru_col - (Columns - W_WIDTH(wp));

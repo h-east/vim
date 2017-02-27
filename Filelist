@@ -98,6 +98,7 @@ SRC_ALL =	\
 		src/tee/tee.c \
 		src/xxd/xxd.c \
 		src/main.aap \
+		src/gen_opt_test.vim \
 		src/testdir/main.aap \
 		src/testdir/README.txt \
 		src/testdir/Make_all.mak \
@@ -106,7 +107,10 @@ SRC_ALL =	\
 		src/testdir/sautest/autoload/*.vim \
 		src/testdir/runtest.vim \
 		src/testdir/shared.vim \
+		src/testdir/view_util.vim \
 		src/testdir/setup.vim \
+		src/testdir/gui_init.vim \
+		src/testdir/setup_gui.vim \
 		src/testdir/test[0-9]*.ok \
 		src/testdir/test[0-9]*a.ok \
 		src/testdir/test_[a-z]*.ok \
