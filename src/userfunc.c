@@ -1494,7 +1494,7 @@ list_func_head(ufunc_T *fp, int indent)
     MSG_PUTS("function ");
     if (fp->uf_name[0] == K_SPECIAL)
     {
-	MSG_PUTS_ATTR("<SNR>", hl_attr(HLF_8));
+	MSG_PUTS_ATTR("<SNR>", HL_ATTR(HLF_8));
 	msg_puts(fp->uf_name + 3);
     }
     else
@@ -2104,7 +2104,7 @@ ex_function(exarg_T *eap)
 	else
 	{
 	    /* skip ':' and blanks*/
-	    for (p = theline; vim_iswhite(*p) || *p == ':'; ++p)
+	    for (p = theline; VIM_ISWHITE(*p) || *p == ':'; ++p)
 		;
 
 	    /* Check for "endfunction". */

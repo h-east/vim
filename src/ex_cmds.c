@@ -256,7 +256,7 @@ linelen(int *has_tab)
 
     /* find the character after the last non-blank character */
     for (last = first + STRLEN(first);
-				last > first && vim_iswhite(last[-1]); --last)
+				last > first && VIM_ISWHITE(last[-1]); --last)
 	;
     save = *last;
     *last = NUL;
@@ -400,7 +400,7 @@ ex_sort(exarg_T *eap)
 
     for (p = eap->arg; *p != NUL; ++p)
     {
-	if (vim_iswhite(*p))
+	if (VIM_ISWHITE(*p))
 	    ;
 	else if (*p == 'i')
 	    sort_ic = TRUE;
@@ -683,7 +683,7 @@ ex_retab(exarg_T *eap)
 	did_undo = FALSE;
 	for (;;)
 	{
-	    if (vim_iswhite(ptr[col]))
+	    if (VIM_ISWHITE(ptr[col]))
 	    {
 		if (!got_tab && num_spaces == 0)
 		{
@@ -799,14 +799,8 @@ do_move(linenr_T line1, linenr_T line2, linenr_T dest)
     linenr_T	num_lines;  /* Num lines moved */
     linenr_T	last_line;  /* Last line in file after adding new text */
 #ifdef FEAT_FOLDING
-    int		isFolded;
-
-    /* Moving lines seems to corrupt the folds, delete folding info now
-     * and recreate it when finished.  Don't do this for manual folding, it
-     * would delete all folds. */
-    isFolded = hasAnyFolding(curwin) && !foldmethodIsManual(curwin);
-    if (isFolded)
-	deleteFoldRecurse(&curwin->w_folds);
+    win_T	*win;
+    tabpage_T	*tp;
 #endif
 
     if (dest >= line1 && dest < line2)
@@ -851,24 +845,34 @@ do_move(linenr_T line1, linenr_T line2, linenr_T dest)
      * their final destination at the new text position -- webb
      */
     last_line = curbuf->b_ml.ml_line_count;
-    mark_adjust(line1, line2, last_line - line2, 0L);
-    changed_lines(last_line - num_lines + 1, 0, last_line + 1, num_lines);
+    mark_adjust_nofold(line1, line2, last_line - line2, 0L);
     if (dest >= line2)
     {
-	mark_adjust(line2 + 1, dest, -num_lines, 0L);
+	mark_adjust_nofold(line2 + 1, dest, -num_lines, 0L);
+#ifdef FEAT_FOLDING
+	FOR_ALL_TAB_WINDOWS(tp, win) {
+	    if (win->w_buffer == curbuf)
+		foldMoveRange(&win->w_folds, line1, line2, dest);
+	}
+#endif
 	curbuf->b_op_start.lnum = dest - num_lines + 1;
 	curbuf->b_op_end.lnum = dest;
     }
     else
     {
-	mark_adjust(dest + 1, line1 - 1, num_lines, 0L);
+	mark_adjust_nofold(dest + 1, line1 - 1, num_lines, 0L);
+#ifdef FEAT_FOLDING
+	FOR_ALL_TAB_WINDOWS(tp, win) {
+	    if (win->w_buffer == curbuf)
+		foldMoveRange(&win->w_folds, dest + 1, line1 - 1, line2);
+	}
+#endif
 	curbuf->b_op_start.lnum = dest + 1;
 	curbuf->b_op_end.lnum = dest + num_lines;
     }
     curbuf->b_op_start.col = curbuf->b_op_end.col = 0;
-    mark_adjust(last_line - num_lines + 1, last_line,
+    mark_adjust_nofold(last_line - num_lines + 1, last_line,
 					     -(last_line - dest - extra), 0L);
-    changed_lines(last_line - num_lines + 1, 0, last_line + 1, -extra);
 
     /*
      * Now we delete the original text -- webb
@@ -905,12 +909,6 @@ do_move(linenr_T line1, linenr_T line2, linenr_T dest)
     }
     else
 	changed_lines(dest + 1, 0, line1 + num_lines, 0L);
-
-#ifdef FEAT_FOLDING
-	/* recreate folds */
-	if (isFolded)
-	    foldUpdateAll(curwin);
-#endif
 
     return OK;
 }
@@ -2891,7 +2889,7 @@ print_line_no_prefix(
     {
 	vim_snprintf((char *)numbuf, sizeof(numbuf),
 				   "%*ld ", number_width(curwin), (long)lnum);
-	msg_puts_attr(numbuf, hl_attr(HLF_N));	/* Highlight line nrs */
+	msg_puts_attr(numbuf, HL_ATTR(HLF_N));	/* Highlight line nrs */
     }
     msg_prt_line(ml_get(lnum), list);
 }
@@ -4211,7 +4209,7 @@ do_ecmd(
 
 	/* If autocommands change the cursor position or topline, we should
 	 * keep it.  Also when it moves within a line. */
-	if (!equalpos(curwin->w_cursor, orig_pos))
+	if (!EQUAL_POS(curwin->w_cursor, orig_pos))
 	{
 	    newlnum = curwin->w_cursor.lnum;
 	    newcol = curwin->w_cursor.col;
@@ -4807,7 +4805,7 @@ do_sub(exarg_T *eap)
 	which_pat = RE_SUBST;	/* use last substitute regexp */
 
 				/* new pattern and substitution */
-    if (eap->cmd[0] == 's' && *cmd != NUL && !vim_iswhite(*cmd)
+    if (eap->cmd[0] == 's' && *cmd != NUL && !VIM_ISWHITE(*cmd)
 		&& vim_strchr((char_u *)"0123456789cegriIp|\"", *cmd) == NULL)
     {
 				/* don't accept alphanumeric for separator */
@@ -4863,7 +4861,7 @@ do_sub(exarg_T *eap)
 	    }
 	    if (cmd[0] == '\\' && cmd[1] != 0)	/* skip escaped characters */
 		++cmd;
-	    mb_ptr_adv(cmd);
+	    MB_PTR_ADV(cmd);
 	}
 
 	if (!eap->skip)
@@ -5381,7 +5379,7 @@ do_sub(exarg_T *eap)
 			    msg_no_more = TRUE;
 			    /* write message same highlighting as for
 			     * wait_return */
-			    smsg_attr(hl_attr(HLF_R),
+			    smsg_attr(HL_ATTR(HLF_R),
 				    (char_u *)_("replace with %s (y/n/a/q/l/^E/^Y)?"), sub);
 			    msg_no_more = FALSE;
 			    msg_scroll = i;
@@ -6225,7 +6223,7 @@ ex_help(exarg_T *eap)
 
     /* remove trailing blanks */
     p = arg + STRLEN(arg) - 1;
-    while (p > arg && vim_iswhite(*p) && p[-1] != '\\')
+    while (p > arg && VIM_ISWHITE(*p) && p[-1] != '\\')
 	*p-- = NUL;
 
 #ifdef FEAT_MULTI_LANG
@@ -6809,7 +6807,7 @@ fix_help_buffer(void)
 	{
 	    line = ml_get_buf(curbuf, lnum, FALSE);
 	    len = (int)STRLEN(line);
-	    if (in_example && len > 0 && !vim_iswhite(line[0]))
+	    if (in_example && len > 0 && !VIM_ISWHITE(line[0]))
 	    {
 		/* End of example: non-white or '<' in first column. */
 		if (line[0] == '<')
@@ -7421,7 +7419,7 @@ ex_helptags(exarg_T *eap)
     int		add_help_tags = FALSE;
 
     /* Check for ":helptags ++t {dir}". */
-    if (STRNCMP(eap->arg, "++t", 3) == 0 && vim_iswhite(eap->arg[3]))
+    if (STRNCMP(eap->arg, "++t", 3) == 0 && VIM_ISWHITE(eap->arg[3]))
     {
 	add_help_tags = TRUE;
 	eap->arg = skipwhite(eap->arg + 3);
@@ -7754,7 +7752,7 @@ ex_sign(exarg_T *eap)
 	if (VIM_ISDIGIT(*arg))
 	{
 	    id = getdigits(&arg);
-	    if (!vim_iswhite(*arg) && *arg != NUL)
+	    if (!VIM_ISWHITE(*arg) && *arg != NUL)
 	    {
 		id = -1;
 		arg = arg1;
@@ -8286,7 +8284,7 @@ ex_smile(exarg_T *eap UNUSED)
 	    else
 		for (n = *p++; n > 0; --n)
 		    if (*p == 'o' || *p == '$')
-			msg_putchar_attr(*p, hl_attr(HLF_L));
+			msg_putchar_attr(*p, HL_ATTR(HLF_L));
 		    else
 			msg_putchar(*p);
     msg_clr_eos();

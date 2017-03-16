@@ -241,7 +241,7 @@ clpum_redraw(void)
 		case 3: p = clpum_array[idx].pum_extra; break;
 	    }
 	    if (p != NULL)
-		for ( ; ; mb_ptr_adv(p))
+		for ( ; ; MB_PTR_ADV(p))
 		{
 		    if (s == NULL)
 			s = p;

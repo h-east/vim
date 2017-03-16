@@ -49,7 +49,7 @@ source setup.vim
 " This also enables use of line continuation.
 set nocp viminfo+=nviminfo
 
-" Use utf-8 or latin1 be default, instead of whatever the system default
+" Use utf-8 or latin1 by default, instead of whatever the system default
 " happens to be.  Individual tests can overrule this at the top of the file.
 if has('multi_byte')
   set encoding=utf-8
@@ -95,6 +95,9 @@ function RunTheTest(test)
   " Avoid a three second wait when a message is about to be overwritten by the
   " mode message.
   set noshowmode
+
+  " Clear any overrides.
+  call test_override('ALL', 0)
 
   if exists("*SetUp")
     try
@@ -164,6 +167,7 @@ let s:flaky = [
       \ 'Test_close_and_exit_cb()',
       \ 'Test_collapse_buffers()',
       \ 'Test_communicate()',
+      \ 'Test_exit_callback_interval()',
       \ 'Test_nb_basic()',
       \ 'Test_oneshot()',
       \ 'Test_pipe_through_sort_all()',

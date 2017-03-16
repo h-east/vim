@@ -1518,7 +1518,7 @@ list_arg_vars(exarg_T *eap, char_u *arg, int *first)
 	if (error || eap->skip)
 	{
 	    arg = find_name_end(arg, NULL, NULL, FNE_INCL_BR | FNE_CHECK_START);
-	    if (!vim_iswhite(*arg) && !ends_excmd(*arg))
+	    if (!VIM_ISWHITE(*arg) && !ends_excmd(*arg))
 	    {
 		emsg_severe = TRUE;
 		EMSG(_(e_trailing));
@@ -1858,7 +1858,7 @@ get_lval(
     if (expr_start != NULL)
     {
 	/* Don't expand the name when we already know there is an error. */
-	if (unlet && !vim_iswhite(*p) && !ends_excmd(*p)
+	if (unlet && !VIM_ISWHITE(*p) && !ends_excmd(*p)
 						    && *p != '[' && *p != '.')
 	{
 	    EMSG(_(e_trailing));
@@ -2451,7 +2451,7 @@ eval_for_line(
 	return fi;
 
     expr = skipwhite(expr);
-    if (expr[0] != 'i' || expr[1] != 'n' || !vim_iswhite(expr[2]))
+    if (expr[0] != 'i' || expr[1] != 'n' || !VIM_ISWHITE(expr[2]))
     {
 	EMSG(_("E690: Missing \"in\" after :for"));
 	return fi;
@@ -2553,8 +2553,8 @@ set_context_for_expression(
 	    for (p = arg + STRLEN(arg); p >= arg; )
 	    {
 		xp->xp_pattern = p;
-		mb_ptr_back(arg, p);
-		if (vim_iswhite(*p))
+		MB_PTR_BACK(arg, p);
+		if (VIM_ISWHITE(*p))
 		    break;
 	    }
 	    return;
@@ -2700,7 +2700,7 @@ ex_unletlock(
 							     FNE_CHECK_START);
 	if (lv.ll_name == NULL)
 	    error = TRUE;	    /* error but continue parsing */
-	if (name_end == NULL || (!vim_iswhite(*name_end)
+	if (name_end == NULL || (!VIM_ISWHITE(*name_end)
 						   && !ends_excmd(*name_end)))
 	{
 	    if (name_end != NULL)
@@ -4816,7 +4816,7 @@ get_string_tv(char_u **arg, typval_T *rettv, int evaluate)
     /*
      * Find the end of the string, skipping backslashed characters.
      */
-    for (p = *arg + 1; *p != NUL && *p != '"'; mb_ptr_adv(p))
+    for (p = *arg + 1; *p != NUL && *p != '"'; MB_PTR_ADV(p))
     {
 	if (*p == '\\' && p[1] != NUL)
 	{
@@ -4954,7 +4954,7 @@ get_lit_string_tv(char_u **arg, typval_T *rettv, int evaluate)
     /*
      * Find the end of the string, skipping ''.
      */
-    for (p = *arg + 1; *p != NUL; mb_ptr_adv(p))
+    for (p = *arg + 1; *p != NUL; MB_PTR_ADV(p))
     {
 	if (*p == '\'')
 	{
@@ -5912,7 +5912,7 @@ string_quote(char_u *str, int function)
     if (str != NULL)
     {
 	len += (unsigned)STRLEN(str);
-	for (p = str; *p != NUL; mb_ptr_adv(p))
+	for (p = str; *p != NUL; MB_PTR_ADV(p))
 	    if (*p == '\'')
 		++len;
     }
@@ -6371,12 +6371,12 @@ find_name_end(
 			|| *p == '{'
 			|| ((flags & FNE_INCL_BR) && (*p == '[' || *p == '.'))
 			|| mb_nest != 0
-			|| br_nest != 0); mb_ptr_adv(p))
+			|| br_nest != 0); MB_PTR_ADV(p))
     {
 	if (*p == '\'')
 	{
 	    /* skip over 'string' to avoid counting [ and ] inside it. */
-	    for (p = p + 1; *p != NUL && *p != '\''; mb_ptr_adv(p))
+	    for (p = p + 1; *p != NUL && *p != '\''; MB_PTR_ADV(p))
 		;
 	    if (*p == NUL)
 		break;
@@ -6384,7 +6384,7 @@ find_name_end(
 	else if (*p == '"')
 	{
 	    /* skip over "str\"ing" to avoid counting [ and ] inside it. */
-	    for (p = p + 1; *p != NUL && *p != '"'; mb_ptr_adv(p))
+	    for (p = p + 1; *p != NUL && *p != '"'; MB_PTR_ADV(p))
 		if (*p == '\\' && p[1] != NUL)
 		    ++p;
 	    if (*p == NUL)
@@ -6868,7 +6868,7 @@ handle_subscript(
 		|| (**arg == '.' && rettv->v_type == VAR_DICT)
 		|| (**arg == '(' && (!evaluate || rettv->v_type == VAR_FUNC
 					    || rettv->v_type == VAR_PARTIAL)))
-	    && !vim_iswhite(*(*arg - 1)))
+	    && !VIM_ISWHITE(*(*arg - 1)))
     {
 	if (**arg == '(')
 	{
@@ -8321,6 +8321,15 @@ ex_execute(exarg_T *eap)
 
     if (ret != FAIL && ga.ga_data != NULL)
     {
+	if (eap->cmdidx == CMD_echomsg || eap->cmdidx == CMD_echoerr)
+	{
+	    /* Mark the already saved text as finishing the line, so that what
+	     * follows is displayed on a new line when scrolling back at the
+	     * more prompt. */
+	    msg_sb_eol();
+	    msg_start();
+	}
+
 	if (eap->cmdidx == CMD_echomsg)
 	{
 	    MSG_ATTR(ga.ga_data, echo_attr);
@@ -9412,7 +9421,7 @@ shortpath_for_partial(
     /* Count up the path separators from the RHS.. so we know which part
      * of the path to return. */
     sepcount = 0;
-    for (p = *fnamep; p < *fnamep + *fnamelen; mb_ptr_adv(p))
+    for (p = *fnamep; p < *fnamep + *fnamelen; MB_PTR_ADV(p))
 	if (vim_ispathsep(*p))
 	    ++sepcount;
 
@@ -9530,7 +9539,7 @@ repeat:
 	}
 
 	/* When "/." or "/.." is used: force expansion to get rid of it. */
-	for (p = *fnamep; *p != NUL; mb_ptr_adv(p))
+	for (p = *fnamep; *p != NUL; MB_PTR_ADV(p))
 	{
 	    if (vim_ispathsep(*p)
 		    && p[1] == '.'
@@ -9660,7 +9669,7 @@ repeat:
 	*usedlen += 2;
 	s = get_past_head(*fnamep);
 	while (tail > s && after_pathsep(s, tail))
-	    mb_ptr_back(*fnamep, tail);
+	    MB_PTR_BACK(*fnamep, tail);
 	*fnamelen = (int)(tail - *fnamep);
 #ifdef VMS
 	if (*fnamelen > 0)
@@ -9679,7 +9688,7 @@ repeat:
 	else
 	{
 	    while (tail > s && !after_pathsep(s, tail))
-		mb_ptr_back(*fnamep, tail);
+		MB_PTR_BACK(*fnamep, tail);
 	}
     }
 

@@ -630,7 +630,7 @@ gui_init(void)
      * where Vim was started. */
     emsg_on_display = FALSE;
     msg_scrolled = 0;
-    clear_sb_text();
+    clear_sb_text(TRUE);
     need_wait_return = FALSE;
     msg_didany = FALSE;
 
@@ -4492,7 +4492,7 @@ gui_do_scroll(void)
 	clpum_redraw();
 #endif
 
-    return (wp == curwin && !equalpos(curwin->w_cursor, old_cursor));
+    return (wp == curwin && !EQUAL_POS(curwin->w_cursor, old_cursor));
 }
 
 
@@ -4516,7 +4516,7 @@ scroll_line_len(linenr_T lnum)
 	for (;;)
 	{
 	    w = chartabsize(p, col);
-	    mb_ptr_adv(p);
+	    MB_PTR_ADV(p);
 	    if (*p == NUL)		/* don't count the last character */
 		break;
 	    col += w;
@@ -4983,7 +4983,7 @@ ex_gui(exarg_T *eap)
      */
     if (arg[0] == '-'
 	    && (arg[1] == 'f' || arg[1] == 'b')
-	    && (arg[2] == NUL || vim_iswhite(arg[2])))
+	    && (arg[2] == NUL || VIM_ISWHITE(arg[2])))
     {
 	gui.dofork = (arg[1] == 'b');
 	eap->arg = skipwhite(eap->arg + 2);
@@ -5134,7 +5134,7 @@ gui_update_screen(void)
 		curwin->w_p_cole > 0
 # endif
 		)
-		     && !equalpos(last_cursormoved, curwin->w_cursor))
+		     && !EQUAL_POS(last_cursormoved, curwin->w_cursor))
     {
 # ifdef FEAT_AUTOCMD
 	if (has_cursormoved())

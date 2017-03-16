@@ -408,7 +408,7 @@ edit(
 	 * the "A" command, thus set State to avoid that. Also check that the
 	 * line number is still valid (lines may have been deleted).
 	 * Do not restore if v:char was set to a non-empty string. */
-	if (!equalpos(curwin->w_cursor, save_cursor)
+	if (!EQUAL_POS(curwin->w_cursor, save_cursor)
 # ifdef FEAT_EVAL
 		&& *get_vim_var_str(VV_CHAR) == NUL
 # endif
@@ -857,7 +857,7 @@ edit(
 
 		    if (str != NULL)
 		    {
-			for (p = str; *p != NUL; mb_ptr_adv(p))
+			for (p = str; *p != NUL; MB_PTR_ADV(p))
 			    ins_compl_addleader(PTR2CHAR(p));
 			vim_free(str);
 		    }
@@ -1492,7 +1492,7 @@ normalchar:
 		    if (*str != NUL && stop_arrow() != FAIL)
 		    {
 			/* Insert the new value of v:char literally. */
-			for (p = str; *p != NUL; mb_ptr_adv(p))
+			for (p = str; *p != NUL; MB_PTR_ADV(p))
 			{
 			    c = PTR2CHAR(p);
 			    if (c == CAR || c == K_KENTER || c == NL)
@@ -1631,7 +1631,7 @@ ins_redraw(
 # endif
 		)
 # ifdef FEAT_AUTOCMD
-	&& !equalpos(last_cursormoved, curwin->w_cursor)
+	&& !EQUAL_POS(last_cursormoved, curwin->w_cursor)
 # endif
 # ifdef FEAT_INS_EXPAND
 	&& !pum_visible()
@@ -1771,7 +1771,7 @@ edit_putchar(int c, int highlight)
 	update_topline();	/* just in case w_topline isn't valid */
 	validate_cursor();
 	if (highlight)
-	    attr = hl_attr(HLF_8);
+	    attr = HL_ATTR(HLF_8);
 	else
 	    attr = 0;
 	pc_row = W_WINROW(curwin) + curwin->w_wrow;
@@ -2149,7 +2149,7 @@ truncate_spaces(char_u *line)
     int	    i;
 
     /* find start of trailing white space */
-    for (i = (int)STRLEN(line) - 1; i >= 0 && vim_iswhite(line[i]); i--)
+    for (i = (int)STRLEN(line) - 1; i >= 0 && VIM_ISWHITE(line[i]); i--)
     {
 	if (State & REPLACE_FLAG)
 	    replace_join(0);	    /* remove a NUL from the replace stack */
@@ -2256,13 +2256,16 @@ has_compl_option(int dict_opt)
 	edit_submode = NULL;
 	msg_attr(dict_opt ? (char_u *)_("'dictionary' option is empty")
 			  : (char_u *)_("'thesaurus' option is empty"),
-							      hl_attr(HLF_E));
+							      HL_ATTR(HLF_E));
 	if (emsg_silent == 0)
 	{
 	    vim_beep(BO_COMPL);
 	    setcursor();
 	    out_flush();
-	    ui_delay(2000L, FALSE);
+#ifdef FEAT_EVAL
+	    if (!get_vim_var_nr(VV_TESTING))
+#endif
+		ui_delay(2000L, FALSE);
 	}
 	return FALSE;
     }
@@ -2355,7 +2358,7 @@ ins_compl_accept_char(int c)
 	case CTRL_X_OMNI:
 	    /* Command line and Omni completion can work with just about any
 	     * printable character, but do stop at white space. */
-	    return vim_isprintc(c) && !vim_iswhite(c);
+	    return vim_isprintc(c) && !VIM_ISWHITE(c);
 
 	case CTRL_X_WHOLE_LINE:
 	    /* For while line completion a space can be part of the line. */
@@ -2400,7 +2403,7 @@ ins_compl_add_infercase(
 	    actual_len = 0;
 	    while (*p != NUL)
 	    {
-		mb_ptr_adv(p);
+		MB_PTR_ADV(p);
 		++actual_len;
 	    }
 	}
@@ -2416,7 +2419,7 @@ ins_compl_add_infercase(
 	    actual_compl_length = 0;
 	    while (*p != NUL)
 	    {
-		mb_ptr_adv(p);
+		MB_PTR_ADV(p);
 		++actual_compl_length;
 	    }
 	}
@@ -2719,8 +2722,8 @@ ins_compl_longest_match(compl_T *match)
 #ifdef FEAT_MBYTE
 	    if (has_mbyte)
 	    {
-		mb_ptr_adv(p);
-		mb_ptr_adv(s);
+		MB_PTR_ADV(p);
+		MB_PTR_ADV(s);
 	    }
 	    else
 #endif
@@ -3249,7 +3252,7 @@ ins_compl_files(
 	{
 	    vim_snprintf((char *)IObuff, IOSIZE,
 			      _("Scanning dictionary: %s"), (char *)files[i]);
-	    (void)msg_trunc_attr(IObuff, TRUE, hl_attr(HLF_R));
+	    (void)msg_trunc_attr(IObuff, TRUE, HL_ATTR(HLF_R));
 	}
 
 	if (fp != NULL)
@@ -3471,7 +3474,7 @@ ins_compl_bs(void)
 
     line = ml_get_curline();
     p = line + curwin->w_cursor.col;
-    mb_ptr_back(line, p);
+    MB_PTR_BACK(line, p);
 
     /* Stop completion when the whole word was deleted.  For Omni completion
      * allow the word to be deleted, we won't match everything.
@@ -4020,7 +4023,7 @@ ins_compl_fixRedoBufForLeader(char_u *ptr_arg)
 	if (len > 0)
 	    len -= (*mb_head_off)(p, p + len);
 #endif
-	for (p += len; *p != NUL; mb_ptr_adv(p))
+	for (p += len; *p != NUL; MB_PTR_ADV(p))
 	    AppendCharToRedobuff(K_BS);
     }
     else
@@ -4127,7 +4130,7 @@ expand_by_function(
     }
     curwin->w_cursor = pos;	/* restore the cursor position */
     validate_cursor();
-    if (!equalpos(curwin->w_cursor, pos))
+    if (!EQUAL_POS(curwin->w_cursor, pos))
     {
 	EMSG(_(e_compldel));
 	goto theend;
@@ -4341,7 +4344,7 @@ ins_compl_get_exp(pos_T *ini)
 			    : ins_buf->b_sfname == NULL
 				? ins_buf->b_fname
 				: ins_buf->b_sfname);
-		(void)msg_trunc_attr(IObuff, TRUE, hl_attr(HLF_R));
+		(void)msg_trunc_attr(IObuff, TRUE, HL_ATTR(HLF_R));
 	    }
 	    else if (*e_cpt == NUL)
 		break;
@@ -4371,7 +4374,7 @@ ins_compl_get_exp(pos_T *ini)
 		{
 		    type = CTRL_X_TAGS;
 		    vim_snprintf((char *)IObuff, IOSIZE, _("Scanning tags."));
-		    (void)msg_trunc_attr(IObuff, TRUE, hl_attr(HLF_R));
+		    (void)msg_trunc_attr(IObuff, TRUE, HL_ATTR(HLF_R));
 		}
 		else
 		    type = -1;
@@ -5333,9 +5336,9 @@ ins_complete(int c, int enable_pum)
 	    {
 		char_u	*p = line + startcol;
 
-		mb_ptr_back(line, p);
+		MB_PTR_BACK(line, p);
 		while (p > line && vim_isfilec(PTR2CHAR(p)))
-		    mb_ptr_back(line, p);
+		    MB_PTR_BACK(line, p);
 		if (p == line && vim_isfilec(PTR2CHAR(p)))
 		    startcol = 0;
 		else
@@ -5405,7 +5408,7 @@ ins_complete(int c, int enable_pum)
 	    }
 	    curwin->w_cursor = pos;	/* restore the cursor position */
 	    validate_cursor();
-	    if (!equalpos(curwin->w_cursor, pos))
+	    if (!EQUAL_POS(curwin->w_cursor, pos))
 	    {
 		EMSG(_(e_compldel));
 		return FAIL;
@@ -5690,7 +5693,7 @@ ins_complete(int c, int enable_pum)
 	    if (!p_smd)
 		msg_attr(edit_submode_extra,
 			edit_submode_highl < HLF_COUNT
-			? hl_attr(edit_submode_highl) : 0);
+			? HL_ATTR(edit_submode_highl) : 0);
 	}
 	else
 	    msg_clr_cmdline();	/* necessary for "noshowmode" */
@@ -5986,9 +5989,9 @@ insert_special(
 #endif
 
 #ifdef FEAT_MBYTE
-# define WHITECHAR(cc) (vim_iswhite(cc) && (!enc_utf8 || !utf_iscomposing(utf_ptr2char(ml_get_cursor() + 1))))
+# define WHITECHAR(cc) (VIM_ISWHITE(cc) && (!enc_utf8 || !utf_iscomposing(utf_ptr2char(ml_get_cursor() + 1))))
 #else
-# define WHITECHAR(cc) vim_iswhite(cc)
+# define WHITECHAR(cc) VIM_ISWHITE(cc)
 #endif
 
 /*
@@ -6034,7 +6037,7 @@ insertchar(
      */
     if (textwidth > 0
 	    && (force_format
-		|| (!vim_iswhite(c)
+		|| (!VIM_ISWHITE(c)
 		    && !((State & REPLACE_FLAG)
 #ifdef FEAT_VREPLACE
 			&& !(State & VREPLACE_FLAG)
@@ -6091,7 +6094,7 @@ insertchar(
 		++p;
 	    middle_len = copy_option_part(&p, lead_end, COM_MAX_LEN, ",");
 	    /* Don't count trailing white space for middle_len */
-	    while (middle_len > 0 && vim_iswhite(lead_end[middle_len - 1]))
+	    while (middle_len > 0 && VIM_ISWHITE(lead_end[middle_len - 1]))
 		--middle_len;
 
 	    /* Find the end-comment string */
@@ -6101,7 +6104,7 @@ insertchar(
 
 	    /* Skip white space before the cursor */
 	    i = curwin->w_cursor.col;
-	    while (--i >= 0 && vim_iswhite(line[i]))
+	    while (--i >= 0 && VIM_ISWHITE(line[i]))
 		;
 	    i++;
 
@@ -6290,7 +6293,7 @@ internal_format(
 	    )
     {
 	cc = gchar_cursor();
-	if (vim_iswhite(cc))
+	if (VIM_ISWHITE(cc))
 	{
 	    save_char = cc;
 	    pchar_cursor('x');
@@ -7028,13 +7031,13 @@ stop_insert(
 	    {
 		dec_cursor();
 		cc = gchar_cursor();
-		if (!vim_iswhite(cc))
+		if (!VIM_ISWHITE(cc))
 		    curwin->w_cursor = tpos;
 	    }
 
 	    auto_format(TRUE, FALSE);
 
-	    if (vim_iswhite(cc))
+	    if (VIM_ISWHITE(cc))
 	    {
 		if (gchar_cursor() != NUL)
 		    inc_cursor();
@@ -7070,7 +7073,7 @@ stop_insert(
 		if (gchar_cursor() == NUL && curwin->w_cursor.col > 0)
 		    --curwin->w_cursor.col;
 		cc = gchar_cursor();
-		if (!vim_iswhite(cc))
+		if (!VIM_ISWHITE(cc))
 		    break;
 		if (del_char(TRUE) == FAIL)
 		    break;  /* should not happen */
@@ -7220,7 +7223,7 @@ beginline(int flags)
 	{
 	    char_u  *ptr;
 
-	    for (ptr = ml_get_curline(); vim_iswhite(*ptr)
+	    for (ptr = ml_get_curline(); VIM_ISWHITE(*ptr)
 			       && !((flags & BL_FIX) && ptr[1] == NUL); ++ptr)
 		++curwin->w_cursor.col;
 	}
@@ -8944,7 +8947,7 @@ ins_bs(
      * can't backup past starting point unless 'backspace' > 1
      * can backup to a previous line if 'backspace' == 0
      */
-    if (       bufempty()
+    if (       BUFEMPTY()
 	    || (
 #ifdef FEAT_RIGHTLEFT
 		!revins_on &&
@@ -9166,7 +9169,7 @@ ins_bs(
 
 	    /* delete characters until we are at or before want_vcol */
 	    while (vcol > want_vcol
-		    && (cc = *(ml_get_cursor() - 1), vim_iswhite(cc)))
+		    && (cc = *(ml_get_cursor() - 1), VIM_ISWHITE(cc)))
 		ins_bs_one(&vcol);
 
 	    /* insert extra spaces until we are at want_vcol */
@@ -9459,7 +9462,7 @@ ins_mousescroll(int dir)
     }
 # endif
 
-    if (!equalpos(curwin->w_cursor, tpos))
+    if (!EQUAL_POS(curwin->w_cursor, tpos))
     {
 	start_arrow(&tpos);
 # ifdef FEAT_CINDENT
@@ -10053,7 +10056,7 @@ ins_tab(void)
 
 	/* Find first white before the cursor */
 	fpos = curwin->w_cursor;
-	while (fpos.col > 0 && vim_iswhite(ptr[-1]))
+	while (fpos.col > 0 && VIM_ISWHITE(ptr[-1]))
 	{
 	    --fpos.col;
 	    --ptr;
@@ -10074,7 +10077,7 @@ ins_tab(void)
 
 	/* Use as many TABs as possible.  Beware of 'breakindent', 'showbreak'
 	 * and 'linebreak' adding extra virtual columns. */
-	while (vim_iswhite(*ptr))
+	while (VIM_ISWHITE(*ptr))
 	{
 	    i = lbr_chartabsize(NULL, (char_u *)"\t", vcol);
 	    if (vcol + i > want_vcol)
@@ -10453,7 +10456,7 @@ ins_try_si(int c)
 	    ptr = ml_get(pos->lnum);
 	    i = pos->col;
 	    if (i > 0)		/* skip blanks before '{' */
-		while (--i > 0 && vim_iswhite(ptr[i]))
+		while (--i > 0 && VIM_ISWHITE(ptr[i]))
 		    ;
 	    curwin->w_cursor.lnum = pos->lnum;
 	    curwin->w_cursor.col = i;

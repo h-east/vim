@@ -359,7 +359,7 @@ getcmdline(
 
     ccline.overstrike = FALSE;		    /* always start in insert mode */
 #ifdef FEAT_SEARCH_EXTRA
-    clearpos(&match_end);
+    CLEAR_POS(&match_end);
     save_cursor = curwin->w_cursor;	    /* may be restored later */
     search_start = curwin->w_cursor;
     old_curswant = curwin->w_curswant;
@@ -383,6 +383,7 @@ getcmdline(
 	return NULL;			    /* out of memory */
     ccline.cmdlen = ccline.cmdpos = 0;
     ccline.cmdbuff[0] = NUL;
+    sb_text_start_cmdline();
 
     /* autoindent for :insert and :append */
     if (firstc <= 0)
@@ -1798,7 +1799,7 @@ getcmdline(
 		    if (did_incsearch)
 		    {
 			curwin->w_cursor = match_end;
-			if (!equalpos(curwin->w_cursor, search_start))
+			if (!EQUAL_POS(curwin->w_cursor, search_start))
 			{
 			    c = gchar_cursor();
 			    /* If 'ignorecase' and 'smartcase' are set and the
@@ -2039,7 +2040,7 @@ docomplete:
 			    search_start = t;
 			    (void)decl(&search_start);
 			}
-			if (lt(t, search_start) && c == Ctrl_G)
+			if (LT_POS(t, search_start) && c == Ctrl_G)
 			{
 			    /* wrap around */
 			    search_start = t;
@@ -2361,7 +2362,7 @@ returncmd:
 	    curwin->w_cursor = save_cursor;
 	else
 	{
-	    if (!equalpos(save_cursor, search_start))
+	    if (!EQUAL_POS(save_cursor, search_start))
 	    {
 		/* put the '" mark at the original position */
 		curwin->w_cursor = save_cursor;
@@ -2441,6 +2442,7 @@ returncmd:
     if (ccline.input_fn)
 	RedrawingDisabled = save_RedrawingDisabled;
 #endif
+    sb_text_end_cmdline();
 
     {
 	char_u *p = ccline.cmdbuff;
@@ -4573,14 +4575,14 @@ showmatches(expand_T *xp, int wildmenu UNUSED)
 	    lines = (num_files + columns - 1) / columns;
 	}
 
-	attr = hl_attr(HLF_D);	/* find out highlighting for directories */
+	attr = HL_ATTR(HLF_D);	/* find out highlighting for directories */
 
 	if (xp->xp_context == EXPAND_TAGS_LISTFILES)
 	{
-	    MSG_PUTS_ATTR(_("tagname"), hl_attr(HLF_T));
+	    MSG_PUTS_ATTR(_("tagname"), HL_ATTR(HLF_T));
 	    msg_clr_eos();
 	    msg_advance(maxlen - 3);
-	    MSG_PUTS_ATTR(_(" kind file\n"), hl_attr(HLF_T));
+	    MSG_PUTS_ATTR(_(" kind file\n"), HL_ATTR(HLF_T));
 	}
 
 	/* list the files line by line */
@@ -4591,12 +4593,12 @@ showmatches(expand_T *xp, int wildmenu UNUSED)
 	    {
 		if (xp->xp_context == EXPAND_TAGS_LISTFILES)
 		{
-		    msg_outtrans_attr(files_found[k], hl_attr(HLF_D));
+		    msg_outtrans_attr(files_found[k], HL_ATTR(HLF_D));
 		    p = files_found[k] + STRLEN(files_found[k]) + 1;
 		    msg_advance(maxlen + 1);
 		    msg_puts(p);
 		    msg_advance(maxlen + 3);
-		    msg_puts_long_attr(p + 2, hl_attr(HLF_D));
+		    msg_puts_long_attr(p + 2, HL_ATTR(HLF_D));
 		    break;
 		}
 		for (j = maxlen - lastlen; --j >= 0; )
@@ -4691,7 +4693,7 @@ sm_gettail(char_u *s)
 	    t = p;
 	    had_sep = FALSE;
 	}
-	mb_ptr_adv(p);
+	MB_PTR_ADV(p);
     }
     return t;
 }
@@ -5765,7 +5767,7 @@ ExpandRTDir(
 	if (e - 4 > s && STRNICMP(e - 4, ".vim", 4) == 0)
 	{
 	    e -= 4;
-	    for (s = e; s > match; mb_ptr_back(match, s))
+	    for (s = e; s > match; MB_PTR_BACK(match, s))
 		if (s < match || vim_ispathsep(*s))
 		    break;
 	    ++s;
@@ -6424,7 +6426,7 @@ remove_key_from_history(void)
 		if (p == NULL)
 		    break;
 		++p;
-		for (i = 0; p[i] && !vim_iswhite(p[i]); ++i)
+		for (i = 0; p[i] && !VIM_ISWHITE(p[i]); ++i)
 		    if (p[i] == '\\' && p[i + 1])
 			++i;
 		STRMOVE(p, p + i);
@@ -7579,7 +7581,7 @@ clpum_compl_accept_char(int c)
 {
     /* Command line completion can work with just about any
      * printable character, but do stop at white space. */
-    return vim_isprintc(c) && !vim_iswhite(c);
+    return vim_isprintc(c) && !VIM_ISWHITE(c);
 }
 
 /*
@@ -7618,7 +7620,7 @@ clpum_compl_add_infercase(
 	    actual_len = 0;
 	    while (*p != NUL)
 	    {
-		mb_ptr_adv(p);
+		MB_PTR_ADV(p);
 		++actual_len;
 	    }
 	}
@@ -7634,7 +7636,7 @@ clpum_compl_add_infercase(
 	    actual_compl_length = 0;
 	    while (*p != NUL)
 	    {
-		mb_ptr_adv(p);
+		MB_PTR_ADV(p);
 		++actual_compl_length;
 	    }
 	}
@@ -8266,7 +8268,7 @@ clpum_compl_bs(void)
 
     n = ccline.cmdpos;
     p = ccline.cmdbuff + ccline.cmdpos;
-    mb_ptr_back(ccline.cmdbuff, p);
+    MB_PTR_BACK(ccline.cmdbuff, p);
 
     /* Stop completion when the whole word was deleted.  For Omni completion
      * allow the word to be deleted, we won't match everything. */
@@ -8664,7 +8666,7 @@ expand_by_function(char_u *base)
     }
     curwin->w_cursor = pos;	/* restore the cursor position */
     validate_cursor();
-    if (!equalpos(curwin->w_cursor, pos))
+    if (!EQUAL_POS(curwin->w_cursor, pos))
     {
 	EMSG(_(e_compldel));
 	goto theend;
@@ -9325,7 +9327,7 @@ clpum_complete(int c)
 	    }
 	    curwin->w_cursor = pos;	/* restore the cursor position */
 	    validate_cursor();
-	    if (!equalpos(curwin->w_cursor, pos))
+	    if (!EQUAL_POS(curwin->w_cursor, pos))
 	    {
 		EMSG(_(e_compldel));
 		return FAIL;
@@ -9529,7 +9531,7 @@ clpum_complete(int c)
 	    if (!p_smd)
 		msg_attr(edit_submode_extra,
 			edit_submode_highl < HLF_COUNT
-			? hl_attr(edit_submode_highl) : 0);
+			? HL_ATTR(edit_submode_highl) : 0);
 	}
 	else
 	    msg_clr_cmdline();	/* necessary for "noshowmode" */

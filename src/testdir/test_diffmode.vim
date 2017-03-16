@@ -1,4 +1,5 @@
 " Tests for diff mode
+set belloff=all
 
 func Test_diff_fold_sync()
   enew!
@@ -317,9 +318,20 @@ func Test_diffpatch()
   bwipe!
   new
   call assert_fails('diffpatch Xpatch', 'E816:')
-  call setline(1, ['1', '2', '3'])
-  diffpatch Xpatch
-  call assert_equal(['1', '2x', '3', '4'], getline(1, '$'))
+
+  for name in ['Xpatch', 'Xpatch$HOME', 'Xpa''tch']
+    call setline(1, ['1', '2', '3'])
+    if name != 'Xpatch'
+      call rename('Xpatch', name)
+    endif
+    exe 'diffpatch ' . escape(name, '$')
+    call assert_equal(['1', '2x', '3', '4'], getline(1, '$'))
+    if name != 'Xpatch'
+      call rename(name, 'Xpatch')
+    endif
+    bwipe!
+  endfor
+
   call delete('Xpatch')
   bwipe!
 endfunc

@@ -152,6 +152,7 @@ NEW_TESTS = test_arabic.res \
 	    test_diffmode.res \
 	    test_digraph.res \
 	    test_display.res \
+	    test_edit.res \
 	    test_farsi.res \
 	    test_fnameescape.res \
 	    test_fold.res \
@@ -182,6 +183,7 @@ NEW_TESTS = test_arabic.res \
 	    test_netbeans.res \
 	    test_normal.res \
 	    test_number.res \
+	    test_options.res \
 	    test_packadd.res \
 	    test_paste.res \
 	    test_perl.res \
@@ -222,3 +224,4 @@ test49.out: test49.vim
 
 test60.out: test60.vim
 
+test_options.res test_alot.res: opt_test.vim
