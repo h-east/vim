@@ -3203,8 +3203,12 @@ jumpto_tag(
      * open a new tab page. */
     if (postponed_split || cmdmod.tab != 0)
     {
-	win_split(postponed_split > 0 ? postponed_split : 0,
-						       postponed_split_flags);
+	if (win_split(postponed_split > 0 ? postponed_split : 0,
+						postponed_split_flags) == FAIL)
+	{
+	    --RedrawingDisabled;
+	    goto erret;
+	}
 	RESET_BINDING(curwin);
     }
 #endif
@@ -3876,11 +3880,11 @@ add_tag_field(
 }
 
 /*
- * Add the tags matching the specified pattern to the list "list"
- * as a dictionary
+ * Add the tags matching the specified pattern "pat" to the list "list"
+ * as a dictionary. Use "buf_fname" for priority, unless NULL.
  */
     int
-get_tags(list_T *list, char_u *pat)
+get_tags(list_T *list, char_u *pat, char_u *buf_fname)
 {
     int		num_matches, i, ret;
     char_u	**matches, *p;
@@ -3890,7 +3894,7 @@ get_tags(list_T *list, char_u *pat)
     long	is_static;
 
     ret = find_tags(pat, &num_matches, &matches,
-				    TAG_REGEXP | TAG_NOIC, (int)MAXCOL, NULL);
+				TAG_REGEXP | TAG_NOIC, (int)MAXCOL, buf_fname);
     if (ret == OK && num_matches > 0)
     {
 	for (i = 0; i < num_matches; ++i)
