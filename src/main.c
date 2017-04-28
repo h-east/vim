@@ -89,14 +89,15 @@ static char *(main_errors[]) =
 };
 
 #ifndef PROTO		/* don't want a prototype for main() */
+
+/* Various parameters passed between main() and other functions. */
+static mparm_T	params;
+
 #ifndef NO_VIM_MAIN	/* skip this for unittests */
 
 static char_u *start_dir = NULL;	/* current working dir on startup */
 
 static int has_dash_c_arg = FALSE;
-
-/* Various parameters passed between main() and other functions. */
-static mparm_T	params;
 
     int
 # ifdef VIMDLL
@@ -665,12 +666,6 @@ vim_main2(void)
 
     starttermcap();	    /* start termcap if not done by wait_return() */
     TIME_MSG("start termcap");
-#if defined(FEAT_TERMRESPONSE)
-# if defined(FEAT_MBYTE)
-    may_req_ambiguous_char_width();
-# endif
-    may_req_bg_color();
-#endif
 
 #ifdef FEAT_MOUSE
     setmouse();				/* may start using the mouse */
@@ -800,6 +795,11 @@ vim_main2(void)
     /* Requesting the termresponse is postponed until here, so that a "-c q"
      * argument doesn't make it appear in the shell Vim was started from. */
     may_req_termresponse();
+
+# if defined(FEAT_MBYTE)
+    may_req_ambiguous_char_width();
+# endif
+    may_req_bg_color();
 #endif
 
     /* start in insert mode */
@@ -1010,6 +1010,15 @@ common_init(mparm_T *paramp)
 #ifdef FEAT_EVAL
     set_lang_var();		/* set v:lang and v:ctype */
 #endif
+}
+
+/*
+ * Return TRUE when the --not-a-term argument was found.
+ */
+    int
+is_not_a_term()
+{
+    return params.not_a_term;
 }
 
 /*

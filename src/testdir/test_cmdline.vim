@@ -65,6 +65,10 @@ func Test_highlight_completion()
   hi Aardig ctermfg=green
   call feedkeys(":hi \<Tab>\<Home>\"\<CR>", 'xt')
   call assert_equal('"hi Aardig', getreg(':'))
+  call feedkeys(":hi default \<Tab>\<Home>\"\<CR>", 'xt')
+  call assert_equal('"hi default Aardig', getreg(':'))
+  call feedkeys(":hi clear Aa\<Tab>\<Home>\"\<CR>", 'xt')
+  call assert_equal('"hi clear Aardig', getreg(':'))
   call feedkeys(":hi li\<S-Tab>\<Home>\"\<CR>", 'xt')
   call assert_equal('"hi link', getreg(':'))
   call feedkeys(":hi d\<S-Tab>\<Home>\"\<CR>", 'xt')
@@ -410,6 +414,16 @@ func Test_getcmdtype()
   cnoremap <expr> <F6> Check_cmdline('=')
   call feedkeys("a\<C-R>=MyCmd a\<F6>\<Esc>\<Esc>", "xt")
   cunmap <F6>
+endfunc
+
+func Test_verbosefile()
+  set verbosefile=Xlog
+  echomsg 'foo'
+  echomsg 'bar'
+  set verbosefile=
+  let log = readfile('Xlog')
+  call assert_match("foo\nbar", join(log, "\n"))
+  call delete('Xlog')
 endfunc
 
 set cpo&

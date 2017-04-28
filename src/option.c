@@ -3200,6 +3200,7 @@ static struct vimoption options[] =
     p_term("t_vi", T_VI)
     p_term("t_vs", T_VS)
     p_term("t_WP", T_CWP)
+    p_term("t_GP", T_CGP)
     p_term("t_WS", T_CWS)
     p_term("t_xn", T_XN)
     p_term("t_xs", T_XS)
@@ -6442,7 +6443,7 @@ did_set_string_option(
 #if defined(FEAT_XIM) && defined(FEAT_GUI_GTK)
     else if (varp == &p_imak)
     {
-	if (gui.in_use && !im_xim_isvalid_imactivate())
+	if (!im_xim_isvalid_imactivate())
 	    errmsg = e_invarg;
     }
 #endif
@@ -11098,7 +11099,7 @@ buf_copy_options(buf_T *buf, int flags)
 	    buf->b_p_ml = p_ml;
 	    buf->b_p_ml_nobin = p_ml_nobin;
 	    buf->b_p_inf = p_inf;
-	    buf->b_p_swf = p_swf;
+	    buf->b_p_swf = cmdmod.noswapfile ? FALSE : p_swf;
 #ifdef FEAT_INS_EXPAND
 	    buf->b_p_cpt = vim_strsave(p_cpt);
 #endif

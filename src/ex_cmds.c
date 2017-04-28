@@ -4564,7 +4564,7 @@ ex_change(exarg_T *eap)
 ex_z(exarg_T *eap)
 {
     char_u	*x;
-    int		bigness;
+    long	bigness;
     char_u	*kind;
     int		minus = 0;
     linenr_T	start, end, curs, i;
@@ -4601,7 +4601,12 @@ ex_z(exarg_T *eap)
 	}
 	else
 	{
-	    bigness = atoi((char *)x);
+	    bigness = atol((char *)x);
+
+	    /* bigness could be < 0 if atol(x) overflows. */
+	    if (bigness > 2 * curbuf->b_ml.ml_line_count || bigness < 0)
+		bigness = 2 * curbuf->b_ml.ml_line_count;
+
 	    p_window = bigness;
 	    if (*kind == '=')
 		bigness += 2;
@@ -4659,6 +4664,8 @@ ex_z(exarg_T *eap)
 
     if (curs > curbuf->b_ml.ml_line_count)
 	curs = curbuf->b_ml.ml_line_count;
+    else if (curs < 1)
+	curs = 1;
 
     for (i = start; i <= end; i++)
     {
@@ -4681,7 +4688,11 @@ ex_z(exarg_T *eap)
 	}
     }
 
-    curwin->w_cursor.lnum = curs;
+    if (curwin->w_cursor.lnum != curs)
+    {
+	curwin->w_cursor.lnum = curs;
+	curwin->w_cursor.col = 0;
+    }
     ex_no_reprint = TRUE;
 }
 
