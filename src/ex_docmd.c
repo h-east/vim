@@ -488,6 +488,9 @@ static void	ex_folddo(exarg_T *eap);
 #ifndef FEAT_PROFILE
 # define ex_profile		ex_ni
 #endif
+#ifndef FEAT_TERMINAL
+# define ex_terminal		ex_ni
+#endif
 
 /*
  * Declare cmdnames[].
@@ -2370,7 +2373,8 @@ do_one_cmd(
 	goto doend;
     }
     /* Check for wrong commands. */
-    if (*p == '!' && ea.cmd[1] == 0151 && ea.cmd[0] == 78)
+    if (*p == '!' && ea.cmd[1] == 0151 && ea.cmd[0] == 78
+	    && !IS_USER_CMDIDX(ea.cmdidx))
     {
 	errormsg = uc_fun_cmd();
 	goto doend;
@@ -4556,7 +4560,7 @@ get_address(
 			curwin->w_cursor.col = 0;
 		    searchcmdlen = 0;
 		    if (!do_search(NULL, c, cmd, 1L,
-				       SEARCH_HIS | SEARCH_MSG, NULL))
+					  SEARCH_HIS | SEARCH_MSG, NULL, NULL))
 		    {
 			curwin->w_cursor = pos;
 			cmd = NULL;
@@ -4613,7 +4617,7 @@ get_address(
 		    if (searchit(curwin, curbuf, &pos,
 				*cmd == '?' ? BACKWARD : FORWARD,
 				(char_u *)"", 1L, SEARCH_MSG,
-					i, (linenr_T)0, NULL) != FAIL)
+					i, (linenr_T)0, NULL, NULL) != FAIL)
 			lnum = pos.lnum;
 		    else
 		    {
@@ -5042,6 +5046,7 @@ expand_filename(
 		&& eap->cmdidx != CMD_lgrep
 		&& eap->cmdidx != CMD_grepadd
 		&& eap->cmdidx != CMD_lgrepadd
+		&& eap->cmdidx != CMD_hardcopy
 #ifndef UNIX
 		&& !(eap->argt & NOSPC)
 #endif
@@ -7266,8 +7271,11 @@ ex_quit(exarg_T *eap)
     apply_autocmds(EVENT_QUITPRE, NULL, NULL, FALSE, curbuf);
     /* Refuse to quit when locked or when the buffer in the last window is
      * being closed (can only happen in autocommands). */
-    if (curbuf_locked() || (wp->w_buffer->b_nwindows == 1
-						&& wp->w_buffer->b_locked > 0))
+    if (curbuf_locked()
+# ifdef FEAT_WINDOWS
+	    || !win_valid(wp)
+# endif
+	    || (wp->w_buffer->b_nwindows == 1 && wp->w_buffer->b_locked > 0))
 	return;
 #endif
 
@@ -10890,6 +10898,9 @@ eval_vars(
 		result = strbuf;
 		break;
 #endif
+	default:
+		result = (char_u *)""; /* avoid gcc warning */
+		break;
 	}
 
 	resultlen = (int)STRLEN(result);	/* length of new string */
@@ -12169,13 +12180,22 @@ ex_filetype(exarg_T *eap)
 }
 
 /*
- * ":setfiletype {name}"
+ * ":setfiletype [FALLBACK] {name}"
  */
     static void
 ex_setfiletype(exarg_T *eap)
 {
     if (!did_filetype)
-	set_option_value((char_u *)"filetype", 0L, eap->arg, OPT_LOCAL);
+    {
+	char_u *arg = eap->arg;
+
+	if (STRNCMP(arg, "FALLBACK ", 9) == 0)
+	    arg += 9;
+
+	set_option_value((char_u *)"filetype", 0L, arg, OPT_LOCAL);
+	if (arg != eap->arg)
+	    did_filetype = FALSE;
+    }
 }
 #endif
 

@@ -4358,7 +4358,7 @@ find_decl(
     {
 	valid = FALSE;
 	t = searchit(curwin, curbuf, &curwin->w_cursor, FORWARD,
-			    pat, 1L, searchflags, RE_LAST, (linenr_T)0, NULL);
+		       pat, 1L, searchflags, RE_LAST, (linenr_T)0, NULL, NULL);
 	if (curwin->w_cursor.lnum >= old_pos.lnum)
 	    t = FAIL;	/* match after start is failure too */
 
@@ -5477,6 +5477,14 @@ nv_clear(cmdarg_T *cap)
 #ifdef FEAT_SYN_HL
 	/* Clear all syntax states to force resyncing. */
 	syn_stack_free_all(curwin->w_s);
+# ifdef FEAT_RELTIME
+	{
+	    win_T *wp;
+
+	    FOR_ALL_WINDOWS(wp)
+		wp->w_s->b_syn_slow = FALSE;
+	}
+# endif
 #endif
 	redraw_later(CLEAR);
     }
@@ -6250,9 +6258,9 @@ nv_gotofile(cmdarg_T *cap)
 	if (curbufIsChanged() && curbuf->b_nwindows <= 1 && !P_HID(curbuf))
 	    (void)autowrite(curbuf, FALSE);
 	setpcmark();
-	(void)do_ecmd(0, ptr, NULL, NULL, ECMD_LAST,
-				       P_HID(curbuf) ? ECMD_HIDE : 0, curwin);
-	if (cap->nchar == 'F' && lnum >= 0)
+	if (do_ecmd(0, ptr, NULL, NULL, ECMD_LAST,
+				   P_HID(curbuf) ? ECMD_HIDE : 0, curwin) == OK
+		&& cap->nchar == 'F' && lnum >= 0)
 	{
 	    curwin->w_cursor.lnum = lnum;
 	    check_cursor_lnum();
@@ -6380,7 +6388,7 @@ normal_search(
     curwin->w_set_curswant = TRUE;
 
     i = do_search(cap->oap, dir, pat, cap->count1,
-			   opt | SEARCH_OPT | SEARCH_ECHO | SEARCH_MSG, NULL);
+		      opt | SEARCH_OPT | SEARCH_ECHO | SEARCH_MSG, NULL, NULL);
     if (i == 0)
 	clearop(cap->oap);
     else
@@ -7838,7 +7846,10 @@ n_start_visual_mode(int c)
 nv_window(cmdarg_T *cap)
 {
 #ifdef FEAT_WINDOWS
-    if (!checkclearop(cap->oap))
+    if (cap->nchar == ':')
+	/* "CTRL-W :" is the same as typing ":"; useful in a terminal window */
+	nv_colon(cap);
+    else if (!checkclearop(cap->oap))
 	do_window(cap->nchar, cap->count0, NUL); /* everything is in window.c */
 #else
     (void)checkclearop(cap->oap);
@@ -8986,7 +8997,7 @@ nv_esc(cmdarg_T *cap)
 #endif
 		&& !VIsual_active
 		&& no_reason)
-	    MSG(_("Type  :quit<Enter>  to exit Vim"));
+	    MSG(_("Type  :qa!  and press <Enter> to abandon all changes and exit Vim"));
 
 	/* Don't reset "restart_edit" when 'insertmode' is set, it won't be
 	 * set again below when halfway a mapping. */

@@ -958,6 +958,14 @@ extern int (*dyn_libintl_putenv)(const char *envstring);
 #define GETF_ALT	0x02	/* jumping to alternate file (not buf num) */
 #define GETF_SWITCH	0x04	/* respect 'switchbuf' settings when jumping */
 
+/* Return values of getfile() */
+#define GETFILE_ERROR	    1	/* normal error */
+#define GETFILE_NOT_WRITTEN 2	/* "not written" error */
+#define GETFILE_SAME_FILE   0	/* success, same file */
+#define GETFILE_OPEN_OTHER -1	/* success, opened another file */
+#define GETFILE_UNUSED	    8
+#define GETFILE_SUCCESS(x)  ((x) <= 0)
+
 /* Values for buflist_new() flags */
 #define BLN_CURBUF	1	/* may re-use curbuf for new buffer */
 #define BLN_LISTED	2	/* put new buffer in buffer list */
@@ -1430,6 +1438,7 @@ typedef enum
     , HLF_CUC	    /* 'cursurcolumn' */
     , HLF_CUL	    /* 'cursurline' */
     , HLF_MC	    /* 'colorcolumn' */
+    , HLF_QFL	    /* quickfix window line currently selected */
     , HLF_COUNT	    /* MUST be the last one */
 } hlf_T;
 
@@ -1440,7 +1449,7 @@ typedef enum
 		  'f', 'F', 'A', 'C', 'D', 'T', '-', '>', \
 		  'B', 'P', 'R', 'L', \
 		  '+', '=', 'x', 'X', '0', '1', 'y', 'Y', \
-		  '*', '#', '_', '!', '.', 'o'}
+		  '*', '#', '_', '!', '.', 'o', 'q'}
 
 /*
  * Boolean constants

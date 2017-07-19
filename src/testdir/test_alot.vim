@@ -16,6 +16,7 @@ source test_expr.vim
 source test_feedkeys.vim
 source test_file_perm.vim
 source test_fileformat.vim
+source test_filetype.vim
 source test_filter_cmd.vim
 source test_filter_map.vim
 source test_findfile.vim
@@ -43,6 +44,7 @@ source test_reltime.vim
 source test_searchpos.vim
 source test_set.vim
 source test_sort.vim
+source test_sha256.vim
 source test_statusline.vim
 source test_syn_attr.vim
 source test_tabline.vim

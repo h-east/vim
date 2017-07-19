@@ -1,4 +1,4 @@
-*options.txt*	For Vim version 8.0.  Last change: 2017 Mar 22
+*options.txt*	For Vim version 8.0.  Last change: 2017 Jul 15
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -370,7 +370,7 @@ Note: In the future more global options can be made global-local.  Using
 
 Setting the filetype
 
-:setf[iletype] {filetype}			*:setf* *:setfiletype*
+:setf[iletype] [FALLBACK] {filetype}			*:setf* *:setfiletype*
 			Set the 'filetype' option to {filetype}, but only if
 			not done yet in a sequence of (nested) autocommands.
 			This is short for: >
@@ -380,6 +380,13 @@ Setting the filetype
 <			This command is used in a filetype.vim file to avoid
 			setting the 'filetype' option twice, causing different
 			settings and syntax files to be loaded.
+
+			When the optional FALLBACK argument is present, a
+			later :setfiletype command will override the
+			'filetype'.  This is to used for filetype detections
+			that are just a guess.  |did_filetype()| will return
+			false after this command.
+
 			{not in Vi}
 
 				*option-window* *optwin*
@@ -861,6 +868,12 @@ A jump table for the options with a short description can be found at |Q_op|.
 		:set background&
 <	Vim will guess the value.  In the GUI this should work correctly,
 	in other cases Vim might not be able to guess the right value.
+
+	When the t_BG option is set, Vim will use it to request the background
+	color from the terminal.  If the returned RGB value is dark/light and
+	'background' is not dark/light, 'background' will be set and the
+	screen is redrawn.  This may have side effects, make t_BG empty in
+	your .vimrc if you suspect this problem.
 
 	When starting the GUI, the default value for 'background' will be
 	"light".  When the value is not set in the .gvimrc, and Vim detects
@@ -2738,7 +2751,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	Makes the 'g' and 'c' flags of the ":substitute" command to be
 	toggled each time the flag is given.  See |complex-change|.  See
 	also 'gdefault' option.
-	Switching this option on is discouraged!
+	Switching this option on may break plugins!
 
 					*'emoji'* *'emo'* *'noemoji'* *'noemo'*
 'emoji' 'emo'	boolean (default: on)
@@ -3547,6 +3560,9 @@ A jump table for the options with a short description can be found at |Q_op|.
 		:s///gg		  subst. all	  subst. one
 
 	NOTE: This option is reset when 'compatible' is set.
+	DEPRECATED: Setting this option may break plugins that are not aware
+	of this option.  Also, many users get confused that adding the /g flag
+	has the opposite effect of that it normally does.
 
 						*'grepformat'* *'gfm'*
 'grepformat' 'gfm'	string	(default "%f:%l:%m,%f:%l%m,%f  %l%m")
@@ -4062,7 +4078,9 @@ A jump table for the options with a short description can be found at |Q_op|.
 				     D:DiffDelete,T:DiffText,>:SignColumn,
 				     B:SpellBad,P:SpellCap,R:SpellRare,
 				     L:SpellLocal,-:Conceal,+:Pmenu,=:PmenuSel,
-				     x:PmenuSbar,X:PmenuThumb")
+				     x:PmenuSbar,X:PmenuThumb,*:TabLine,
+				     #:TabLineSel,_:TabLineFill,!:CursorColumn,
+				     .:CursorLine,o:ColorColumn,q:QuickFixLine")
 			global
 			{not in Vi}
 	This option can be used to set highlighting mode for various
@@ -4986,8 +5004,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 	When on the plugin scripts are loaded when starting up |load-plugins|.
 	This option can be reset in your |vimrc| file to disable the loading
 	of plugins.
-	Note that using the "-u NONE" and "--noplugin" command line arguments
-	reset this option. |-u| |--noplugin|
+	Note that using the "-u NONE", "-u DEFAULTS" and "--noplugin" command
+	line arguments reset this option.  See |-u| and |--noplugin|.
 
 						*'luadll'*
 'luadll'		string	(default depends on the build)
@@ -5965,10 +5983,14 @@ A jump table for the options with a short description can be found at |Q_op|.
 			{only available when compiled with the |+reltime|
 			feature}
 	The time in milliseconds for redrawing the display.  This applies to
-	searching for patterns for 'hlsearch' and |:match| highlighting.
+	searching for patterns for 'hlsearch', |:match| highlighting an syntax
+	highlighting.
 	When redrawing takes more than this many milliseconds no further
-	matches will be highlighted.  This is used to avoid that Vim hangs
-	when using a very complicated pattern.
+	matches will be highlighted.
+	For syntax highlighting the time applies per window.  When over the
+	limit syntax highlighting is disabled until |CTRL-L| is used.
+	This is used to avoid that Vim hangs when using a very complicated
+	pattern.
 
 						*'regexpengine'* *'re'*
 'regexpengine' 're'	number	(default 0)
@@ -7346,7 +7368,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 	Watch out for errors in expressions.  They may render Vim unusable!
 	If you are stuck, hold down ':' or 'Q' to get a prompt, then quit and
-	edit your .vimrc or whatever with "vim -u NONE" to get it right.
+	edit your .vimrc or whatever with "vim --clean" to get it right.
 
 	Examples:
 	Emulate standard status line with 'ruler' set >
@@ -7767,7 +7789,28 @@ A jump table for the options with a short description can be found at |Q_op|.
 	compatible terminal.
 	If setting this option does not work (produces a colorless UI)
 	reading |xterm-true-color| might help.
+	Note that the "cterm" attributes are still used, not the "gui" ones.
 	NOTE: This option is reset when 'compatible' is set.
+
+						*'termkey'* *'tk'*
+'termkey' 'tk'		string	(default "CTRL-W")
+			local to window
+			{not in Vi}
+	The key that precedes a Vim command in a terminal window.  Other keys
+	are sent to the job running in the window.
+	The string must be one key stroke.
+	NOT IMPLEMENTED YET
+
+
+						*'thesaurus'* *'tsr'*
+'termsize' 'tms'	string	(default "")
+			local to window
+			{not in Vi}
+	Size of the |terminal| window.  Format: {rows}x{columns}.
+	- When empty the terminal gets the size from the window.
+	- When set (e.g., "24x80") the terminal size is fixed.  If the window
+	  is smaller only the top-left part is displayed.
+	NOT IMPLEMENTED YET
 
 						*'terse'* *'noterse'*
 'terse'			boolean	(default off)
@@ -8328,13 +8371,14 @@ A jump table for the options with a short description can be found at |Q_op|.
 			{not available when compiled without the |+viminfo|
 			feature}
 	When non-empty, the viminfo file is read upon startup and written
-	when exiting Vim (see |viminfo-file|).  The string should be a comma
-	separated list of parameters, each consisting of a single character
-	identifying the particular parameter, followed by a number or string
-	which specifies the value of that parameter.  If a particular
-	character is left out, then the default value is used for that
-	parameter.  The following is a list of the identifying characters and
-	the effect of their value.
+	when exiting Vim (see |viminfo-file|). Except when 'viminfofile' is
+	"NONE".
+	The string should be a comma separated list of parameters, each
+	consisting of a single character identifying the particular parameter,
+	followed by a number or string which specifies the value of that
+	parameter.  If a particular character is left out, then the default
+	value is used for that parameter.  The following is a list of the
+	identifying characters and the effect of their value.
 	CHAR	VALUE	~
 							*viminfo-!*
 	!	When included, save and restore global variables that start
@@ -8394,9 +8438,9 @@ A jump table for the options with a short description can be found at |Q_op|.
 		has been used since the last search command.
 							*viminfo-n*
 	n	Name of the viminfo file.  The name must immediately follow
-		the 'n'.  Must be at the end of the option!  If the "-i"
-		argument was given when starting Vim, that file name overrides
-		the one given here with 'viminfo'.  Environment variables are
+		the 'n'.  Must be at the end of the option!  If the
+		'viminfofile' option is set, that file name overrides the one
+		given here with 'viminfo'.  Environment variables are
 		expanded when opening the file, not when setting the option.
 							*viminfo-r*
 	r	Removable media.  The argument is a string (up to the next
@@ -8437,6 +8481,17 @@ A jump table for the options with a short description can be found at |Q_op|.
 	NOTE: This option is set to the Vim default value when 'compatible'
 	is reset.
 
+				*'viminfofile'* *'vif'*
+'viminfofile' 'vif'	string	(default: "")
+			global
+			{not in Vi}
+			{not available when compiled without the |+viminfo|
+			feature}
+	When non-empty, overrides the file name used for viminfo.
+	When equal to "NONE" no viminfo file will be read or written.
+	This option can be set with the |-i| command line flag.  The |--clean|
+	command line flag sets it to "NONE".
+
 					    *'virtualedit'* *'ve'*
 'virtualedit' 've'	string	(default "")
 			global
@@ -8470,14 +8525,27 @@ A jump table for the options with a short description can be found at |Q_op|.
 'visualbell' 'vb'	boolean	(default off)
 			global
 			{not in Vi}
-	Use visual bell instead of beeping.  The terminal code to display the
+	Use a visual bell instead of beeping.  The terminal code to display the
 	visual bell is given with 't_vb'.  When no beep or flash is wanted,
-	use ":set vb t_vb=".
-	Note: When the GUI starts, 't_vb' is reset to its default value.  You
-	might want to set it again in your |gvimrc|.
+	use: >
+		:set vb t_vb=
+<	If you want a short flash, you can use this on many terminals: >
+		:set vb t_vb=[?5h$<100>[?5l
+<	Here $<100> specifies the time, you can use a smaller or bigger value
+	to get a shorter or longer flash.
+
+	Note: Vim will limit the bell to once per half a second.  This avoids
+	having to wait for the flashing to finish when there are lots of
+	bells, e.g. on key repeat.  This also happens without 'visualbell'
+	set.
+
 	In the GUI, 't_vb' defaults to "<Esc>|f", which inverts the display
 	for 20 msec.  If you want to use a different time, use "<Esc>|40f",
 	where 40 is the time in msec.
+
+	Note: When the GUI starts, 't_vb' is reset to its default value.  You
+	might want to set it again in your |gvimrc|.
+
 	Does not work on the Amiga, you always get a screen flash.
 	Also see 'errorbells'.
 

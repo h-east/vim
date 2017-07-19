@@ -1636,7 +1636,9 @@ shift_delete_registers()
     free_yank_all();			/* free register nine */
     for (n = 9; n > 1; --n)
 	y_regs[n] = y_regs[n - 1];
-    y_previous = y_current = &y_regs[1];
+    y_current = &y_regs[1];
+    if (!y_append)
+	y_previous = y_current;
     y_regs[1].y_array = NULL;		/* set register one to empty */
 }
 
@@ -3165,19 +3167,29 @@ op_yank(oparg_T *oap, int deleting, int mess)
 	/* Some versions of Vi use ">=" here, some don't...  */
 	if (yanklines > p_report)
 	{
+	    char namebuf[100];
+
+	    if (oap->regname == NUL)
+		*namebuf = NUL;
+	    else
+		vim_snprintf(namebuf, sizeof(namebuf),
+						_(" into \"%c"), oap->regname);
+
 	    /* redisplay now, so message is not deleted */
 	    update_topline_redraw();
 	    if (yanklines == 1)
 	    {
 		if (oap->block_mode)
-		    MSG(_("block of 1 line yanked"));
+		    smsg((char_u *)_("block of 1 line yanked%s"), namebuf);
 		else
-		    MSG(_("1 line yanked"));
+		    smsg((char_u *)_("1 line yanked%s"), namebuf);
 	    }
 	    else if (oap->block_mode)
-		smsg((char_u *)_("block of %ld lines yanked"), yanklines);
+		smsg((char_u *)_("block of %ld lines yanked%s"),
+		     yanklines, namebuf);
 	    else
-		smsg((char_u *)_("%ld lines yanked"), yanklines);
+		smsg((char_u *)_("%ld lines yanked%s"), yanklines,
+		     namebuf);
 	}
     }
 

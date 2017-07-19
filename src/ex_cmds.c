@@ -1743,7 +1743,7 @@ static int  viminfo_errcnt;
 no_viminfo(void)
 {
     /* "vim -i NONE" does not read or write a viminfo file */
-    return (use_viminfo != NULL && STRCMP(use_viminfo, "NONE") == 0);
+    return STRCMP(p_viminfofile, "NONE") == 0;
 }
 
 /*
@@ -2093,8 +2093,8 @@ viminfo_filename(char_u *file)
 {
     if (file == NULL || *file == NUL)
     {
-	if (use_viminfo != NULL)
-	    file = use_viminfo;
+	if (*p_viminfofile != NUL)
+	    file = p_viminfofile;
 	else if ((file = find_viminfo_parameter('n')) == NULL || *file == NUL)
 	{
 #ifdef VIMINFO_FILE2
@@ -3520,11 +3520,14 @@ check_readonly(int *forceit, buf_T *buf)
 
 /*
  * Try to abandon current file and edit a new or existing file.
- * 'fnum' is the number of the file, if zero use ffname/sfname.
+ * "fnum" is the number of the file, if zero use ffname/sfname.
+ * "lnum" is the line number for the cursor in the new file (if non-zero).
  *
- * Return 1 for "normal" error, 2 for "not written" error, 0 for success
- * -1 for successfully opening another file.
- * 'lnum' is the line number for the cursor in the new file (if non-zero).
+ * Return:
+ * GETFILE_ERROR for "normal" error,
+ * GETFILE_NOT_WRITTEN for "not written" error,
+ * GETFILE_SAME_FILE for success
+ * GETFILE_OPEN_OTHER for successfully opening another file.
  */
     int
 getfile(
@@ -3540,10 +3543,10 @@ getfile(
     char_u	*free_me = NULL;
 
     if (text_locked())
-	return 1;
+	return GETFILE_ERROR;
 #ifdef FEAT_AUTOCMD
     if (curbuf_locked())
-	return 1;
+	return GETFILE_ERROR;
 #endif
 
     if (fnum == 0)
@@ -3570,7 +3573,7 @@ getfile(
 	    if (other)
 		--no_wait_return;
 	    EMSG(_(e_nowrtmsg));
-	    retval = 2;	/* file has been changed */
+	    retval = GETFILE_NOT_WRITTEN;	/* file has been changed */
 	    goto theend;
 	}
     }
@@ -3584,14 +3587,14 @@ getfile(
 	    curwin->w_cursor.lnum = lnum;
 	check_cursor_lnum();
 	beginline(BL_SOL | BL_FIX);
-	retval = 0;	/* it's in the same file */
+	retval = GETFILE_SAME_FILE;	/* it's in the same file */
     }
     else if (do_ecmd(fnum, ffname, sfname, NULL, lnum,
 		(P_HID(curbuf) ? ECMD_HIDE : 0) + (forceit ? ECMD_FORCEIT : 0),
 		curwin) == OK)
-	retval = -1;	/* opened another file */
+	retval = GETFILE_OPEN_OTHER;	/* opened another file */
     else
-	retval = 1;	/* error encountered */
+	retval = GETFILE_ERROR;		/* error encountered */
 
 theend:
     vim_free(free_me);
@@ -3965,8 +3968,8 @@ do_ecmd(
 		     * <VN> We could instead free the synblock
 		     * and re-attach to buffer, perhaps.
 		     */
-		    if (curwin->w_buffer != NULL
-			    && curwin->w_s == &(curwin->w_buffer->b_s))
+		    if (curwin->w_buffer == NULL
+			    || curwin->w_s == &(curwin->w_buffer->b_s))
 			curwin->w_s = &(buf->b_s);
 #endif
 		    curwin->w_buffer = buf;
@@ -5093,7 +5096,7 @@ do_sub(exarg_T *eap)
 		); ++lnum)
     {
 	nmatch = vim_regexec_multi(&regmatch, curwin, curbuf, lnum,
-							    (colnr_T)0, NULL);
+						       (colnr_T)0, NULL, NULL);
 	if (nmatch)
 	{
 	    colnr_T	copycol;
@@ -5692,7 +5695,7 @@ skip:
 			|| nmatch_tl > 0
 			|| (nmatch = vim_regexec_multi(&regmatch, curwin,
 							curbuf, sub_firstlnum,
-							 matchcol, NULL)) == 0
+						    matchcol, NULL, NULL)) == 0
 			|| regmatch.startpos[0].lnum > 0)
 		{
 		    if (new_start != NULL)
@@ -5757,7 +5760,7 @@ skip:
 		    }
 		    if (nmatch == -1 && !lastone)
 			nmatch = vim_regexec_multi(&regmatch, curwin, curbuf,
-					       sub_firstlnum, matchcol, NULL);
+					  sub_firstlnum, matchcol, NULL, NULL);
 
 		    /*
 		     * 5. break if there isn't another match in this line
@@ -5900,6 +5903,17 @@ do_sub_msg(
     return FALSE;
 }
 
+    static void
+global_exe_one(char_u *cmd, linenr_T lnum)
+{
+    curwin->w_cursor.lnum = lnum;
+    curwin->w_cursor.col = 0;
+    if (*cmd == NUL || *cmd == '\n')
+	do_cmdline((char_u *)"p", NULL, NULL, DOCMD_NOWAIT);
+    else
+	do_cmdline(cmd, NULL, NULL, DOCMD_NOWAIT);
+}
+
 /*
  * Execute a global command of the form:
  *
@@ -5930,9 +5944,13 @@ ex_global(exarg_T *eap)
     int		match;
     int		which_pat;
 
-    if (global_busy)
+    /* When nesting the command works on one line.  This allows for
+     * ":g/found/v/notfound/command". */
+    if (global_busy && (eap->line1 != 1
+				  || eap->line2 != curbuf->b_ml.ml_line_count))
     {
-	EMSG(_("E147: Cannot do :global recursive"));	/* will increment global_busy */
+	/* will increment global_busy to break out of the loop */
+	EMSG(_("E147: Cannot do :global recursive with a range"));
 	return;
     }
 
@@ -5990,46 +6008,58 @@ ex_global(exarg_T *eap)
 	return;
     }
 
-    /*
-     * pass 1: set marks for each (not) matching line
-     */
-    for (lnum = eap->line1; lnum <= eap->line2 && !got_int; ++lnum)
+    if (global_busy)
     {
-	/* a match on this line? */
+	lnum = curwin->w_cursor.lnum;
 	match = vim_regexec_multi(&regmatch, curwin, curbuf, lnum,
-							    (colnr_T)0, NULL);
+						       (colnr_T)0, NULL, NULL);
 	if ((type == 'g' && match) || (type == 'v' && !match))
-	{
-	    ml_setmarked(lnum);
-	    ndone++;
-	}
-	line_breakcheck();
-    }
-
-    /*
-     * pass 2: execute the command for each line that has been marked
-     */
-    if (got_int)
-	MSG(_(e_interr));
-    else if (ndone == 0)
-    {
-	if (type == 'v')
-	    smsg((char_u *)_("Pattern found in every line: %s"), pat);
-	else
-	    smsg((char_u *)_("Pattern not found: %s"), pat);
+	    global_exe_one(cmd, lnum);
     }
     else
     {
+	/*
+	 * pass 1: set marks for each (not) matching line
+	 */
+	for (lnum = eap->line1; lnum <= eap->line2 && !got_int; ++lnum)
+	{
+	    /* a match on this line? */
+	    match = vim_regexec_multi(&regmatch, curwin, curbuf, lnum,
+						       (colnr_T)0, NULL, NULL);
+	    if ((type == 'g' && match) || (type == 'v' && !match))
+	    {
+		ml_setmarked(lnum);
+		ndone++;
+	    }
+	    line_breakcheck();
+	}
+
+	/*
+	 * pass 2: execute the command for each line that has been marked
+	 */
+	if (got_int)
+	    MSG(_(e_interr));
+	else if (ndone == 0)
+	{
+	    if (type == 'v')
+		smsg((char_u *)_("Pattern found in every line: %s"), pat);
+	    else
+		smsg((char_u *)_("Pattern not found: %s"), pat);
+	}
+	else
+	{
 #ifdef FEAT_CLIPBOARD
-	start_global_changes();
+	    start_global_changes();
 #endif
-	global_exe(cmd);
+	    global_exe(cmd);
 #ifdef FEAT_CLIPBOARD
-	end_global_changes();
+	    end_global_changes();
 #endif
+	}
+
+	ml_clearmarked();	   /* clear rest of the marks */
     }
 
-    ml_clearmarked();	   /* clear rest of the marks */
     vim_regfree(regmatch.regprog);
 }
 
@@ -6060,12 +6090,7 @@ global_exe(char_u *cmd)
     old_lcount = curbuf->b_ml.ml_line_count;
     while (!got_int && (lnum = ml_firstmarked()) != 0 && global_busy == 1)
     {
-	curwin->w_cursor.lnum = lnum;
-	curwin->w_cursor.col = 0;
-	if (*cmd == NUL || *cmd == '\n')
-	    do_cmdline((char_u *)"p", NULL, NULL, DOCMD_NOWAIT);
-	else
-	    do_cmdline(cmd, NULL, NULL, DOCMD_NOWAIT);
+	global_exe_one(cmd, lnum);
 	ui_breakcheck();
     }
 
@@ -6807,8 +6832,15 @@ fix_help_buffer(void)
     char_u	*rt;
     int		mustfree;
 
-    /* set filetype to "help". */
-    set_option_value((char_u *)"ft", 0L, (char_u *)"help", OPT_LOCAL);
+#ifdef FEAT_AUTOCMD
+    /* Set filetype to "help" if still needed. */
+    if (STRCMP(curbuf->b_p_ft, "help") != 0)
+    {
+	++curbuf_lock;
+	set_option_value((char_u *)"ft", 0L, (char_u *)"help", OPT_LOCAL);
+	--curbuf_lock;
+    }
+#endif
 
 #ifdef FEAT_SYN_HL
     if (!syntax_present(curwin))
@@ -8511,4 +8543,3 @@ ex_oldfiles(exarg_T *eap UNUSED)
     }
 }
 #endif
-

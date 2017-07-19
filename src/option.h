@@ -926,6 +926,7 @@ EXTERN char_u	*p_fcs;		/* 'fillchar' */
 #endif
 #ifdef FEAT_VIMINFO
 EXTERN char_u	*p_viminfo;	/* 'viminfo' */
+EXTERN char_u	*p_viminfofile;	/* 'viminfofile' */
 #endif
 #ifdef FEAT_SESSION
 EXTERN char_u	*p_vdir;	/* 'viewdir' */
@@ -1135,6 +1136,10 @@ enum
 #ifdef FEAT_CONCEAL
     , WV_COCU
     , WV_COLE
+#endif
+#ifdef FEAT_TERMINAL
+    , WV_TK
+    , WV_TMS
 #endif
 #ifdef FEAT_CURSORBIND
     , WV_CRBIND
