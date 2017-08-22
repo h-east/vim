@@ -6882,15 +6882,16 @@ buf_check_timestamp(
      * this buffer. */
     if (buf->b_ffname == NULL
 	    || buf->b_ml.ml_mfp == NULL
-#if defined(FEAT_QUICKFIX)
 	    || *buf->b_p_bt != NUL
-#endif
 	    || buf->b_saving
 #ifdef FEAT_AUTOCMD
 	    || busy
 #endif
 #ifdef FEAT_NETBEANS_INTG
 	    || isNetbeansBuffer(buf)
+#endif
+#ifdef FEAT_TERMINAL
+	    || buf->b_term != NULL
 #endif
 	    )
 	return 0;

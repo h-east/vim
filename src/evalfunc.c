@@ -836,6 +836,23 @@ static struct fst
     {"tanh",		1, 1, f_tanh},
 #endif
     {"tempname",	0, 0, f_tempname},
+#ifdef FEAT_TERMINAL
+    {"term_getaltscreen", 1, 1, f_term_getaltscreen},
+    {"term_getattr",	2, 2, f_term_getattr},
+    {"term_getcursor",	1, 1, f_term_getcursor},
+    {"term_getjob",	1, 1, f_term_getjob},
+    {"term_getline",	2, 2, f_term_getline},
+    {"term_getscrolled", 1, 1, f_term_getscrolled},
+    {"term_getsize",	1, 1, f_term_getsize},
+    {"term_getstatus",	1, 1, f_term_getstatus},
+    {"term_gettitle",	1, 1, f_term_gettitle},
+    {"term_gettty",	1, 1, f_term_gettty},
+    {"term_list",	0, 0, f_term_list},
+    {"term_scrape",	2, 2, f_term_scrape},
+    {"term_sendkeys",	2, 2, f_term_sendkeys},
+    {"term_start",	1, 2, f_term_start},
+    {"term_wait",	1, 2, f_term_wait},
+#endif
     {"test_alloc_fail",	3, 3, f_test_alloc_fail},
     {"test_autochdir",	0, 0, f_test_autochdir},
     {"test_garbagecollect_now",	0, 0, f_test_garbagecollect_now},
@@ -1546,7 +1563,7 @@ buflist_find_by_name(char_u *name, int curtab_only)
 /*
  * Get buffer by number or pattern.
  */
-    static buf_T *
+    buf_T *
 get_buf_tv(typval_T *tv, int curtab_only)
 {
     char_u	*name = tv->vval.v_string;
@@ -1921,6 +1938,9 @@ f_ch_logfile(typval_T *argvars, typval_T *rettv UNUSED)
     char_u *opt = (char_u *)"";
     char_u buf[NUMBUFLEN];
 
+    /* Don't open a file in restricted mode. */
+    if (check_restricted() || check_secure())
+	return;
     fname = get_tv_string(&argvars[0]);
     if (argvars[1].v_type == VAR_STRING)
 	opt = get_tv_string_buf(&argvars[1], buf);
@@ -2007,7 +2027,7 @@ f_ch_setoptions(typval_T *argvars, typval_T *rettv UNUSED)
 	return;
     clear_job_options(&opt);
     if (get_job_options(&argvars[1], &opt,
-			      JO_CB_ALL + JO_TIMEOUT_ALL + JO_MODE_ALL) == OK)
+			    JO_CB_ALL + JO_TIMEOUT_ALL + JO_MODE_ALL, 0) == OK)
 	channel_set_options(channel, &opt);
     free_job_options(&opt);
 }
@@ -2031,7 +2051,7 @@ f_ch_status(typval_T *argvars, typval_T *rettv)
     if (argvars[1].v_type != VAR_UNKNOWN)
     {
 	clear_job_options(&opt);
-	if (get_job_options(&argvars[1], &opt, JO_PART) == OK
+	if (get_job_options(&argvars[1], &opt, JO_PART, 0) == OK
 						     && (opt.jo_set & JO_PART))
 	    part = opt.jo_part;
     }
@@ -2334,8 +2354,45 @@ f_count(typval_T *argvars, typval_T *rettv)
 {
     long	n = 0;
     int		ic = FALSE;
+    int		error = FALSE;
 
-    if (argvars[0].v_type == VAR_LIST)
+    if (argvars[2].v_type != VAR_UNKNOWN)
+	ic = (int)get_tv_number_chk(&argvars[2], &error);
+
+    if (argvars[0].v_type == VAR_STRING)
+    {
+	char_u *expr = get_tv_string_chk(&argvars[1]);
+	char_u *p = argvars[0].vval.v_string;
+	char_u *next;
+
+	if (!error && expr != NULL && p != NULL)
+	{
+	    if (ic)
+	    {
+		size_t len = STRLEN(expr);
+
+		while (*p != NUL)
+		{
+		    if (MB_STRNICMP(p, expr, len) == 0)
+		    {
+			++n;
+			p += len;
+		    }
+		    else
+			MB_PTR_ADV(p);
+		}
+	    }
+	    else
+		while ((next = (char_u *)strstr((char *)p, (char *)expr))
+								       != NULL)
+		{
+		    ++n;
+		    p = next + STRLEN(expr);
+		}
+	}
+
+    }
+    else if (argvars[0].v_type == VAR_LIST)
     {
 	listitem_T	*li;
 	list_T		*l;
@@ -2346,9 +2403,6 @@ f_count(typval_T *argvars, typval_T *rettv)
 	    li = l->lv_first;
 	    if (argvars[2].v_type != VAR_UNKNOWN)
 	    {
-		int error = FALSE;
-
-		ic = (int)get_tv_number_chk(&argvars[2], &error);
 		if (argvars[3].v_type != VAR_UNKNOWN)
 		{
 		    idx = (long)get_tv_number_chk(&argvars[3], &error);
@@ -2376,11 +2430,8 @@ f_count(typval_T *argvars, typval_T *rettv)
 
 	if ((d = argvars[0].vval.v_dict) != NULL)
 	{
-	    int error = FALSE;
-
 	    if (argvars[2].v_type != VAR_UNKNOWN)
 	    {
-		ic = (int)get_tv_number_chk(&argvars[2], &error);
 		if (argvars[3].v_type != VAR_UNKNOWN)
 		    EMSG(_(e_invarg));
 	    }
@@ -4351,6 +4402,8 @@ f_getchar(typval_T *argvars, typval_T *rettv)
 		/* Find the window at the mouse coordinates and compute the
 		 * text position. */
 		win = mouse_find_win(&row, &col);
+		if (win == NULL)
+		    return;
 		(void)mouse_comp_pos(win, &row, &col, &lnum);
 # ifdef FEAT_WINDOWS
 		for (wp = firstwin; wp != win; wp = wp->w_next)
@@ -5197,6 +5250,9 @@ get_win_info(win_T *wp, short tpnr, short winnr)
     dict_add_nr_str(dict, "width", wp->w_width, NULL);
     dict_add_nr_str(dict, "bufnr", wp->w_buffer->b_fnum, NULL);
 
+#ifdef FEAT_TERMINAL
+    dict_add_nr_str(dict, "terminal", bt_terminal(wp->w_buffer), NULL);
+#endif
 #ifdef FEAT_QUICKFIX
     dict_add_nr_str(dict, "quickfix", bt_quickfix(wp->w_buffer), NULL);
     dict_add_nr_str(dict, "loclist",
@@ -5893,7 +5949,7 @@ f_has(typval_T *argvars, typval_T *rettv)
 #ifdef FEAT_TERMGUICOLORS
 	"termguicolors",
 #endif
-#ifdef FEAT_TERMINAL
+#if defined(FEAT_TERMINAL) && !defined(WIN3264)
 	"terminal",
 #endif
 #ifdef TERMINFO
@@ -6100,6 +6156,10 @@ f_has(typval_T *argvars, typval_T *rettv)
 #ifdef FEAT_NETBEANS_INTG
 	else if (STRICMP(name, "netbeans_enabled") == 0)
 	    n = netbeans_active();
+#endif
+#if defined(FEAT_TERMINAL) && defined(WIN3264)
+	else if (STRICMP(name, "terminal") == 0)
+	    n = terminal_enabled();
 #endif
     }
 
@@ -6463,8 +6523,9 @@ f_inputlist(typval_T *argvars, typval_T *rettv)
     int		mouse_used;
 
 #ifdef NO_CONSOLE_INPUT
-    /* While starting up, there is no place to enter text. */
-    if (no_console_input())
+    /* While starting up, there is no place to enter text. When running tests
+     * with --not-a-term we assume feedkeys() will be used. */
+    if (no_console_input() && !is_not_a_term())
 	return;
 #endif
     if (argvars[0].v_type != VAR_LIST || argvars[0].vval.v_list == NULL)
@@ -6754,7 +6815,7 @@ f_job_setoptions(typval_T *argvars, typval_T *rettv UNUSED)
     if (job == NULL)
 	return;
     clear_job_options(&opt);
-    if (get_job_options(&argvars[1], &opt, JO_STOPONEXIT + JO_EXIT_CB) == OK)
+    if (get_job_options(&argvars[1], &opt, JO_STOPONEXIT + JO_EXIT_CB, 0) == OK)
 	job_set_options(job, &opt);
     free_job_options(&opt);
 }
@@ -7817,6 +7878,10 @@ f_mode(typval_T *argvars, typval_T *rettv)
 	buf[0] = 'x';
 	buf[1] = '!';
     }
+#ifdef FEAT_TERMINAL
+    else if (term_use_loop())
+	buf[0] = 't';
+#endif
     else if (VIsual_active)
     {
 	if (VIsual_select)
