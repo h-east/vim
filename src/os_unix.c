@@ -2280,6 +2280,7 @@ vim_is_xterm(char_u *name)
 		|| STRNICMP(name, "kterm", 5) == 0
 		|| STRNICMP(name, "mlterm", 6) == 0
 		|| STRNICMP(name, "rxvt", 4) == 0
+		|| STRNICMP(name, "screen.xterm", 12) == 0
 		|| STRCMP(name, "builtin_xterm") == 0);
 }
 
@@ -4093,8 +4094,17 @@ mch_parse_cmd(char_u *cmd, int use_shcf, char ***argv, int *argc)
 	    ++*argc;
 	    while (*p != NUL && (inquote || (*p != ' ' && *p != TAB)))
 	    {
-		if (*p == '"')
+		if (p[0] == '"')
 		    inquote = !inquote;
+		else if (p[0] == '\\' && p[1] != NUL)
+		{
+		    /* First pass: skip over "\ " and "\"".
+		     * Second pass: Remove the backslash. */
+		    if (i == 1)
+			mch_memmove(p, p + 1, STRLEN(p));
+		    else
+			++p;
+		}
 		++p;
 	    }
 	    if (*p == NUL)
@@ -5466,7 +5476,7 @@ mch_job_start(char **argv, job_T *job, jobopt_T *options)
     job->jv_channel = channel;  /* ch_refcount was set above */
 
     if (pty_master_fd >= 0)
-	close(pty_slave_fd); /* duped above */
+	close(pty_slave_fd); /* not used in the parent */
     /* close child stdin, stdout and stderr */
     if (!use_file_for_in && fd_in[0] >= 0)
 	close(fd_in[0]);
@@ -5666,6 +5676,32 @@ mch_clear_job(job_T *job)
 # else
     (void)waitpid(job->jv_pid, NULL, WNOHANG);
 # endif
+}
+#endif
+
+#if defined(FEAT_TERMINAL) || defined(PROTO)
+    int
+mch_create_pty_channel(job_T *job, jobopt_T *options)
+{
+    int		pty_master_fd = -1;
+    int		pty_slave_fd = -1;
+    channel_T	*channel;
+
+    open_pty(&pty_master_fd, &pty_slave_fd, &job->jv_tty_name);
+    close(pty_slave_fd);
+
+    channel = add_channel();
+    if (channel == NULL)
+    {
+	close(pty_master_fd);
+	return FAIL;
+    }
+    job->jv_channel = channel;  /* ch_refcount was set by add_channel() */
+    channel->ch_keep_open = TRUE;
+
+    channel_set_pipes(channel, pty_master_fd, pty_master_fd, pty_master_fd);
+    channel_set_job(channel, job, options);
+    return OK;
 }
 #endif
 

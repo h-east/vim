@@ -235,7 +235,7 @@ redraw_later_clear(void)
     else
 #endif
 	/* Use attributes that is very unlikely to appear in text. */
-	screen_attr = HL_BOLD | HL_UNDERLINE | HL_INVERSE;
+	screen_attr = HL_BOLD | HL_UNDERLINE | HL_INVERSE | HL_STRIKETHROUGH;
 }
 
 /*
@@ -445,9 +445,11 @@ redraw_asap(int type)
  * Invoked after an asynchronous callback is called.
  * If an echo command was used the cursor needs to be put back where
  * it belongs. If highlighting was changed a redraw is needed.
+ * If "call_update_screen" is FALSE don't call update_screen() when at the
+ * command line.
  */
     void
-redraw_after_callback(void)
+redraw_after_callback(int call_update_screen)
 {
     ++redrawing_for_callback;
 
@@ -461,7 +463,7 @@ redraw_after_callback(void)
 #ifdef FEAT_WILDMENU
 		&& wild_menu_showing == 0
 #endif
-		)
+		&& call_update_screen)
 	    update_screen(0);
 	/* Redraw in the same position, so that the user can continue
 	 * editing the command. */
@@ -3018,7 +3020,7 @@ win_line(
     int		startrow,
     int		endrow,
     int		nochange UNUSED,	/* not updating for changed text */
-    proftime_T	*syntax_tm)
+    proftime_T	*syntax_tm UNUSED)
 {
     int		col = 0;		/* visual column on screen */
     unsigned	off;			/* offset in ScreenLines/ScreenAttrs */
@@ -3466,7 +3468,7 @@ win_line(
     {
 	/* For checking first word with a capital skip white space. */
 	if (cap_col == 0)
-	    cap_col = (int)(skipwhite(line) - line);
+	    cap_col = getwhitecols(line);
 
 	/* To be able to spell-check over line boundaries copy the end of the
 	 * current line into nextline[].  Above the start of the next line was
@@ -5200,7 +5202,8 @@ win_line(
 	/* XIM don't send preedit_start and preedit_end, but they send
 	 * preedit_changed and commit.  Thus Vim can't set "im_is_active", use
 	 * im_is_preediting() here. */
-	if (xic != NULL
+	if (p_imst == IM_ON_THE_SPOT
+		&& xic != NULL
 		&& lnum == wp->w_cursor.lnum
 		&& (State & INSERT)
 		&& !p_imdisable
@@ -8093,6 +8096,8 @@ screen_start_highlight(int attr)
 		out_str(T_CZH);
 	    if ((attr & HL_INVERSE) && T_MR != NULL)	/* inverse (reverse) */
 		out_str(T_MR);
+	    if ((attr & HL_STRIKETHROUGH) && T_STS != NULL)	/* strike */
+		out_str(T_STS);
 
 	    /*
 	     * Output the color or start string after bold etc., in case the
@@ -8216,6 +8221,13 @@ screen_stop_highlight(void)
 		    do_ME = TRUE;
 		else
 		    out_str(T_CZR);
+	    }
+	    if (screen_attr & HL_STRIKETHROUGH)
+	    {
+		if (STRCMP(T_STE, T_ME) == 0)
+		    do_ME = TRUE;
+		else
+		    out_str(T_STE);
 	    }
 	    if (do_ME || (screen_attr & (HL_BOLD | HL_INVERSE)))
 		out_str(T_ME);

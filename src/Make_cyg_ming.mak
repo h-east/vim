@@ -76,6 +76,10 @@ endif
 # Set to yes to enable terminal support.
 TERMINAL=no
 
+ifndef CTAGS
+# this assumes ctags is Exuberant ctags
+CTAGS = ctags -I INIT+ --fields=+S
+endif
 
 # Link against the shared version of libstdc++ by default.  Set
 # STATIC_STDCPLUS to "yes" to link against static version instead.
@@ -340,6 +344,7 @@ endif
 #	  TCL_VER=[TCL version, eg 83, 84] (default is 86)
 #	  TCL_VER_LONG=[Tcl version, eg 8.3] (default is 8.6)
 #	    You must set TCL_VER_LONG when you set TCL_VER.
+#	  TCL_DLL=[TCL dll name, eg tcl86.dll] (default is tcl86.dll)
 ifdef TCL
 ifndef DYNAMIC_TCL
 DYNAMIC_TCL=yes
@@ -349,6 +354,9 @@ TCL_VER = 86
 endif
 ifndef TCL_VER_LONG
 TCL_VER_LONG = 8.6
+endif
+ifndef TCL_DLL
+TCL_DLL = tcl$(TCL_VER).dll
 endif
 TCLINC += -I$(TCL)/include
 endif
@@ -526,7 +534,7 @@ endif
 ifdef TCL
 CFLAGS += -DFEAT_TCL $(TCLINC)
 ifeq (yes, $(DYNAMIC_TCL))
-CFLAGS += -DDYNAMIC_TCL -DDYNAMIC_TCL_DLL=\"tcl$(TCL_VER).dll\" -DDYNAMIC_TCL_VER=\"$(TCL_VER_LONG)\"
+CFLAGS += -DDYNAMIC_TCL -DDYNAMIC_TCL_DLL=\"$(TCL_DLL)\" -DDYNAMIC_TCL_VER=\"$(TCL_VER_LONG)\"
 endif
 endif
 
@@ -882,6 +890,12 @@ xxd/xxd.exe: xxd/xxd.c
 GvimExt/gvimext.dll: GvimExt/gvimext.cpp GvimExt/gvimext.rc GvimExt/gvimext.h
 	$(MAKE) -C GvimExt -f Make_ming.mak CROSS=$(CROSS) CROSS_COMPILE=$(CROSS_COMPILE) CXX='$(CXX)' STATIC_STDCPLUS=$(STATIC_STDCPLUS)
 
+tags: notags
+	$(CTAGS) *.c *.cpp *.h if_perl.xs
+
+notags:
+	-$(DEL) tags
+
 clean:
 	-$(DEL) $(OUTDIR)$(DIRSLASH)*.o
 	-$(DEL) $(OUTDIR)$(DIRSLASH)*.res
@@ -972,7 +986,11 @@ $(OUTDIR)/terminal.o:	terminal.c $(INCL) $(TERM_DEPS)
 	$(CC) -c $(CFLAGS) terminal.c -o $(OUTDIR)/terminal.o
 
 
-CCCTERM = $(CC) -c $(CFLAGS) -Ilibvterm/include -DINLINE="" -DVSNPRINTF=vim_vsnprintf
+CCCTERM = $(CC) -c $(CFLAGS) -Ilibvterm/include -DINLINE="" \
+	  -DVSNPRINTF=vim_vsnprintf \
+	  -DIS_COMBINING_FUNCTION=utf_iscomposing_uint \
+	  -DWCWIDTH_FUNCTION=utf_uint2cells
+
 $(OUTDIR)/term_encoding.o: libvterm/src/encoding.c $(TERM_DEPS)
 	$(CCCTERM) libvterm/src/encoding.c -o $@
 

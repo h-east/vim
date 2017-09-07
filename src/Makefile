@@ -2103,17 +2103,17 @@ test1 \
 	test_listchars \
 	test_search_mbyte \
 	test_wordcount \
-	test3 test4 test5 test6 test7 test8 test9 \
-	test11 test12 test14 test15 test17 test18 test19 \
-	test20 test21 test22 test25 test27 test28 test29 \
+	test3 test4 test5 test7 test8 \
+	test11 test12 test14 test15 test17 test19 \
+	test20 test25 test28 test29 \
 	test30 test31 test32 test33 test34 test36 test37 test38 test39 \
 	test40 test41 test42 test43 test44 test45 test48 test49 \
-	test50 test51 test52 test53 test54 test55 test56 test57 test59 \
+	test50 test52 test53 test54 test55 test56 test57 test59 \
 	test60 test64 test66 test68 test69 \
-	test70 test72 test73 test74 test77 test78 test79 \
-	test80 test83 test84 test85 test86 test87 test88 \
-	test91 test94 test95 test98 test99 \
-	test100 test101 test103 test104 test107 test108:
+	test70 test72 test73 test77 test78 test79 \
+	test83 test85 test86 test87 test88 \
+	test94 test95 test99 \
+	test108:
 	cd testdir; rm -f $@.out; $(MAKE) -f Makefile $@.out VIMPROG=../$(VIMTARGET) $(GUI_TESTARG) SCRIPTSOURCE=../$(SCRIPTSOURCE)
 
 # Run individual NEW style test, assuming that Vim was already compiled.
@@ -2125,6 +2125,7 @@ test_arglist \
 	test_autocmd \
 	test_backspace_opt \
 	test_breakindent \
+	test_bufline \
 	test_bufwintabinfo \
 	test_cd \
 	test_cdo \
@@ -2282,6 +2283,7 @@ test_arglist \
 	test_visual \
 	test_window_cmd \
 	test_window_id \
+	test_windows_home \
 	test_writefile \
 	test_alot_latin \
 	test_alot_utf8 \
@@ -3303,7 +3305,11 @@ objects/channel.o: channel.c
 Makefile:
 	@echo The name of the makefile MUST be "Makefile" (with capital M)!!!!
 
-CCCTERM = $(CCC) -Ilibvterm/include -DINLINE="" -DVSNPRINTF=vim_vsnprintf
+CCCTERM = $(CCC) -Ilibvterm/include -DINLINE="" \
+	  -DVSNPRINTF=vim_vsnprintf \
+	  -DIS_COMBINING_FUNCTION=utf_iscomposing_uint \
+	  -DWCWIDTH_FUNCTION=utf_uint2cells
+
 objects/term_encoding.o: libvterm/src/encoding.c $(TERM_DEPS)
 	$(CCCTERM) -o $@ libvterm/src/encoding.c
 
