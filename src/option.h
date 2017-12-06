@@ -235,7 +235,8 @@
 #define GO_TOOLBAR	'T'		/* add toolbar */
 #define GO_FOOTER	'F'		/* add footer */
 #define GO_VERTICAL	'v'		/* arrange dialog buttons vertically */
-#define GO_ALL		"aAbcefFghilmMprtTv" /* all possible flags for 'go' */
+#define GO_KEEPWINSIZE	'k'		/* keep GUI window size */
+#define GO_ALL		"aAbcefFghilmMprtTvk" /* all possible flags for 'go' */
 
 /* flags for 'comments' option */
 #define COM_NEST	'n'		/* comments strings nest */
@@ -376,10 +377,15 @@ EXTERN char_u	*p_bsk;		/* 'backupskip' */
 EXTERN char_u	*p_cm;		/* 'cryptmethod' */
 #endif
 #ifdef FEAT_BEVAL
-EXTERN long	p_bdlay;	/* 'balloondelay' */
+# ifdef FEAT_BEVAL_GUI
 EXTERN int	p_beval;	/* 'ballooneval' */
+# endif
+EXTERN long	p_bdlay;	/* 'balloondelay' */
 # ifdef FEAT_EVAL
 EXTERN char_u	*p_bexpr;
+# endif
+# ifdef FEAT_BEVAL_TERM
+EXTERN int	p_bevalterm;	/* 'balloonevalterm' */
 # endif
 #endif
 #ifdef FEAT_BROWSE
@@ -466,9 +472,7 @@ static char *(p_dy_values[]) = {"lastline", "truncate", "uhex", NULL};
 #define DY_TRUNCATE		0x002
 #define DY_UHEX			0x004
 EXTERN int	p_ed;		/* 'edcompatible' */
-#ifdef FEAT_WINDOWS
 EXTERN char_u	*p_ead;		/* 'eadirection' */
-#endif
 EXTERN int	p_ea;		/* 'equalalways' */
 EXTERN char_u	*p_ep;		/* 'equalprg' */
 EXTERN int	p_eb;		/* 'errorbells' */
@@ -557,9 +561,7 @@ EXTERN char_u	*p_gtl;		/* 'guitablabel' */
 EXTERN char_u	*p_gtt;		/* 'guitabtooltip' */
 #endif
 EXTERN char_u	*p_hf;		/* 'helpfile' */
-#ifdef FEAT_WINDOWS
 EXTERN long	p_hh;		/* 'helpheight' */
-#endif
 #ifdef FEAT_MULTI_LANG
 EXTERN char_u	*p_hlg;		/* 'helplang' */
 #endif
@@ -585,13 +587,15 @@ EXTERN char_u	*p_iconstring;	/* 'iconstring' */
 EXTERN int	p_ic;		/* 'ignorecase' */
 #if defined(FEAT_XIM) && defined(FEAT_GUI_GTK)
 EXTERN char_u	*p_imak;	/* 'imactivatekey' */
+#define IM_ON_THE_SPOT		0L
+#define IM_OVER_THE_SPOT	1L
+EXTERN long	p_imst;		/* 'imstyle' */
+#endif
+#if defined(FEAT_EVAL) && defined(FEAT_MBYTE)
 EXTERN char_u	*p_imaf;	/* 'imactivatefunc' */
 EXTERN char_u	*p_imsf;	/* 'imstatusfunc' */
-EXTERN long	p_imst;		/* 'imstyle' */
-# define IM_ON_THE_SPOT		0L
-# define IM_OVER_THE_SPOT	1L
 #endif
-#ifdef USE_IM_CONTROL
+#ifdef FEAT_MBYTE
 EXTERN int	p_imcmdline;	/* 'imcmdline' */
 EXTERN int	p_imdisable;	/* 'imdisable' */
 #endif
@@ -617,10 +621,8 @@ EXTERN long	p_linespace;	/* 'linespace' */
 #ifdef FEAT_LISP
 EXTERN char_u	*p_lispwords;	/* 'lispwords' */
 #endif
-#ifdef FEAT_WINDOWS
 EXTERN long	p_ls;		/* 'laststatus' */
 EXTERN long	p_stal;		/* 'showtabline' */
-#endif
 EXTERN char_u	*p_lcs;		/* 'listchars' */
 
 EXTERN int	p_lz;		/* 'lazyredraw' */
@@ -674,6 +676,10 @@ EXTERN long	p_mouset;	/* 'mousetime' */
 EXTERN int	p_more;		/* 'more' */
 #ifdef FEAT_MZSCHEME
 EXTERN long	p_mzq;		/* 'mzquantum */
+# if defined(DYNAMIC_MZSCHEME)
+EXTERN char_u	*p_mzschemedll;	/* 'mzschemedll' */
+EXTERN char_u	*p_mzschemegcdll; /* 'mzschemegcdll' */
+# endif
 #endif
 #if defined(MSWIN)
 EXTERN int	p_odev;		/* 'opendevice' */
@@ -711,7 +717,7 @@ EXTERN long	p_re;		/* 'regexpengine' */
 EXTERN char_u	*p_rop;		/* 'renderoptions' */
 #endif
 EXTERN long	p_report;	/* 'report' */
-#if defined(FEAT_WINDOWS) && defined(FEAT_QUICKFIX)
+#if defined(FEAT_QUICKFIX)
 EXTERN long	p_pvh;		/* 'previewheight' */
 #endif
 #ifdef WIN3264
@@ -801,19 +807,15 @@ EXTERN long	p_ss;		/* 'sidescroll' */
 EXTERN long	p_siso;		/* 'sidescrolloff' */
 EXTERN int	p_scs;		/* 'smartcase' */
 EXTERN int	p_sta;		/* 'smarttab' */
-#ifdef FEAT_WINDOWS
 EXTERN int	p_sb;		/* 'splitbelow' */
 EXTERN long	p_tpm;		/* 'tabpagemax' */
 # if defined(FEAT_STL_OPT)
 EXTERN char_u	*p_tal;		/* 'tabline' */
 # endif
-#endif
 #ifdef FEAT_SPELL
 EXTERN char_u	*p_sps;		/* 'spellsuggest' */
 #endif
-#ifdef FEAT_WINDOWS
 EXTERN int	p_spr;		/* 'splitright' */
-#endif
 EXTERN int	p_sol;		/* 'startofline' */
 EXTERN char_u	*p_su;		/* 'suffixes' */
 EXTERN char_u	*p_sws;		/* 'swapsync' */
@@ -917,9 +919,7 @@ EXTERN long	p_ul;		/* 'undolevels' */
 EXTERN long	p_ur;		/* 'undoreload' */
 EXTERN long	p_uc;		/* 'updatecount' */
 EXTERN long	p_ut;		/* 'updatetime' */
-#if defined(FEAT_WINDOWS) || defined(FEAT_FOLDING)
 EXTERN char_u	*p_fcs;		/* 'fillchar' */
-#endif
 #ifdef FEAT_VIMINFO
 EXTERN char_u	*p_viminfo;	/* 'viminfo' */
 EXTERN char_u	*p_viminfofile;	/* 'viminfofile' */
@@ -969,12 +969,10 @@ EXTERN char_u	*p_wim;		/* 'wildmode' */
 #ifdef FEAT_WILDMENU
 EXTERN int	p_wmnu;		/* 'wildmenu' */
 #endif
-#ifdef FEAT_WINDOWS
 EXTERN long	p_wh;		/* 'winheight' */
 EXTERN long	p_wmh;		/* 'winminheight' */
 EXTERN long	p_wmw;		/* 'winminwidth' */
 EXTERN long	p_wiw;		/* 'winwidth' */
-#endif
 #if defined(WIN3264) && defined(FEAT_TERMINAL)
 EXTERN char_u	*p_winptydll;	/* 'winptydll' */
 #endif
@@ -1170,7 +1168,7 @@ enum
 #ifdef FEAT_LINEBREAK
     , WV_NUW
 #endif
-#if defined(FEAT_WINDOWS) && defined(FEAT_QUICKFIX)
+#if defined(FEAT_QUICKFIX)
     , WV_PVW
 #endif
 #ifdef FEAT_RIGHTLEFT
@@ -1192,10 +1190,8 @@ enum
 #ifdef FEAT_STL_OPT
     , WV_STL
 #endif
-#ifdef FEAT_WINDOWS
     , WV_WFH
     , WV_WFW
-#endif
     , WV_WRAP
 #ifdef FEAT_SIGNS
     , WV_SCL

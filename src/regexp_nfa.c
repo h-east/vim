@@ -1320,7 +1320,7 @@ nfa_regatom(void)
 		goto collection;
 
 	/* "\_x" is character class plus newline */
-	/*FALLTHROUGH*/
+	/* FALLTHROUGH */
 
 	/*
 	 * Character classes.
@@ -1522,7 +1522,7 @@ nfa_regatom(void)
 		case 'u':   /* %uabcd hex 4 */
 		case 'U':   /* %U1234abcd hex 8 */
 		    {
-			int nr;
+			long nr;
 
 			switch (c)
 			{
@@ -2040,7 +2040,7 @@ nfa_regpiece(void)
     int		greedy = TRUE;      /* Braces are prefixed with '-' ? */
     parse_state_T old_state;
     parse_state_T new_state;
-    int		c2;
+    long	c2;
     int		old_post_pos;
     int		my_post_start;
     int		quest;
@@ -4698,6 +4698,7 @@ skip_add:
 		subs = addstate(l, state->out, subs, pim, off_arg);
 		break;
 	    }
+	    /* FALLTHROUGH */
 	case NFA_MCLOSE1:
 	case NFA_MCLOSE2:
 	case NFA_MCLOSE3:

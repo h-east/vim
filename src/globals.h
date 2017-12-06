@@ -63,7 +63,6 @@ EXTERN int	Screen_mco INIT(= 0);		/* value of p_mco used when
 EXTERN schar_T	*ScreenLines2 INIT(= NULL);
 #endif
 
-#ifdef FEAT_WINDOWS
 /*
  * Indexes for tab page line:
  *	N > 0 for label of tab page N
@@ -72,7 +71,6 @@ EXTERN schar_T	*ScreenLines2 INIT(= NULL);
  *	N == -999 for closing current tab page
  */
 EXTERN short	*TabPageIdxs INIT(= NULL);
-#endif
 
 EXTERN int	screen_Rows INIT(= 0);	    /* actual size of ScreenLines[] */
 EXTERN int	screen_Columns INIT(= 0);   /* actual size of ScreenLines[] */
@@ -396,6 +394,9 @@ EXTERN int	cterm_normal_bg_color INIT(= 0);
 EXTERN guicolor_T cterm_normal_fg_gui_color INIT(= INVALCOLOR);
 EXTERN guicolor_T cterm_normal_bg_gui_color INIT(= INVALCOLOR);
 #endif
+#ifdef FEAT_TERMRESPONSE
+EXTERN int	is_mac_terminal INIT(= FALSE);  /* recognized Terminal.app */
+#endif
 
 #ifdef FEAT_AUTOCMD
 EXTERN int	autocmd_busy INIT(= FALSE);	/* Is apply_autocmds() busy? */
@@ -454,9 +455,7 @@ EXTERN int	gui_prev_topfill INIT(= 0);
 EXTERN int	drag_status_line INIT(= FALSE);	/* dragging the status line */
 EXTERN int	postponed_mouseshape INIT(= FALSE); /* postponed updating the
 						       mouse pointer shape */
-#  ifdef FEAT_WINDOWS
 EXTERN int	drag_sep_line INIT(= FALSE);	/* dragging vert separator */
-#  endif
 # endif
 
 #endif
@@ -564,9 +563,7 @@ EXTERN int	clip_unnamed_saved INIT(= 0);
  * All windows are linked in a list. firstwin points to the first entry,
  * lastwin to the last entry (can be the same as firstwin) and curwin to the
  * currently active window.
- * Without the FEAT_WINDOWS they are all equal.
  */
-#ifdef FEAT_WINDOWS
 EXTERN win_T	*firstwin;		/* first window */
 EXTERN win_T	*lastwin;		/* last window */
 EXTERN win_T	*prevwin INIT(= NULL);	/* previous window */
@@ -585,16 +582,6 @@ EXTERN win_T	*prevwin INIT(= NULL);	/* previous window */
     for ((tp) = first_tabpage; (tp) != NULL; (tp) = (tp)->tp_next) \
 	for ((wp) = ((tp) == curtab) \
 		? firstwin : (tp)->tp_firstwin; (wp); (wp) = (wp)->w_next)
-#else
-# define firstwin curwin
-# define lastwin curwin
-# define ONE_WINDOW 1
-# define W_NEXT(wp) NULL
-# define FOR_ALL_WINDOWS(wp) wp = curwin;
-# define FOR_ALL_TABPAGES(tp) for (;FALSE;)
-# define FOR_ALL_WINDOWS_IN_TAB(tp, wp) wp = curwin;
-# define FOR_ALL_TAB_WINDOWS(tp, wp) wp = curwin;
-#endif
 
 EXTERN win_T	*curwin;	/* currently active window */
 
@@ -609,7 +596,6 @@ EXTERN int	aucmd_win_used INIT(= FALSE);	/* aucmd_win is being used */
  */
 EXTERN frame_T	*topframe;	/* top of the window frame tree */
 
-#ifdef FEAT_WINDOWS
 /*
  * Tab pages are alternative topframes.  "first_tabpage" points to the first
  * one in the list, "curtab" is the current one.
@@ -617,7 +603,6 @@ EXTERN frame_T	*topframe;	/* top of the window frame tree */
 EXTERN tabpage_T    *first_tabpage;
 EXTERN tabpage_T    *curtab;
 EXTERN int	    redraw_tabline INIT(= FALSE);  /* need to redraw tabline */
-#endif
 
 /*
  * All buffers are linked in a list. 'firstbuf' points to the first entry,
@@ -951,9 +936,13 @@ EXTERN char_u		composing_hangul_buffer[5];
  * "Visual_mode"    When State is NORMAL or INSERT.
  * "finish_op"	    When State is NORMAL, after typing the operator and before
  *		    typing the motion command.
+ * "debug_mode"	    Debug mode.
  */
 EXTERN int	State INIT(= NORMAL);	/* This is the current state of the
 					 * command interpreter. */
+#ifdef FEAT_EVAL
+EXTERN int	debug_mode INIT(= FALSE);
+#endif
 
 EXTERN int	finish_op INIT(= FALSE);/* TRUE while an operator is pending */
 EXTERN long	opcount INIT(= 0);	/* count for pending operator */
@@ -1047,7 +1036,7 @@ EXTERN int	stop_insert_mode;	/* for ":stopinsert" and 'insertmode' */
 
 EXTERN int	KeyTyped;		/* TRUE if user typed current char */
 EXTERN int	KeyStuffed;		/* TRUE if current char from stuffbuf */
-#ifdef USE_IM_CONTROL
+#ifdef FEAT_MBYTE
 EXTERN int	vgetc_im_active;	/* Input Method was active for last
 					   character obtained from vgetc() */
 #endif
@@ -1115,14 +1104,12 @@ EXTERN varnumber_T last_changedtick INIT(= 0);   /* for TextChanged event */
 EXTERN buf_T	*last_changedtick_buf INIT(= NULL);
 #endif
 
-#ifdef FEAT_WINDOWS
 EXTERN int	postponed_split INIT(= 0);  /* for CTRL-W CTRL-] command */
 EXTERN int	postponed_split_flags INIT(= 0);  /* args for win_split() */
 EXTERN int	postponed_split_tab INIT(= 0);  /* cmdmod.tab */
-# ifdef FEAT_QUICKFIX
+#ifdef FEAT_QUICKFIX
 EXTERN int	g_do_tagpreview INIT(= 0);  /* for tag preview commands:
 					       height of preview window */
-# endif
 #endif
 EXTERN int	replace_offset INIT(= 0);   /* offset for replace_push() */
 
@@ -1210,17 +1197,12 @@ EXTERN int	lcs_trail INIT(= NUL);
 EXTERN int	lcs_conceal INIT(= ' ');
 #endif
 
-#if defined(FEAT_WINDOWS) || defined(FEAT_WILDMENU) || defined(FEAT_STL_OPT) \
-	|| defined(FEAT_FOLDING)
 /* Characters from 'fillchars' option */
 EXTERN int	fill_stl INIT(= ' ');
 EXTERN int	fill_stlnc INIT(= ' ');
-#endif
-#if defined(FEAT_WINDOWS) || defined(FEAT_FOLDING)
 EXTERN int	fill_vert INIT(= ' ');
 EXTERN int	fill_fold INIT(= '-');
 EXTERN int	fill_diff INIT(= '-');
-#endif
 
 #ifdef FEAT_FOLDING
 EXTERN int	disable_fold_update INIT(= 0);
@@ -1263,6 +1245,7 @@ EXTERN int	no_hlsearch INIT(= FALSE);
 
 #if defined(FEAT_BEVAL) && !defined(NO_X11_INCLUDES)
 EXTERN BalloonEval	*balloonEval INIT(= NULL);
+EXTERN int		balloonEvalForTerm INIT(= FALSE);
 # if defined(FEAT_NETBEANS_INTG) || defined(FEAT_SUN_WORKSHOP)
 EXTERN int bevalServers INIT(= 0);
 #  define BEVAL_NETBEANS		0x01
@@ -1457,7 +1440,7 @@ EXTERN char_u e_failed[]	INIT(= N_("E472: Command failed"));
 #if defined(FEAT_GUI) && defined(FEAT_XFONTSET)
 EXTERN char_u e_fontset[]	INIT(= N_("E234: Unknown fontset: %s"));
 #endif
-#if defined(FEAT_GUI_X11) || defined(FEAT_GUI_GTK) || defined(MACOS) \
+#if defined(FEAT_GUI_X11) || defined(FEAT_GUI_GTK) || defined(FEAT_GUI_MAC) \
 	|| defined(FEAT_GUI_PHOTON) || defined(FEAT_GUI_MSWIN)
 EXTERN char_u e_font[]		INIT(= N_("E235: Unknown font: %s"));
 #endif
@@ -1480,6 +1463,9 @@ EXTERN char_u e_isadir2[]	INIT(= N_("E17: \"%s\" is a directory"));
 #endif
 #ifdef FEAT_LIBCALL
 EXTERN char_u e_libcall[]	INIT(= N_("E364: Library call failed for \"%s()\""));
+#endif
+#ifdef HAVE_FSYNC
+EXTERN char_u e_fsync[]		INIT(= N_("E667: Fsync failed"));
 #endif
 #if defined(DYNAMIC_PERL) \
 	|| defined(DYNAMIC_PYTHON) || defined(DYNAMIC_PYTHON3) \
@@ -1524,9 +1510,7 @@ EXTERN char_u e_nopresub[]	INIT(= N_("E33: No previous substitute regular expres
 EXTERN char_u e_noprev[]	INIT(= N_("E34: No previous command"));
 EXTERN char_u e_noprevre[]	INIT(= N_("E35: No previous regular expression"));
 EXTERN char_u e_norange[]	INIT(= N_("E481: No range allowed"));
-#ifdef FEAT_WINDOWS
 EXTERN char_u e_noroom[]	INIT(= N_("E36: Not enough room"));
-#endif
 #ifdef FEAT_CLIENTSERVER
 EXTERN char_u e_noserver[]	INIT(= N_("E247: no registered server named \"%s\""));
 #endif
@@ -1579,7 +1563,7 @@ EXTERN char_u e_readerrf[]	INIT(= N_("E47: Error while reading errorfile"));
 EXTERN char_u e_sandbox[]	INIT(= N_("E48: Not allowed in sandbox"));
 #endif
 EXTERN char_u e_secure[]	INIT(= N_("E523: Not allowed here"));
-#if defined(AMIGA) || defined(MACOS) || defined(MSWIN)  \
+#if defined(AMIGA) || defined(MACOS_X) || defined(MSWIN)  \
 	|| defined(UNIX) || defined(VMS)
 EXTERN char_u e_screenmode[]	INIT(= N_("E359: Screen mode setting not supported"));
 #endif
@@ -1597,10 +1581,8 @@ EXTERN char_u e_toomany[]	INIT(= N_("E77: Too many file names"));
 EXTERN char_u e_trailing[]	INIT(= N_("E488: Trailing characters"));
 EXTERN char_u e_umark[]		INIT(= N_("E78: Unknown mark"));
 EXTERN char_u e_wildexpand[]	INIT(= N_("E79: Cannot expand wildcards"));
-#ifdef FEAT_WINDOWS
 EXTERN char_u e_winheight[]	INIT(= N_("E591: 'winheight' cannot be smaller than 'winminheight'"));
 EXTERN char_u e_winwidth[]	INIT(= N_("E592: 'winwidth' cannot be smaller than 'winminwidth'"));
-#endif
 EXTERN char_u e_write[]		INIT(= N_("E80: Error while writing"));
 EXTERN char_u e_zerocount[]	INIT(= N_("E939: Positive count required"));
 #ifdef FEAT_EVAL
@@ -1628,7 +1610,7 @@ EXTERN char_u e_invalidreg[]    INIT(= N_("E850: Invalid register name"));
 #endif
 EXTERN char_u e_dirnotf[]	INIT(= N_("E919: Directory not found in '%s': \"%s\""));
 
-#ifdef MACOS_X_UNIX
+#ifdef FEAT_GUI_MAC
 EXTERN short disallow_gui	INIT(= FALSE);
 #endif
 
@@ -1679,6 +1661,11 @@ EXTERN int  in_free_unref_items INIT(= FALSE);
 #ifdef FEAT_TIMERS
 EXTERN int  did_add_timer INIT(= FALSE);
 EXTERN int  timer_busy INIT(= 0);   /* when timer is inside vgetc() then > 0 */
+#endif
+
+#ifdef FEAT_BEVAL_TERM
+EXTERN int  bevalexpr_due_set INIT(= FALSE);
+EXTERN proftime_T bevalexpr_due;
 #endif
 
 #ifdef FEAT_EVAL

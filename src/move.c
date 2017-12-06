@@ -861,14 +861,14 @@ validate_cursor_col(void)
 	col = curwin->w_virtcol;
 	off = curwin_col_off();
 	col += off;
-	width = W_WIDTH(curwin) - off + curwin_col_off2();
+	width = curwin->w_width - off + curwin_col_off2();
 
 	/* long line wrapping, adjust curwin->w_wrow */
 	if (curwin->w_p_wrap
-		&& col >= (colnr_T)W_WIDTH(curwin)
+		&& col >= (colnr_T)curwin->w_width
 		&& width > 0)
 	    /* use same formula as what is used in curs_columns() */
-	    col -= ((col - W_WIDTH(curwin)) / width + 1) * width;
+	    col -= ((col - curwin->w_width) / width + 1) * width;
 	if (col > (int)curwin->w_leftcol)
 	    col -= curwin->w_leftcol;
 	else
@@ -981,26 +981,22 @@ curs_columns(
      */
     curwin->w_wrow = curwin->w_cline_row;
 
-    textwidth = W_WIDTH(curwin) - extra;
+    textwidth = curwin->w_width - extra;
     if (textwidth <= 0)
     {
 	/* No room for text, put cursor in last char of window. */
-	curwin->w_wcol = W_WIDTH(curwin) - 1;
+	curwin->w_wcol = curwin->w_width - 1;
 	curwin->w_wrow = curwin->w_height - 1;
     }
-    else if (curwin->w_p_wrap
-#ifdef FEAT_WINDOWS
-	    && curwin->w_width != 0
-#endif
-	    )
+    else if (curwin->w_p_wrap && curwin->w_width != 0)
     {
 	width = textwidth + curwin_col_off2();
 
 	/* long line wrapping, adjust curwin->w_wrow */
-	if (curwin->w_wcol >= W_WIDTH(curwin))
+	if (curwin->w_wcol >= curwin->w_width)
 	{
 	    /* this same formula is used in validate_cursor_col() */
-	    n = (curwin->w_wcol - W_WIDTH(curwin)) / width + 1;
+	    n = (curwin->w_wcol - curwin->w_width) / width + 1;
 	    curwin->w_wcol -= n * width;
 	    curwin->w_wrow += n;
 
@@ -1031,7 +1027,7 @@ curs_columns(
 	 * extra
 	 */
 	off_left = (int)startcol - (int)curwin->w_leftcol - p_siso;
-	off_right = (int)endcol - (int)(curwin->w_leftcol + W_WIDTH(curwin)
+	off_right = (int)endcol - (int)(curwin->w_leftcol + curwin->w_width
 								- p_siso) + 1;
 	if (off_left < 0 || off_right > 0)
 	{
@@ -1095,10 +1091,7 @@ curs_columns(
 	    && curwin->w_height != 0
 	    && curwin->w_cursor.lnum == curwin->w_topline
 	    && width > 0
-#ifdef FEAT_WINDOWS
-	    && curwin->w_width != 0
-#endif
-	    )
+	    && curwin->w_width != 0)
     {
 	/* Cursor past end of screen.  Happens with a single line that does
 	 * not fit on screen.  Find a skipcol to show the text around the
@@ -1260,16 +1253,12 @@ scrolldown(
      * and move the cursor onto the displayed part of the window.
      */
     wrow = curwin->w_wrow;
-    if (curwin->w_p_wrap
-#ifdef FEAT_WINDOWS
-		&& curwin->w_width != 0
-#endif
-	    )
+    if (curwin->w_p_wrap && curwin->w_width != 0)
     {
 	validate_virtcol();
 	validate_cheight();
 	wrow += curwin->w_cline_height - 1 -
-	    curwin->w_virtcol / W_WIDTH(curwin);
+	    curwin->w_virtcol / curwin->w_width;
     }
     while (wrow >= curwin->w_height && curwin->w_cursor.lnum > 1)
     {
@@ -1469,16 +1458,12 @@ scrolldown_clamp(void)
 #else
     end_row += plines(curwin->w_topline - 1);
 #endif
-    if (curwin->w_p_wrap
-#ifdef FEAT_WINDOWS
-		&& curwin->w_width != 0
-#endif
-	    )
+    if (curwin->w_p_wrap && curwin->w_width != 0)
     {
 	validate_cheight();
 	validate_virtcol();
 	end_row += curwin->w_cline_height - 1 -
-	    curwin->w_virtcol / W_WIDTH(curwin);
+	    curwin->w_virtcol / curwin->w_width;
     }
     if (end_row < curwin->w_height - p_so)
     {
@@ -1533,14 +1518,10 @@ scrollup_clamp(void)
 #else
     start_row = curwin->w_wrow - plines(curwin->w_topline);
 #endif
-    if (curwin->w_p_wrap
-#ifdef FEAT_WINDOWS
-		&& curwin->w_width != 0
-#endif
-	    )
+    if (curwin->w_p_wrap && curwin->w_width != 0)
     {
 	validate_virtcol();
-	start_row -= curwin->w_virtcol / W_WIDTH(curwin);
+	start_row -= curwin->w_virtcol / curwin->w_width;
     }
     if (start_row >= p_so)
     {
@@ -2864,9 +2845,7 @@ do_check_cursorbind(void)
 	    /* Only scroll when 'scrollbind' hasn't done this. */
 	    if (!curwin->w_p_scb)
 		update_topline();
-# ifdef FEAT_WINDOWS
 	    curwin->w_redr_status = TRUE;
-# endif
 	}
     }
 

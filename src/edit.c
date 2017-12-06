@@ -516,7 +516,7 @@ edit(
      */
     if (curbuf->b_p_iminsert == B_IMODE_LMAP)
 	State |= LANGMAP;
-#ifdef USE_IM_CONTROL
+#ifdef FEAT_MBYTE
     im_set_active(curbuf->b_p_iminsert == B_IMODE_IM);
 #endif
 
@@ -781,7 +781,7 @@ edit(
 #endif
 
 	/*
-	 * Get a character for Insert mode.  Ignore K_IGNORE.
+	 * Get a character for Insert mode.  Ignore K_IGNORE and K_NOP.
 	 */
 	if (c != K_CURSORHOLD)
 	    lastc = c;		/* remember the previous char for CTRL-D */
@@ -798,7 +798,7 @@ edit(
 	    do
 	    {
 		c = safe_vgetc();
-	    } while (c == K_IGNORE);
+	    } while (c == K_IGNORE || c == K_NOP);
 
 #ifdef FEAT_AUTOCMD
 	/* Don't want K_CURSORHOLD for the second key, e.g., after CTRL-V. */
@@ -984,7 +984,7 @@ edit(
 	case ESC:	/* End input mode */
 	    if (echeck_abbr(ESC + ABBR_OFF))
 		break;
-	    /*FALLTHROUGH*/
+	    /* FALLTHROUGH */
 
 	case Ctrl_C:	/* End input mode */
 #ifdef FEAT_CMDWIN
@@ -1177,6 +1177,7 @@ doESCkey:
 	case K_LEFTDRAG:
 	case K_LEFTRELEASE:
 	case K_LEFTRELEASE_NM:
+	case K_MOUSEMOVE:
 	case K_MIDDLEMOUSE:
 	case K_MIDDLEDRAG:
 	case K_MIDDLERELEASE:
@@ -1360,7 +1361,7 @@ doESCkey:
 	    /* FALLTHROUGH */
 	case CAR:
 	case NL:
-#if defined(FEAT_WINDOWS) && defined(FEAT_QUICKFIX)
+#if defined(FEAT_QUICKFIX)
 	    /* In a quickfix window a <CR> jumps to the error under the
 	     * cursor. */
 	    if (bt_quickfix(curbuf) && c == CAR)
@@ -1776,14 +1777,14 @@ edit_putchar(int c, int highlight)
 	else
 	    attr = 0;
 	pc_row = W_WINROW(curwin) + curwin->w_wrow;
-	pc_col = W_WINCOL(curwin);
+	pc_col = curwin->w_wincol;
 #if defined(FEAT_RIGHTLEFT) || defined(FEAT_MBYTE)
 	pc_status = PC_STATUS_UNSET;
 #endif
 #ifdef FEAT_RIGHTLEFT
 	if (curwin->w_p_rl)
 	{
-	    pc_col += W_WIDTH(curwin) - 1 - curwin->w_wcol;
+	    pc_col += curwin->w_width - 1 - curwin->w_wcol;
 # ifdef FEAT_MBYTE
 	    if (has_mbyte)
 	    {
@@ -1865,7 +1866,7 @@ display_dollar(colnr_T col)
     }
 #endif
     curs_columns(FALSE);	    /* recompute w_wrow and w_wcol */
-    if (curwin->w_wcol < W_WIDTH(curwin))
+    if (curwin->w_wcol < curwin->w_width)
     {
 	edit_putchar('$', FALSE);
 	dollar_vcol = curwin->w_virtcol;
@@ -4045,22 +4046,16 @@ ins_compl_fixRedoBufForLeader(char_u *ptr_arg)
     static buf_T *
 ins_compl_next_buf(buf_T *buf, int flag)
 {
-#ifdef FEAT_WINDOWS
     static win_T *wp;
-#endif
 
     if (flag == 'w')		/* just windows */
     {
-#ifdef FEAT_WINDOWS
 	if (buf == curbuf)	/* first call for this flag/expansion */
 	    wp = curwin;
 	while ((wp = (wp->w_next != NULL ? wp->w_next : firstwin)) != curwin
 		&& wp->w_buffer->b_scanned)
 	    ;
 	buf = wp->w_buffer;
-#else
-	buf = curbuf;
-#endif
     }
     else
 	/* 'b' (just loaded buffers), 'u' (just non-loaded buffers) or 'U'
@@ -5780,13 +5775,16 @@ quote_meta(char_u *dest, char_u *src, int len)
 		if (ctrl_x_mode == CTRL_X_DICTIONARY
 					   || ctrl_x_mode == CTRL_X_THESAURUS)
 		    break;
+		/* FALLTHROUGH */
 	    case '~':
 		if (!p_magic)	/* quote these only if magic is set */
 		    break;
+		/* FALLTHROUGH */
 	    case '\\':
 		if (ctrl_x_mode == CTRL_X_DICTIONARY
 					   || ctrl_x_mode == CTRL_X_THESAURUS)
 		    break;
+		/* FALLTHROUGH */
 	    case '^':		/* currently it's not needed. */
 	    case '$':
 		m++;
@@ -5980,7 +5978,7 @@ insert_special(
      * Only use mod_mask for special keys, to avoid things like <S-Space>,
      * unless 'allow_modmask' is TRUE.
      */
-#ifdef MACOS
+#ifdef MACOS_X
     /* Command-key never produces a normal key */
     if (mod_mask & MOD_MASK_CMD)
 	allow_modmask = TRUE;
@@ -6826,7 +6824,7 @@ check_auto_format(
 /*
  * Find out textwidth to be used for formatting:
  *	if 'textwidth' option is set, use it
- *	else if 'wrapmargin' option is set, use W_WIDTH(curwin) - 'wrapmargin'
+ *	else if 'wrapmargin' option is set, use curwin->w_width - 'wrapmargin'
  *	if invalid value, use 0.
  *	Set default to window width (maximum 79) for "gq" operator.
  */
@@ -6841,7 +6839,7 @@ comp_textwidth(
     {
 	/* The width is the window width minus 'wrapmargin' minus all the
 	 * things that add to the margin. */
-	textwidth = W_WIDTH(curwin) - curbuf->b_p_wm;
+	textwidth = curwin->w_width - curbuf->b_p_wm;
 #ifdef FEAT_CMDWIN
 	if (cmdwin_type != 0)
 	    textwidth -= 1;
@@ -6860,7 +6858,7 @@ comp_textwidth(
 	textwidth = 0;
     if (ff && textwidth == 0)
     {
-	textwidth = W_WIDTH(curwin) - 1;
+	textwidth = curwin->w_width - 1;
 	if (textwidth > 79)
 	    textwidth = 79;
     }
@@ -8208,7 +8206,7 @@ in_cinkeys(
 		{
 		    /* "0=word": Check if there are only blanks before the
 		     * word. */
-		    if (getwhitecols(line) !=
+		    if (getwhitecols_curline() !=
 				     (int)(curwin->w_cursor.col - (p - look)))
 			match = FALSE;
 		}
@@ -8374,7 +8372,7 @@ ins_reg(void)
     ++no_u_sync;
     if (regname == '=')
     {
-# ifdef USE_IM_CONTROL
+# ifdef FEAT_MBYTE
 	int	im_on = im_get_status();
 # endif
 	/* Sync undo when evaluating the expression calls setline() or
@@ -8382,7 +8380,7 @@ ins_reg(void)
 	u_sync_once = 2;
 
 	regname = get_expr_register();
-# ifdef USE_IM_CONTROL
+# ifdef FEAT_MBYTE
 	/* Restore the Input Method. */
 	if (im_on)
 	    im_set_active(TRUE);
@@ -8511,12 +8509,12 @@ ins_ctrl_hat(void)
 	{
 	    curbuf->b_p_iminsert = B_IMODE_LMAP;
 	    State |= LANGMAP;
-#ifdef USE_IM_CONTROL
+#ifdef FEAT_MBYTE
 	    im_set_active(FALSE);
 #endif
 	}
     }
-#ifdef USE_IM_CONTROL
+#ifdef FEAT_MBYTE
     else
     {
 	/* There are no ":lmap" mappings, toggle IM */
@@ -8540,7 +8538,7 @@ ins_ctrl_hat(void)
     if (gui.in_use)
 	gui_update_cursor(TRUE, FALSE);
 #endif
-#if defined(FEAT_WINDOWS) && defined(FEAT_KEYMAP)
+#if defined(FEAT_KEYMAP)
     /* Show/unshow value of 'keymap' in status lines. */
     status_redraw_curbuf();
 #endif
@@ -8663,7 +8661,7 @@ ins_esc(
 	}
     }
 
-#ifdef USE_IM_CONTROL
+#ifdef FEAT_MBYTE
     /* Disable IM to allow typing English directly for Normal mode commands.
      * When ":lmap" is enabled don't change 'iminsert' (IM can be enabled as
      * well). */
@@ -8759,7 +8757,7 @@ ins_start_select(int c)
 	    case K_KPAGEUP:
 	    case K_PAGEDOWN:
 	    case K_KPAGEDOWN:
-# ifdef MACOS
+# ifdef MACOS_X
 	    case K_LEFT:
 	    case K_RIGHT:
 	    case K_UP:
@@ -9382,7 +9380,6 @@ ins_mouse(int c)
     tpos = curwin->w_cursor;
     if (do_mouse(NULL, c, BACKWARD, 1L, 0))
     {
-#ifdef FEAT_WINDOWS
 	win_T	*new_curwin = curwin;
 
 	if (curwin != old_curwin && win_valid(old_curwin))
@@ -9392,40 +9389,32 @@ ins_mouse(int c)
 	    curwin = old_curwin;
 	    curbuf = curwin->w_buffer;
 	}
-#endif
 	start_arrow(curwin == old_curwin ? &tpos : NULL);
-#ifdef FEAT_WINDOWS
 	if (curwin != new_curwin && win_valid(new_curwin))
 	{
 	    curwin = new_curwin;
 	    curbuf = curwin->w_buffer;
 	}
-#endif
 # ifdef FEAT_CINDENT
 	can_cindent = TRUE;
 # endif
     }
 
-#ifdef FEAT_WINDOWS
     /* redraw status lines (in case another window became active) */
     redraw_statuslines();
-#endif
 }
 
     static void
 ins_mousescroll(int dir)
 {
     pos_T	tpos;
-# if defined(FEAT_WINDOWS)
     win_T	*old_curwin = curwin, *wp;
-# endif
 # ifdef FEAT_INS_EXPAND
     int		did_scroll = FALSE;
 # endif
 
     tpos = curwin->w_cursor;
 
-# ifdef FEAT_WINDOWS
     if (mouse_row >= 0 && mouse_col >= 0)
     {
 	int row, col;
@@ -9441,16 +9430,11 @@ ins_mousescroll(int dir)
 	curbuf = curwin->w_buffer;
     }
     if (curwin == old_curwin)
-# endif
 	undisplay_dollar();
 
 # ifdef FEAT_INS_EXPAND
     /* Don't scroll the window in which completion is being done. */
-    if (!pum_visible()
-#  if defined(FEAT_WINDOWS)
-	    || curwin != old_curwin
-#  endif
-	    )
+    if (!pum_visible() || curwin != old_curwin)
 # endif
     {
 	if (dir == MSCR_DOWN || dir == MSCR_UP)
@@ -9467,7 +9451,7 @@ ins_mousescroll(int dir)
 	    int val, step = 6;
 
 	    if (mod_mask & (MOD_MASK_SHIFT | MOD_MASK_CTRL))
-		step = W_WIDTH(curwin);
+		step = curwin->w_width;
 	    val = curwin->w_leftcol + (dir == MSCR_RIGHT ? -step : step);
 	    if (val < 0)
 		val = 0;
@@ -9479,12 +9463,10 @@ ins_mousescroll(int dir)
 # endif
     }
 
-# ifdef FEAT_WINDOWS
     curwin->w_redr_status = TRUE;
 
     curwin = old_curwin;
     curbuf = curwin->w_buffer;
-# endif
 
 # ifdef FEAT_INS_EXPAND
     /* The popup menu may overlay the window, need to redraw it.
@@ -9883,7 +9865,6 @@ ins_pageup(void)
 
     undisplay_dollar();
 
-#ifdef FEAT_WINDOWS
     if (mod_mask & MOD_MASK_CTRL)
     {
 	/* <C-PageUp>: tab page back */
@@ -9894,7 +9875,6 @@ ins_pageup(void)
 	}
 	return;
     }
-#endif
 
     tpos = curwin->w_cursor;
     if (onepage(BACKWARD, 1L) == OK)
@@ -9946,7 +9926,6 @@ ins_pagedown(void)
 
     undisplay_dollar();
 
-#ifdef FEAT_WINDOWS
     if (mod_mask & MOD_MASK_CTRL)
     {
 	/* <C-PageDown>: tab page forward */
@@ -9957,7 +9936,6 @@ ins_pagedown(void)
 	}
 	return;
     }
-#endif
 
     tpos = curwin->w_cursor;
     if (onepage(FORWARD, 1L) == OK)

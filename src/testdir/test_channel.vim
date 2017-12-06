@@ -274,12 +274,10 @@ func Ch_channel_handler(port)
   " Test that it works while waiting on a numbered message.
   call assert_equal('ok', ch_evalexpr(handle, 'call me'))
   call WaitFor('"we called you" == g:Ch_reply')
-  call assert_equal('we called you', g:Ch_reply)
 
   " Test that it works while not waiting on a numbered message.
   call ch_sendexpr(handle, 'call me again')
   call WaitFor('"we did call you" == g:Ch_reply')
-  call assert_equal('we did call you', g:Ch_reply)
 endfunc
 
 func Test_channel_handler()
@@ -322,7 +320,6 @@ func Ch_channel_zero(port)
   call assert_equal('sent zero', ch_evalexpr(handle, 'send zero'))
   if s:has_handler
     call WaitFor('"zero index" == g:Ch_reply')
-    call assert_equal('zero index', g:Ch_reply)
   else
     sleep 20m
     call assert_equal('', g:Ch_reply)
@@ -338,7 +335,6 @@ func Ch_channel_zero(port)
   else
     call assert_equal('', g:Ch_reply)
   endif
-  call assert_equal('sent zero', g:Ch_zero_reply)
 endfunc
 
 func Test_zero_reply()
@@ -709,7 +705,7 @@ func Run_test_pipe_to_buffer(use_name, nomod, do_msg)
     call ch_sendraw(handle, "double this\n")
     call ch_sendraw(handle, "quit\n")
     sp pipe-output
-    call WaitFor('line("$") >= 6 && g:Ch_bufClosed == "yes"')
+    call WaitFor('line("$") == ' . len(expected) . ' && g:Ch_bufClosed == "yes"')
     call assert_equal(expected, getline(1, '$'))
     if a:nomod
       call assert_equal(0, &modifiable)
@@ -804,7 +800,7 @@ func Run_test_pipe_err_to_buffer(use_name, nomod, do_msg)
     call ch_sendraw(handle, "doubleerr this\n")
     call ch_sendraw(handle, "quit\n")
     sp pipe-err
-    call WaitFor('line("$") >= 5')
+    call WaitFor('line("$") == ' . len(expected))
     call assert_equal(expected, getline(1, '$'))
     if a:nomod
       call assert_equal(0, &modifiable)
@@ -1130,12 +1126,14 @@ func Test_pipe_to_buffer_raw()
   let job = job_start([s:python, '-c', 
         \ 'import sys; [sys.stdout.write(".") and sys.stdout.flush() for _ in range(10000)]'], options)
   call assert_equal("run", job_status(job))
-  call WaitFor('len(join(getline(2,line("$")),"") >= 10000')
+  call WaitFor('len(join(getline(1, "$"), "")) >= 10000', 3000)
   try
-    for line in getline(2, '$')
-      let line = substitute(line, '^\.*', '', '')
-      call assert_equal('', line)
+    let totlen = 0
+    for line in getline(1, '$')
+      call assert_equal('', substitute(line, '^\.*', '', ''))
+      let totlen += len(line)
     endfor
+    call assert_equal(10000, totlen)
   finally
     call job_stop(job)
     bwipe!
@@ -1300,24 +1298,25 @@ func Test_close_and_exit_cb()
   endif
   call ch_log('Test_close_and_exit_cb')
 
-  let dict = {'ret': {}}
-  func dict.close_cb(ch) dict
+  let g:retdict = {'ret': {}}
+  func g:retdict.close_cb(ch) dict
     let self.ret['close_cb'] = job_status(ch_getjob(a:ch))
   endfunc
-  func dict.exit_cb(job, status) dict
+  func g:retdict.exit_cb(job, status) dict
     let self.ret['exit_cb'] = job_status(a:job)
   endfunc
 
   let g:job = job_start('echo', {
-        \ 'close_cb': dict.close_cb,
-        \ 'exit_cb': dict.exit_cb,
+        \ 'close_cb': g:retdict.close_cb,
+        \ 'exit_cb': g:retdict.exit_cb,
         \ })
   call assert_equal('run', job_status(g:job))
   unlet g:job
-  call WaitFor('len(dict.ret) >= 2')
-  call assert_equal(2, len(dict.ret))
-  call assert_match('^\%(dead\|run\)', dict.ret['close_cb'])
-  call assert_equal('dead', dict.ret['exit_cb'])
+  call WaitFor('len(g:retdict.ret) >= 2')
+  call assert_equal(2, len(g:retdict.ret))
+  call assert_match('^\%(dead\|run\)', g:retdict.ret['close_cb'])
+  call assert_equal('dead', g:retdict.ret['exit_cb'])
+  unlet g:retdict
 endfunc
 
 """"""""""
@@ -1465,7 +1464,7 @@ func Test_exit_callback_interval()
   let g:exit_cb_val = {'start': reltime(), 'end': 0, 'process': 0}
   let job = job_start([s:python, '-c', 'import time;time.sleep(0.5)'], {'exit_cb': 'MyExitTimeCb'})
   let g:exit_cb_val.process = job_info(job).process
-  call WaitFor('type(g:exit_cb_val.end) != v:t_number || g:exit_cb_val.end != 0')
+  call WaitFor('type(g:exit_cb_val.end) != v:t_number || g:exit_cb_val.end != 0', 2000)
   let elapsed = reltimefloat(g:exit_cb_val.end)
   call assert_true(elapsed > 0.5)
   call assert_true(elapsed < 1.0)
@@ -1547,13 +1546,14 @@ func Test_job_stop_immediately()
     return
   endif
 
-  let job = job_start([s:python, '-c', 'import time;time.sleep(10)'])
+  let g:job = job_start([s:python, '-c', 'import time;time.sleep(10)'])
   try
-    call job_stop(job)
-    call WaitFor('"dead" == job_status(job)')
-    call assert_equal('dead', job_status(job))
+    call job_stop(g:job)
+    call WaitFor('"dead" == job_status(g:job)')
+    call assert_equal('dead', job_status(g:job))
   finally
-    call job_stop(job, 'kill')
+    call job_stop(g:job, 'kill')
+    unlet g:job
   endtry
 endfunc
 
@@ -1585,9 +1585,25 @@ func Test_collapse_buffers()
   split testout
   1,$delete
   call job_start('cat test_channel.vim', {'out_io': 'buffer', 'out_name': 'testout'})
-  call WaitFor('line("$") > g:linecount')
+  call WaitFor('line("$") >= g:linecount')
   call assert_inrange(g:linecount, g:linecount + 1, line('$'))
   bwipe!
+endfunc
+
+func Test_cmd_parsing()
+  if !has('unix')
+    return
+  endif
+  call assert_false(filereadable("file with space"))
+  let job = job_start('touch "file with space"')
+  call WaitFor('filereadable("file with space")')
+  call assert_true(filereadable("file with space"))
+  call delete("file with space")
+
+  let job = job_start('touch file\ with\ space')
+  call WaitFor('filereadable("file with space")')
+  call assert_true(filereadable("file with space"))
+  call delete("file with space")
 endfunc
 
 func Test_raw_passes_nul()
@@ -1678,19 +1694,23 @@ func Test_cwd()
   let g:envstr = ''
   if has('win32')
     let expect = $TEMP
-    call job_start(['cmd', '/c', 'echo %CD%'], {'callback': {ch,msg->execute(":let g:envstr .= msg")}, 'cwd': expect})
+    let job = job_start(['cmd', '/c', 'echo %CD%'], {'callback': {ch,msg->execute(":let g:envstr .= msg")}, 'cwd': expect})
   else
     let expect = $HOME
-    call job_start(['pwd'], {'callback': {ch,msg->execute(":let g:envstr .= msg")}, 'cwd': expect})
+    let job = job_start(['pwd'], {'callback': {ch,msg->execute(":let g:envstr .= msg")}, 'cwd': expect})
   endif
-  call WaitFor('"" != g:envstr')
-  let expect = substitute(expect, '[/\\]$', '', '')
-  let g:envstr = substitute(g:envstr, '[/\\]$', '', '')
-  if $CI != '' && stridx(g:envstr, '/private/') == 0
-    let g:envstr = g:envstr[8:]
-  endif
-  call assert_equal(expect, g:envstr)
-  unlet g:envstr
+  try
+    call WaitFor('"" != g:envstr')
+    let expect = substitute(expect, '[/\\]$', '', '')
+    let g:envstr = substitute(g:envstr, '[/\\]$', '', '')
+    if $CI != '' && stridx(g:envstr, '/private/') == 0
+      let g:envstr = g:envstr[8:]
+    endif
+    call assert_equal(expect, g:envstr)
+  finally
+    call job_stop(job)
+    unlet g:envstr
+  endtry
 endfunc
 
 function Ch_test_close_lambda(port)
@@ -1715,7 +1735,7 @@ endfunc
 func s:test_list_args(cmd, out, remove_lf)
   try
     let g:out = ''
-    call job_start([s:python, '-c', a:cmd], {'callback': {ch, msg -> execute('let g:out .= msg')}, 'out_mode': 'raw'})
+    let job = job_start([s:python, '-c', a:cmd], {'callback': {ch, msg -> execute('let g:out .= msg')}, 'out_mode': 'raw'})
     call WaitFor('"" != g:out')
     if has('win32')
       let g:out = substitute(g:out, '\r', '', 'g')
@@ -1725,6 +1745,7 @@ func s:test_list_args(cmd, out, remove_lf)
     endif
     call assert_equal(a:out, g:out)
   finally
+    call job_stop(job)
     unlet g:out
   endtry
 endfunc

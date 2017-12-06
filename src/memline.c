@@ -1139,7 +1139,7 @@ ml_recover(void)
     attr = HL_ATTR(HLF_E);
 
     /*
-     * If the file name ends in ".s[uvw][a-z]" we assume this is the swap file.
+     * If the file name ends in ".s[a-w][a-z]" we assume this is the swap file.
      * Otherwise a search is done to find the swap file(s).
      */
     fname = curbuf->b_fname;
@@ -1153,7 +1153,8 @@ ml_recover(void)
 	    STRNICMP(fname + len - 4, ".s", 2)
 #endif
 						== 0
-		&& vim_strchr((char_u *)"UVWuvw", fname[len - 2]) != NULL
+		&& vim_strchr((char_u *)"abcdefghijklmnopqrstuvw",
+					   TOLOWER_ASC(fname[len - 2])) != NULL
 		&& ASCII_ISALPHA(fname[len - 1]))
     {
 	directly = TRUE;
@@ -2544,8 +2545,7 @@ ml_append(
     return ml_append_int(curbuf, lnum, line, len, newfile, FALSE);
 }
 
-#if defined(FEAT_SPELL) || (defined(FEAT_QUICKFIX) && defined(FEAT_WINDOWS)) \
-	|| defined(PROTO)
+#if defined(FEAT_SPELL) || defined(FEAT_QUICKFIX) || defined(PROTO)
 /*
  * Like ml_append() but for an arbitrary buffer.  The buffer must already have
  * a memline.
@@ -3112,7 +3112,8 @@ ml_replace(linenr_T lnum, char_u *line, int copy)
 }
 
 /*
- * Delete line 'lnum' in the current buffer.
+ * Delete line "lnum" in the current buffer.
+ * When "message" is TRUE may give a "No lines in buffer" message.
  *
  * Check: The caller of this function should probably also call
  * deleted_lines() after this.

@@ -11,7 +11,11 @@ let s:python = PythonProg()
 " Open a terminal with a shell, assign the job to g:job and return the buffer
 " number.
 func Run_shell_in_terminal(options)
-  let buf = term_start(&shell, a:options)
+  if has('win32')
+    let buf = term_start([&shell,'/k'], a:options)
+  else
+    let buf = term_start(&shell, a:options)
+  endif
 
   let termlist = term_list()
   call assert_equal(1, len(termlist))
@@ -34,15 +38,18 @@ func Stop_shell_in_terminal(buf)
 endfunc
 
 func Test_terminal_basic()
+  au BufWinEnter * if &buftype == 'terminal' | let b:done = 'yes' | endif
   let buf = Run_shell_in_terminal({})
+
   if has("unix")
-    call assert_match("^/dev/", job_info(g:job).tty)
-    call assert_match("^/dev/", term_gettty(''))
+    call assert_match('^/dev/', job_info(g:job).tty_out)
+    call assert_match('^/dev/', term_gettty(''))
   else
-    call assert_match("^winpty://", job_info(g:job).tty)
-    call assert_match("^winpty://", term_gettty(''))
+    call assert_match('^\\\\.\\pipe\\', job_info(g:job).tty_out)
+    call assert_match('^\\\\.\\pipe\\', term_gettty(''))
   endif
   call assert_equal('t', mode())
+  call assert_equal('yes', b:done)
   call assert_match('%aR[^\n]*running]', execute('ls'))
 
   call Stop_shell_in_terminal(buf)
@@ -54,6 +61,7 @@ func Test_terminal_basic()
   close
   call assert_equal("", bufname(buf))
 
+  au! BufWinEnter
   unlet g:job
 endfunc
 
@@ -82,6 +90,23 @@ func Test_terminal_wipe_buffer()
   unlet g:job
 endfunc
 
+func Test_terminal_split_quit()
+  let buf = Run_shell_in_terminal({})
+  call term_wait(buf)
+  split
+  quit!
+  call term_wait(buf)
+  sleep 50m
+  call assert_equal('run', job_status(g:job))
+
+  quit!
+  call WaitFor('job_status(g:job) == "dead"')
+  call assert_equal('dead', job_status(g:job))
+
+  exe buf . 'bwipe'
+  unlet g:job
+endfunc
+
 func Test_terminal_hide_buffer()
   let buf = Run_shell_in_terminal({})
   setlocal bufhidden=hide
@@ -102,6 +127,15 @@ endfunc
 func! s:Nasty_exit_cb(job, st)
   exe g:buf . 'bwipe!'
   let g:buf = 0
+endfunc
+
+func Get_cat_123_cmd()
+  if has('win32')
+    return 'cmd /c "cls && color 2 && echo 123"'
+  else
+    call writefile(["\<Esc>[32m123"], 'Xtext')
+    return "cat Xtext"
+  endif
 endfunc
 
 func Test_terminal_nasty_cb()
@@ -143,15 +177,6 @@ func Check_123(buf)
   call assert_equal('123', l)
 endfunc
 
-func Get_cat_123_cmd()
-  if has('win32')
-    return 'cmd /c "cls && color 2 && echo 123"'
-  else
-    call writefile(["\<Esc>[32m123"], 'Xtext')
-    return "cat Xtext"
-  endif
-endfunc
-
 func Test_terminal_scrape_123()
   let cmd = Get_cat_123_cmd()
   let buf = term_start(cmd)
@@ -164,15 +189,14 @@ func Test_terminal_scrape_123()
   call term_wait(1234)
 
   call term_wait(buf)
-  let g:buf = buf
   " On MS-Windows we first get a startup message of two lines, wait for the
   " "cls" to happen, after that we have one line with three characters.
-  call WaitFor('len(term_scrape(g:buf, 1)) == 3')
+  call WaitFor({-> len(term_scrape(buf, 1)) == 3})
   call Check_123(buf)
 
   " Must still work after the job ended.
-  let g:job = term_getjob(buf)
-  call WaitFor('job_status(g:job) == "dead"')
+  let job = term_getjob(buf)
+  call WaitFor({-> job_status(job) == "dead"})
   call term_wait(buf)
   call Check_123(buf)
 
@@ -188,17 +212,17 @@ func Test_terminal_scrape_multibyte()
   if has('win32')
     " Run cmd with UTF-8 codepage to make the type command print the expected
     " multibyte characters.
-    let g:buf = term_start("cmd /K chcp 65001")
-    call term_sendkeys(g:buf, "type Xtext\<CR>")
-    call term_sendkeys(g:buf, "exit\<CR>")
-    let g:line = 4
+    let buf = term_start("cmd /K chcp 65001")
+    call term_sendkeys(buf, "type Xtext\<CR>")
+    call term_sendkeys(buf, "exit\<CR>")
+    let line = 4
   else
-    let g:buf = term_start("cat Xtext")
-    let g:line = 1
+    let buf = term_start("cat Xtext")
+    let line = 1
   endif
 
-  call WaitFor('term_scrape(g:buf, g:line)[0].chars == "l"')
-  let l = term_scrape(g:buf, g:line)
+  call WaitFor({-> len(term_scrape(buf, line)) >= 7 && term_scrape(buf, line)[0].chars == "l"})
+  let l = term_scrape(buf, line)
   call assert_true(len(l) >= 7)
   call assert_equal('l', l[0].chars)
   call assert_equal('é', l[1].chars)
@@ -210,13 +234,11 @@ func Test_terminal_scrape_multibyte()
   call assert_equal('r', l[5].chars)
   call assert_equal('s', l[6].chars)
 
-  let g:job = term_getjob(g:buf)
-  call WaitFor('job_status(g:job) == "dead"')
-  call term_wait(g:buf)
+  let job = term_getjob(buf)
+  call WaitFor({-> job_status(job) == "dead"})
+  call term_wait(buf)
 
-  exe g:buf . 'bwipe'
-  unlet g:buf
-  unlet g:line
+  exe buf . 'bwipe'
   call delete('Xtext')
 endfunc
 
@@ -229,8 +251,8 @@ func Test_terminal_scroll()
   endif
   let buf = term_start(cmd)
 
-  let g:job = term_getjob(buf)
-  call WaitFor('job_status(g:job) == "dead"')
+  let job = term_getjob(buf)
+  call WaitFor({-> job_status(job) == "dead"})
   call term_wait(buf)
   if has('win32')
     " TODO: this should not be needed
@@ -330,9 +352,7 @@ func Test_terminal_curwin()
   call delete('Xtext')
 endfunc
 
-func Test_finish_open_close()
-  call assert_equal(1, winnr('$'))
-
+func s:get_sleep_cmd()
   if s:python != ''
     let cmd = s:python . " test_short_sleep.py"
     let waittime = 500
@@ -345,12 +365,18 @@ func Test_finish_open_close()
       let cmd = 'sleep 1'
     endif
   endif
+  return [cmd, waittime]
+endfunc
+
+func Test_terminal_finish_open_close()
+  call assert_equal(1, winnr('$'))
+
+  let [cmd, waittime] = s:get_sleep_cmd()
 
   exe 'terminal ++close ' . cmd
   call assert_equal(2, winnr('$'))
   wincmd p
   call WaitFor("winnr('$') == 1", waittime)
-  call assert_equal(1, winnr('$'))
 
   call term_start(cmd, {'term_finish': 'close'})
   call assert_equal(2, winnr('$'))
@@ -393,31 +419,51 @@ func Test_finish_open_close()
   call assert_equal(2, winnr('$'))
   call assert_equal(4, winheight(0))
   bwipe
-
 endfunc
 
 func Test_terminal_cwd()
-  if !has('unix')
+  if !executable('pwd')
     return
   endif
   call mkdir('Xdir')
   let buf = term_start('pwd', {'cwd': 'Xdir'})
-  sleep 100m
-  call term_wait(buf)
-  call assert_equal(getcwd() . '/Xdir', getline(1))
+  call WaitFor('"Xdir" == fnamemodify(getline(1), ":t")')
+  call assert_equal('Xdir', fnamemodify(getline(1), ":t"))
 
   exe buf . 'bwipe'
   call delete('Xdir', 'rf')
 endfunc
 
-func Test_terminal_env()
-  if !has('unix')
+func Test_terminal_servername()
+  if !has('clientserver')
     return
   endif
+  let g:buf = Run_shell_in_terminal({})
+  " Wait for the shell to display a prompt
+  call WaitFor('term_getline(g:buf, 1) != ""')
+  if has('win32')
+    call term_sendkeys(g:buf, "echo %VIM_SERVERNAME%\r")
+  else
+    call term_sendkeys(g:buf, "echo $VIM_SERVERNAME\r")
+  endif
+  call term_wait(g:buf)
+  call Stop_shell_in_terminal(g:buf)
+  call WaitFor('getline(2) == v:servername')
+  call assert_equal(v:servername, getline(2))
+
+  exe g:buf . 'bwipe'
+  unlet g:buf
+endfunc
+
+func Test_terminal_env()
   let g:buf = Run_shell_in_terminal({'env': {'TESTENV': 'correct'}})
   " Wait for the shell to display a prompt
   call WaitFor('term_getline(g:buf, 1) != ""')
-  call term_sendkeys(g:buf, "echo $TESTENV\r")
+  if has('win32')
+    call term_sendkeys(g:buf, "echo %TESTENV%\r")
+  else
+    call term_sendkeys(g:buf, "echo $TESTENV\r")
+  endif
   call term_wait(g:buf)
   call Stop_shell_in_terminal(g:buf)
   call WaitFor('getline(2) == "correct"')
@@ -459,7 +505,7 @@ func Test_terminal_list_args()
 endfunction
 
 func Test_terminal_noblock()
-  let g:buf = term_start(&shell)
+  let buf = term_start(&shell)
   if has('mac')
     " The shell or something else has a problem dealing with more than 1000
     " characters at the same time.
@@ -469,26 +515,24 @@ func Test_terminal_noblock()
   endif
 
   for c in ['a','b','c','d','e','f','g','h','i','j','k']
-    call term_sendkeys(g:buf, 'echo ' . repeat(c, len) . "\<cr>")
+    call term_sendkeys(buf, 'echo ' . repeat(c, len) . "\<cr>")
   endfor
-  call term_sendkeys(g:buf, "echo done\<cr>")
+  call term_sendkeys(buf, "echo done\<cr>")
 
   " On MS-Windows there is an extra empty line below "done".  Find "done" in
   " the last-but-one or the last-but-two line.
-  let g:lnum = term_getsize(g:buf)[0] - 1
-  call WaitFor('term_getline(g:buf, g:lnum) =~ "done" || term_getline(g:buf, g:lnum - 1) =~ "done"', 3000)
-  let line = term_getline(g:buf, g:lnum)
+  let lnum = term_getsize(buf)[0] - 1
+  call WaitFor({-> term_getline(buf, lnum) =~ "done" || term_getline(buf, lnum - 1) =~ "done"}, 3000)
+  let line = term_getline(buf, lnum)
   if line !~ 'done'
-    let line = term_getline(g:buf, g:lnum - 1)
+    let line = term_getline(buf, lnum - 1)
   endif
   call assert_match('done', line)
 
-  let g:job = term_getjob(g:buf)
-  call Stop_shell_in_terminal(g:buf)
-  call term_wait(g:buf)
-  unlet g:buf
+  let g:job = term_getjob(buf)
+  call Stop_shell_in_terminal(buf)
+  call term_wait(buf)
   unlet g:job
-  unlet g:lnum
   bwipe
 endfunc
 
@@ -539,10 +583,6 @@ func Test_terminal_write_stdin()
 endfunc
 
 func Test_terminal_no_cmd()
-  " Todo: make this work on all systems.
-  if !has('unix')
-    return
-  endif
   " Todo: make this work in the GUI
   if !has('gui_running')
     return
@@ -550,11 +590,17 @@ func Test_terminal_no_cmd()
   let buf = term_start('NONE', {})
   call assert_notequal(0, buf)
 
-  let pty = job_info(term_getjob(buf))['tty']
+  let pty = job_info(term_getjob(buf))['tty_out']
   call assert_notequal('', pty)
-  call system('echo "look here" > ' . pty)
-  call term_wait(buf)
-  call assert_equal('look here', term_getline(buf, 1))
+  if has('win32')
+    silent exe '!start cmd /c "echo look here > ' . pty . '"'
+  else
+    call system('echo "look here" > ' . pty)
+  endif
+  let g:buf = buf
+  call WaitFor('term_getline(g:buf, 1) =~ "look here"')
+
+  call assert_match('look here', term_getline(buf, 1))
   bwipe!
 endfunc
 
@@ -599,16 +645,13 @@ func Test_terminal_redir_file()
     call term_wait(buf)
     call WaitFor('len(readfile("Xfile")) > 0')
     call assert_match('123', readfile('Xfile')[0])
+    let g:job = term_getjob(buf)
+    call WaitFor('job_status(g:job) == "dead"')
     call delete('Xfile')
+    bwipe
   endif
 
   if has('unix')
-    let buf = term_start('xyzabc', {'err_io': 'file', 'err_name': 'Xfile'})
-    call term_wait(buf)
-    call WaitFor('len(readfile("Xfile")) > 0')
-    call assert_match('executing job failed', readfile('Xfile')[0])
-    call delete('Xfile')
-
     call writefile(['one line'], 'Xfile')
     let buf = term_start('cat', {'in_io': 'file', 'in_name': 'Xfile'})
     call term_wait(buf)
@@ -619,4 +662,136 @@ func Test_terminal_redir_file()
     bwipe
     call delete('Xfile')
   endif
+endfunc
+
+func TerminalTmap(remap)
+  let buf = Run_shell_in_terminal({})
+  call assert_equal('t', mode())
+
+  if a:remap
+    tmap 123 456
+  else
+    tnoremap 123 456
+  endif
+  " don't use abcde, it's an existing command
+  tmap 456 abxde
+  call assert_equal('456', maparg('123', 't'))
+  call assert_equal('abxde', maparg('456', 't'))
+  call feedkeys("123", 'tx')
+  let g:buf = buf
+  call WaitFor("term_getline(g:buf,term_getcursor(g:buf)[0]) =~ 'abxde\\|456'")
+  let lnum = term_getcursor(buf)[0]
+  if a:remap
+    call assert_match('abxde', term_getline(buf, lnum))
+  else
+    call assert_match('456', term_getline(buf, lnum))
+  endif
+
+  call term_sendkeys(buf, "\r")
+  call Stop_shell_in_terminal(buf)
+  call term_wait(buf)
+
+  tunmap 123
+  tunmap 456
+  call assert_equal('', maparg('123', 't'))
+  close
+  unlet g:job
+endfunc
+
+func Test_terminal_tmap()
+  call TerminalTmap(1)
+  call TerminalTmap(0)
+endfunc
+
+func Test_terminal_wall()
+  let buf = Run_shell_in_terminal({})
+  wall
+  call Stop_shell_in_terminal(buf)
+  call term_wait(buf)
+  exe buf . 'bwipe'
+  unlet g:job
+endfunc
+
+func Test_terminal_composing_unicode()
+  let save_enc = &encoding
+  set encoding=utf-8
+
+  if has('win32')
+    let cmd = "cmd /K chcp 65001"
+    let lnum = [3, 6, 9]
+  else
+    let cmd = &shell
+    let lnum = [1, 3, 5]
+  endif
+
+  enew
+  let buf = term_start(cmd, {'curwin': bufnr('')})
+  let g:job = term_getjob(buf)
+  call term_wait(buf, 50)
+
+  " ascii + composing
+  let txt = "a\u0308bc"
+  call term_sendkeys(buf, "echo " . txt . "\r")
+  call term_wait(buf, 50)
+  call assert_match("echo " . txt, term_getline(buf, lnum[0]))
+  call assert_equal(txt, term_getline(buf, lnum[0] + 1))
+  let l = term_scrape(buf, lnum[0] + 1)
+  call assert_equal("a\u0308", l[0].chars)
+  call assert_equal("b", l[1].chars)
+  call assert_equal("c", l[2].chars)
+
+  " multibyte + composing
+  let txt = "\u304b\u3099\u304e\u304f\u3099\u3052\u3053\u3099"
+  call term_sendkeys(buf, "echo " . txt . "\r")
+  call term_wait(buf, 50)
+  call assert_match("echo " . txt, term_getline(buf, lnum[1]))
+  call assert_equal(txt, term_getline(buf, lnum[1] + 1))
+  let l = term_scrape(buf, lnum[1] + 1)
+  call assert_equal("\u304b\u3099", l[0].chars)
+  call assert_equal("\u304e", l[1].chars)
+  call assert_equal("\u304f\u3099", l[2].chars)
+  call assert_equal("\u3052", l[3].chars)
+  call assert_equal("\u3053\u3099", l[4].chars)
+
+  " \u00a0 + composing
+  let txt = "abc\u00a0\u0308"
+  call term_sendkeys(buf, "echo " . txt . "\r")
+  call term_wait(buf, 50)
+  call assert_match("echo " . txt, term_getline(buf, lnum[2]))
+  call assert_equal(txt, term_getline(buf, lnum[2] + 1))
+  let l = term_scrape(buf, lnum[2] + 1)
+  call assert_equal("\u00a0\u0308", l[3].chars)
+
+  call term_sendkeys(buf, "exit\r")
+  call WaitFor('job_status(g:job) == "dead"')
+  call assert_equal('dead', job_status(g:job))
+  bwipe!
+  unlet g:job
+  let &encoding = save_enc
+endfunc
+
+func Test_terminal_aucmd_on_close()
+  fun Nop()
+    let s:called = 1
+  endfun
+
+  aug repro
+      au!
+      au BufWinLeave * call Nop()
+  aug END
+
+  let [cmd, waittime] = s:get_sleep_cmd()
+
+  call assert_equal(1, winnr('$'))
+  new
+  call setline(1, ['one', 'two'])
+  exe 'term ++close ' . cmd
+  wincmd p
+  call WaitFor("winnr('$') == 2", waittime)
+  call assert_equal(1, s:called)
+  bwipe!
+
+  unlet s:called
+  au! repro
+  delfunc Nop
 endfunc

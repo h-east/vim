@@ -12,12 +12,10 @@ default: nongui
 # Omitted:
 # test2		"\\tmp" doesn't work.
 # test10	'errorformat' is different
-# test12	can't unlink a swap file
-# test25	uses symbolic link
 # test49	fails in various ways
 # test97	\{ and \$ are not escaped characters.
 
-SCRIPTS = $(SCRIPTS_ALL) $(SCRIPTS_MORE1) $(SCRIPTS_MORE3) $(SCRIPTS_MORE4)
+SCRIPTS = $(SCRIPTS_ALL) $(SCRIPTS_MORE1) $(SCRIPTS_MORE4)
 
 TEST_OUTFILES = $(SCRIPTS_FIRST) $(SCRIPTS) $(SCRIPTS_WIN32) $(SCRIPTS_GUI)
 DOSTMP = dostmp
@@ -118,17 +116,17 @@ bench_re_freeze.out: bench_re_freeze.vim
 newtests: $(NEW_TESTS)
 
 .vim.res:
-	@echo "$(VIMPROG)" > vimcmd
+	@echo $(VIMPROG) > vimcmd
 	$(VIMPROG) -u NONE $(NO_INITS) -S runtest.vim $*.vim
 	@del vimcmd
 
 test_gui.res: test_gui.vim
-	@echo "$(VIMPROG)" > vimcmd
+	@echo $(VIMPROG) > vimcmd
 	$(VIMPROG) -u NONE $(NO_INITS) -S runtest.vim $*.vim
 	@del vimcmd
 
 test_gui_init.res: test_gui_init.vim
-	@echo "$(VIMPROG)" > vimcmd
+	@echo $(VIMPROG) > vimcmd
 	$(VIMPROG) -u gui_preinit.vim -U gui_init.vim $(NO_PLUGINS) -S runtest.vim $*.vim
 	@del vimcmd
 

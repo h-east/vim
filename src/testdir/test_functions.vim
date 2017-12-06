@@ -1,5 +1,21 @@
 " Tests for various functions.
 
+" Must be done first, since the alternate buffer must be unset.
+func Test_00_bufexists()
+  call assert_equal(0, bufexists('does_not_exist'))
+  call assert_equal(1, bufexists(bufnr('%')))
+  call assert_equal(0, bufexists(0))
+  new Xfoo
+  let bn = bufnr('%')
+  call assert_equal(1, bufexists(bn))
+  call assert_equal(1, bufexists('Xfoo'))
+  call assert_equal(1, bufexists(getcwd() . '/Xfoo'))
+  call assert_equal(1, bufexists(0))
+  bw
+  call assert_equal(0, bufexists(bn))
+  call assert_equal(0, bufexists('Xfoo'))
+endfunc
+
 func Test_empty()
   call assert_equal(1, empty(''))
   call assert_equal(0, empty('a'))
@@ -166,6 +182,19 @@ func Test_simplify()
   call assert_fails('call simplify([])', 'E730:')
   call assert_fails('call simplify({})', 'E731:')
   call assert_fails('call simplify(1.2)', 'E806:')
+endfunc
+
+func Test_strpart()
+  call assert_equal('de', strpart('abcdefg', 3, 2))
+  call assert_equal('ab', strpart('abcdefg', -2, 4))
+  call assert_equal('abcdefg', strpart('abcdefg', -2))
+  call assert_equal('fg', strpart('abcdefg', 5, 4))
+  call assert_equal('defg', strpart('abcdefg', 3))
+
+  if has('multi_byte')
+    call assert_equal('lép', strpart('éléphant', 2, 4))
+    call assert_equal('léphant', strpart('éléphant', 2))
+  endif
 endfunc
 
 func Test_tolower()
@@ -478,21 +507,6 @@ func Test_getbufvar()
   set fileformats&
 endfunc
 
-func Test_bufexists()
-  call assert_equal(0, bufexists('does_not_exist'))
-  call assert_equal(1, bufexists(bufnr('%')))
-  call assert_equal(0, bufexists(0))
-  new Xfoo
-  let bn = bufnr('%')
-  call assert_equal(1, bufexists(bn))
-  call assert_equal(1, bufexists('Xfoo'))
-  call assert_equal(1, bufexists(getcwd() . '/Xfoo'))
-  call assert_equal(1, bufexists(0))
-  bw
-  call assert_equal(0, bufexists(bn))
-  call assert_equal(0, bufexists('Xfoo'))
-endfunc
-
 func Test_last_buffer_nr()
   call assert_equal(bufnr('$'), last_buffer_nr())
 endfunc
@@ -528,10 +542,46 @@ func Test_strridx()
   call assert_equal(-1, strridx('hello', 'hello world'))
 endfunc
 
+func Test_match_func()
+  call assert_equal(4,  match('testing', 'ing'))
+  call assert_equal(4,  match('testing', 'ing', 2))
+  call assert_equal(-1, match('testing', 'ing', 5))
+  call assert_equal(-1, match('testing', 'ing', 8))
+  call assert_equal(1, match(['vim', 'testing', 'execute'], 'ing'))
+  call assert_equal(-1, match(['vim', 'testing', 'execute'], 'img'))
+endfunc
+
 func Test_matchend()
   call assert_equal(7,  matchend('testing', 'ing'))
   call assert_equal(7,  matchend('testing', 'ing', 2))
   call assert_equal(-1, matchend('testing', 'ing', 5))
+  call assert_equal(-1, matchend('testing', 'ing', 8))
+  call assert_equal(match(['vim', 'testing', 'execute'], 'ing'), matchend(['vim', 'testing', 'execute'], 'ing'))
+  call assert_equal(match(['vim', 'testing', 'execute'], 'img'), matchend(['vim', 'testing', 'execute'], 'img'))
+endfunc
+
+func Test_matchlist()
+  call assert_equal(['acd', 'a', '', 'c', 'd', '', '', '', '', ''],  matchlist('acd', '\(a\)\?\(b\)\?\(c\)\?\(.*\)'))
+  call assert_equal(['d', '', '', '', 'd', '', '', '', '', ''],  matchlist('acd', '\(a\)\?\(b\)\?\(c\)\?\(.*\)', 2))
+  call assert_equal([],  matchlist('acd', '\(a\)\?\(b\)\?\(c\)\?\(.*\)', 4))
+endfunc
+
+func Test_matchstr()
+  call assert_equal('ing',  matchstr('testing', 'ing'))
+  call assert_equal('ing',  matchstr('testing', 'ing', 2))
+  call assert_equal('', matchstr('testing', 'ing', 5))
+  call assert_equal('', matchstr('testing', 'ing', 8))
+  call assert_equal('testing', matchstr(['vim', 'testing', 'execute'], 'ing'))
+  call assert_equal('', matchstr(['vim', 'testing', 'execute'], 'img'))
+endfunc
+
+func Test_matchstrpos()
+  call assert_equal(['ing', 4, 7], matchstrpos('testing', 'ing'))
+  call assert_equal(['ing', 4, 7], matchstrpos('testing', 'ing', 2))
+  call assert_equal(['', -1, -1], matchstrpos('testing', 'ing', 5))
+  call assert_equal(['', -1, -1], matchstrpos('testing', 'ing', 8))
+  call assert_equal(['ing', 1, 4, 7], matchstrpos(['vim', 'testing', 'execute'], 'ing'))
+  call assert_equal(['', -1, -1, -1], matchstrpos(['vim', 'testing', 'execute'], 'img'))
 endfunc
 
 func Test_nextnonblank_prevnonblank()

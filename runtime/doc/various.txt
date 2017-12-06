@@ -1,4 +1,4 @@
-*various.txt*   For Vim version 8.0.  Last change: 2017 Feb 24
+*various.txt*   For Vim version 8.0.  Last change: 2017 Nov 18
 
 
 		  VIM REFERENCE MANUAL    by Bram Moolenaar
@@ -309,9 +309,13 @@ g8			Print the hex values of the bytes used in the
    *+ARP*		Amiga only: ARP support included
 B  *+arabic*		|Arabic| language support
 N  *+autocmd*		|:autocmd|, automatic commands
-m  *+balloon_eval*	|balloon-eval| support. Included when compiling with
-			supported GUI (Motif, GTK, GUI) and either
-			Netbeans/Sun Workshop integration or |+eval| feature.
+H  *+autoservername*	Automatically enable |clientserver|
+m  *+balloon_eval*	|balloon-eval| support in the GUI. Included when
+			compiling with supported GUI (Motif, GTK, GUI) and
+			either Netbeans/Sun Workshop integration or |+eval|
+			feature.
+H  *+balloon_eval_term*	|balloon-eval| support in the terminal,
+			'balloonevalterm'
 N  *+browse*		|:browse| command
 N  *+builtin_terms*	some terminals builtin |builtin-terms|
 B  *++builtin_terms*	maximal terminals builtin |builtin-terms|
@@ -323,7 +327,7 @@ N  *+clientserver*	Unix and Win32: Remote invocation |clientserver|
    *+clipboard*		|clipboard| support
 N  *+clpum*		command line pupup menu support.
 N  *+cmdline_compl*	command line completion |cmdline-completion|
-N  *+cmdline_hist*	command line history |cmdline-history|
+S  *+cmdline_hist*	command line history |cmdline-history|
 N  *+cmdline_info*	|'showcmd'| and |'ruler'|
 N  *+comments*		|'comments'| support
 B  *+conceal*		"conceal" support, see |conceal| |:syn-conceal| etc.
@@ -362,7 +366,7 @@ m  *+hangul_input*	Hangul input support |hangul|
    *+iconv/dyn*		Likewise |iconv-dynamic| |/dyn|
 N  *+insert_expand*	|insert_expand| Insert mode completion
 m  *+job*		starting and stopping jobs |job|
-N  *+jumplist*		|jumplist|
+S  *+jumplist*		|jumplist|
 B  *+keymap*		|'keymap'|
 N  *+lambda*		|lambda| and |closure|
 B  *+langmap*		|'langmap'|
@@ -439,14 +443,16 @@ N  *+title*		Setting the window 'title' and 'icon'
 N  *+toolbar*		|gui-toolbar|
 N  *+user_commands*	User-defined commands. |user-commands|
 N  *+viminfo*		|'viminfo'|
-N  *+vertsplit*		Vertically split windows |:vsplit|
+   *+vertsplit*		Vertically split windows |:vsplit|; Always enabled
+			since 8.0.1118.
+			in sync with the |+windows| feature
 N  *+virtualedit*	|'virtualedit'|
 S  *+visual*		Visual mode |Visual-mode| Always enabled since 7.4.200.
 N  *+visualextra*	extra Visual mode commands |blockwise-operators|
 N  *+vreplace*		|gR| and |gr|
 N  *+wildignore*	|'wildignore'|
 N  *+wildmenu*		|'wildmenu'|
-S  *+windows*		more than one window
+   *+windows*		more than one window; Always enabled since 8.0.1118.
 m  *+writebackup*	|'writebackup'| is default on
 m  *+xim*		X input method |xim|
    *+xfontset*		X fontset support |xfontset|

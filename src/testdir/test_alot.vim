@@ -1,9 +1,6 @@
 " A series of tests that can run in one Vim invocation.
 " This makes testing go faster, since Vim doesn't need to restart.
 
-source shared.vim
-
-set belloff=all
 source test_assign.vim
 source test_bufline.vim
 source test_cd.vim
@@ -44,6 +41,7 @@ source test_popup.vim
 source test_put.vim
 source test_recover.vim
 source test_reltime.vim
+source test_scroll_opt.vim
 source test_searchpos.vim
 source test_set.vim
 source test_sort.vim

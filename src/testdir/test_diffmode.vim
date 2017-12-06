@@ -1,5 +1,4 @@
 " Tests for diff mode
-set belloff=all
 
 func Test_diff_fold_sync()
   enew!
@@ -376,6 +375,29 @@ func Test_diffopt_vertical()
   %bwipe
 endfunc
 
+func Test_diffopt_hiddenoff()
+  set diffopt=filler,foldcolumn:0,hiddenoff
+  e! one
+  call setline(1, ['Two', 'Three'])
+  redraw
+  let normattr = screenattr(1, 1)
+  diffthis
+  botright vert new two
+  call setline(1, ['One', 'Four'])
+  diffthis
+  redraw
+  call assert_notequal(normattr, screenattr(1, 1))
+  set hidden
+  close
+  redraw
+  " should not diffing with hidden buffer two while 'hiddenoff' is enabled
+  call assert_equal(normattr, screenattr(1, 1))
+
+  bwipe!
+  bwipe!
+  set hidden& diffopt&
+endfunc
+
 func Test_diffoff_hidden()
   set diffopt=filler,foldcolumn:0
   e! one
@@ -420,7 +442,7 @@ func Test_setting_cursor()
   new Xtest2
   put =range(1,100)
   wq
-  
+
   tabe Xtest2
   $
   diffsp Xtest1
@@ -501,7 +523,7 @@ func Test_diffpatch()
   3
 + 4
 .
-  saveas Xpatch
+  saveas! Xpatch
   bwipe!
   new
   call assert_fails('diffpatch Xpatch', 'E816:')
@@ -544,6 +566,47 @@ func Test_diff_nomodifiable()
   call assert_fails('norm dp', 'E793:')
   setl nomodifiable
   call assert_fails('norm do', 'E21:')
+  %bwipe!
+endfunc
+
+func Test_diff_hlID()
+  new
+  call setline(1, [1, 2, 3])
+  diffthis
+  vnew
+  call setline(1, ['1x', 2, 'x', 3])
+  diffthis
+  redraw
+
+  call assert_equal(synIDattr(diff_hlID(-1, 1), "name"), "")
+
+  call assert_equal(synIDattr(diff_hlID(1, 1), "name"), "DiffChange")
+  call assert_equal(synIDattr(diff_hlID(1, 2), "name"), "DiffText")
+  call assert_equal(synIDattr(diff_hlID(2, 1), "name"), "")
+  call assert_equal(synIDattr(diff_hlID(3, 1), "name"), "DiffAdd")
+  call assert_equal(synIDattr(diff_hlID(4, 1), "name"), "")
+
+  wincmd w
+  call assert_equal(synIDattr(diff_hlID(1, 1), "name"), "DiffChange")
+  call assert_equal(synIDattr(diff_hlID(2, 1), "name"), "")
+  call assert_equal(synIDattr(diff_hlID(3, 1), "name"), "")
+
+  %bwipe!
+endfunc
+
+func Test_diff_filler()
+  new
+  call setline(1, [1, 2, 3, 'x', 4])
+  diffthis
+  vnew
+  call setline(1, [1, 2, 'y', 'y', 3, 4])
+  diffthis
+  redraw
+
+  call assert_equal([0, 0, 0, 0, 0, 0, 0, 1, 0], map(range(-1, 7), 'diff_filler(v:val)'))
+  wincmd w
+  call assert_equal([0, 0, 0, 0, 2, 0, 0, 0], map(range(-1, 6), 'diff_filler(v:val)'))
+
   %bwipe!
 endfunc
 

@@ -1,6 +1,5 @@
 " Tests for editing the command line.
 
-set belloff=all
 
 func Test_complete_tab()
   call writefile(['testfile'], 'Xtestfile')
@@ -364,6 +363,27 @@ func Test_cmdline_complete_user_cmd()
   call feedkeys(":Foo b\<Tab>\<Home>\"\<cr>", 'tx')
   call assert_equal('"Foo blue', @:)
   delcommand Foo
+endfunc
+
+func Test_cmdline_write_alternatefile()
+  new
+  call setline('.', ['one', 'two'])
+  f foo.txt
+  new
+  f #-A
+  call assert_equal('foo.txt-A', expand('%'))
+  f #<-B.txt
+  call assert_equal('foo-B.txt', expand('%'))
+  f %<
+  call assert_equal('foo-B', expand('%'))
+  new
+  call assert_fails('f #<', 'E95')
+  bw!
+  f foo-B.txt
+  f %<-A
+  call assert_equal('foo-B-A', expand('%'))
+  bw!
+  bw!
 endfunc
 
 " using a leading backslash here

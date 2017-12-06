@@ -1,4 +1,4 @@
-*options.txt*	For Vim version 8.0.  Last change: 2017 Aug 27
+*options.txt*	For Vim version 8.0.  Last change: 2017 Nov 26
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -423,6 +423,16 @@ command, not when assigning a value to an option with ":let".
 							*$HOME-windows*
 On MS-Windows, if $HOME is not defined as an environment variable, then
 at runtime Vim will set it to the expansion of $HOMEDRIVE$HOMEPATH.
+If $HOMEDRIVE is not set then $USERPROFILE is used.
+
+This expanded value is not exported to the environment, this matters when
+running an external command: >
+	:echo system('set | findstr ^HOME=')
+and >
+	:echo luaeval('os.getenv("HOME")')
+should echo nothing (an empty string) despite exists('$HOME') being true.
+When setting $HOME to a non-empty string it will be exported to the
+subprocesses.
 
 
 Note the maximum length of an expanded option is limited.  How much depends on
@@ -722,7 +732,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 	Vim may set this option automatically at startup time when Vim is
 	compiled with the |+termresponse| feature and if |t_u7| is set to the
-	escape sequence to request cursor position report.
+	escape sequence to request cursor position report.  The response can
+	be found in |v:termu7resp|.
 
 			*'antialias'* *'anti'* *'noantialias'* *'noanti'*
 'antialias' 'anti'	boolean (default: off)
@@ -870,11 +881,12 @@ A jump table for the options with a short description can be found at |Q_op|.
 <	Vim will guess the value.  In the GUI this should work correctly,
 	in other cases Vim might not be able to guess the right value.
 
-	When the t_BG option is set, Vim will use it to request the background
+	When the |t_RB| option is set, Vim will use it to request the background
 	color from the terminal.  If the returned RGB value is dark/light and
 	'background' is not dark/light, 'background' will be set and the
 	screen is redrawn.  This may have side effects, make t_BG empty in
-	your .vimrc if you suspect this problem.
+	your .vimrc if you suspect this problem.  The response to |t_RB| can
+	be found in |v:termrbgresp|.
 
 	When starting the GUI, the default value for 'background' will be
 	"light".  When the value is not set in the .gvimrc, and Vim detects
@@ -1115,7 +1127,16 @@ A jump table for the options with a short description can be found at |Q_op|.
 			{not in Vi}
 			{only available when compiled with the |+balloon_eval|
 			feature}
-	Switch on the |balloon-eval| functionality.
+	Switch on the |balloon-eval| functionality for the GUI.
+
+		       *'balloonevalterm'* *'bevalterm'* *'noballoonevalterm'*
+		       *'nobevalterm'*
+'balloonevalterm' 'bevalterm'	boolean	(default off)
+			global
+			{not in Vi}
+			{only available when compiled with the
+			|+balloon_eval_term| feature}
+	Switch on the |balloon-eval| functionality for the terminal.
 
 						     *'balloonexpr'* *'bexpr'*
 'balloonexpr' 'bexpr'	string	(default "")
@@ -2651,6 +2672,9 @@ A jump table for the options with a short description can be found at |Q_op|.
 		vertical	Start diff mode with vertical splits (unless
 				explicitly specified otherwise).
 
+		hiddenoff	Do not use diff mode for a buffer when it
+				becomes hidden.
+
 		foldcolumn:{n}	Set the 'foldcolumn' option to {n} when
 				starting diff mode.  Without this 2 is used.
 
@@ -3547,6 +3571,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 	systems without an fsync() implementation, this variable is always
 	off.
 	Also see 'swapsync' for controlling fsync() on swap files.
+	'fsync' also applies to |writefile()|, unless a flag is used to
+	overrule it.
 
 				   *'gdefault'* *'gd'* *'nogdefault'* *'nogd'*
 'gdefault' 'gd'		boolean	(default off)
@@ -3921,7 +3947,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 		that this flag must be added in the .vimrc file, before
 		switching on syntax or filetype recognition (when the |gvimrc|
 		file is sourced the system menu has already been loaded; the
-		":syntax on" and ":filetype on" commands load the menu too).
+		`:syntax on` and `:filetype on` commands load the menu too).
 								*'go-g'*
 	  'g'	Grey menu items: Make menu items that are not active grey.  If
 		'g' is not included inactive menu items are not shown at all.
@@ -3965,7 +3991,13 @@ A jump table for the options with a short description can be found at |Q_op|.
 		removing it after the GUI has started has no effect.
 								*'go-F'*
 	  'F'	Add a footer.  Only for Motif.  See |gui-footer|.
-
+								*'go-k'*
+	  'k'	Keep the GUI window size when adding/removing a scrollbar, or
+		toolbar, tabline, etc.  Instead, the behavior is similar to
+		when the window is maximized and will adjust 'lines' and
+		'columns' to fit to the window.  Without the 'k' flag Vim will
+		try to keep 'lines' and 'columns' the same when adding and
+		removing GUI components.
 
 						*'guipty'* *'noguipty'*
 'guipty'		boolean	(default on)
@@ -4109,7 +4141,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 			    set.
 	|hl-Question|	 r  |hit-enter| prompt and yes/no questions
 	|hl-StatusLine|	 s  status line of current window |status-line|
-	|hl-StatusLineNC| S  status lines of not-current windows
+	|hl-StatusLineNC|  S  status lines of not-current windows
 	|hl-Title|	 t  Titles for output from ":set all", ":autocmd" etc.
 	|hl-VertSplit|	 c  column used to separate vertically split windows
 	|hl-Visual|	 v  Visual mode
@@ -4265,10 +4297,10 @@ A jump table for the options with a short description can be found at |Q_op|.
 'imactivatefunc' 'imaf'	string (default "")
 			global
 			{not in Vi}
-			{only available when compiled with |+xim| and
-			|+GUI_GTK|}
+			{only available when compiled with |+mbyte|}
 	This option specifies a function that will be called to
-	activate/inactivate Input Method.
+	activate or deactivate the Input Method.
+	It is not used in the GUI.
 
 	Example: >
 		function ImActivateFunc(active)
@@ -4317,8 +4349,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 'imcmdline' 'imc'	boolean (default off)
 			global
 			{not in Vi}
-			{only available when compiled with the |+xim|,
-			|+multi_byte_ime| or |global-ime| features}
+			{only available when compiled with |+mbyte|}
 	When set the Input Method is always on when starting to edit a command
 	line, unless entering a search pattern (see 'imsearch' for that).
 	Setting this option is useful when your input method allows entering
@@ -4329,15 +4360,14 @@ A jump table for the options with a short description can be found at |Q_op|.
 'imdisable' 'imd'	boolean (default off, on for some systems (SGI))
 			global
 			{not in Vi}
-			{only available when compiled with the |+xim|,
-			|+multi_byte_ime| or |global-ime| features}
+			{only available when compiled with |+mbyte|}
 	When set the Input Method is never used.  This is useful to disable
 	the IM when it doesn't work properly.
 	Currently this option is on by default for SGI/IRIX machines.  This
 	may change in later releases.
 
 						*'iminsert'* *'imi'*
-'iminsert' 'imi'	number (default 0, 2 when an input method is supported)
+'iminsert' 'imi'	number (default 0)
 			local to buffer
 			{not in Vi}
 	Specifies whether :lmap or an Input Method (IM) is to be used in
@@ -4345,8 +4375,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 		0	:lmap is off and IM is off
 		1	:lmap is ON and IM is off
 		2	:lmap is off and IM is ON
-	2 is available only when compiled with the |+multi_byte_ime|, |+xim|
-	or |global-ime|.
 	To always reset the option to zero when leaving Insert mode with <Esc>
 	this can be used: >
 		:inoremap <ESC> <ESC>:set iminsert=0<CR>
@@ -4359,8 +4387,12 @@ A jump table for the options with a short description can be found at |Q_op|.
 	The value 0 may not work correctly with Athena and Motif with some XIM
 	methods.  Use 'imdisable' to disable XIM then.
 
+	You can set 'imactivatefunc' and 'imstatusfunc' to handle IME/XIM
+	via external command if vim is not compiled with the |+xim|,
+	|+multi_byte_ime| or |global-ime|.
+
 						*'imsearch'* *'ims'*
-'imsearch' 'ims'	number (default 0, 2 when an input method is supported)
+'imsearch' 'ims'	number (default -1)
 			local to buffer
 			{not in Vi}
 	Specifies whether :lmap or an Input Method (IM) is to be used when
@@ -4381,10 +4413,10 @@ A jump table for the options with a short description can be found at |Q_op|.
 'imstatusfunc' 'imsf'	string (default "")
 			global
 			{not in Vi}
-			{only available when compiled with |+xim| and
-			|+GUI_GTK|}
+			{only available when compiled with |+mbyte|}
 	This option specifies a function that is called to obtain the status
 	of Input Method.  It must return a positive number when IME is active.
+	It is not used in the GUI.
 
 	Example: >
 		function ImStatusFunc()
@@ -4401,13 +4433,13 @@ A jump table for the options with a short description can be found at |Q_op|.
 			{not in Vi}
 			{only available when compiled with |+xim| and
 			|+GUI_GTK|}
-	This option specifies the input style of Input Method.
-	Set to zero if you want to use on-the-spot style.
-	Set to one if you want to use over-the-spot style.
+	This option specifies the input style of Input Method:
+	0   use on-the-spot style
+	1   over-the-spot style
 	See: |xim-input-style|
 
-	For a long time on-the-spot sytle had been used in GTK version of vim,
-	however, it is known that it causes troubles when using mappings,
+	For a long time on-the-spot style had been used in the GTK version of
+	vim, however, it is known that it causes troubles when using mappings,
 	|single-repeat|, etc.  Therefore over-the-spot style becomes the
 	default now.  This should work fine for most people, however if you
 	have any problem with it, try using on-the-spot style.
@@ -4473,7 +4505,17 @@ A jump table for the options with a short description can be found at |Q_op|.
 	match may not be found.  This is to avoid that Vim hangs while you
 	are typing the pattern.
 	The highlighting can be set with the 'i' flag in 'highlight'.
-	See also: 'hlsearch'.
+	When 'hlsearch' is on, all matched strings are highlighted too while
+	typing a search command. See also: 'hlsearch'.
+	If you don't want turn 'hlsearch' on, but want to highlight all matches
+	while searching, you can turn on and off 'hlsearch' with autocmd.
+	Example: >
+		augroup vimrc-incsearch-highlight
+		  autocmd!
+		  autocmd CmdlineEnter /,\? :set hlsearch
+		  autocmd CmdlineLeave /,\? :set nohlsearch
+		augroup END
+<
 	CTRL-L can be used to add one character from after the current match
 	to the command line.  If 'ignorecase' and 'smartcase' are set and the
 	command line has no uppercase characters, the added character is
@@ -5143,7 +5185,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 		:au FileType c,cpp,java set mps+==:;
 
 <	For a more advanced way of using "%", see the matchit.vim plugin in
-	the $VIMRUNTIME/macros directory. |add-local-help|
+	the $VIMRUNTIME/pack/dist/opt/matchit directory. |add-local-help|
 
 						*'matchtime'* *'mat'*
 'matchtime' 'mat'	number	(default 5)
@@ -5346,7 +5388,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	sysmouse and Linux console with gpm).  For using the mouse in the
 	GUI, see |gui-mouse|.
 	The mouse can be enabled for different modes:
-		n	Normal mode
+		n	Normal mode and Terminal modes
 		v	Visual mode
 		i	Insert mode
 		c	Command-line mode
@@ -5493,6 +5535,33 @@ A jump table for the options with a short description can be found at |Q_op|.
 	Only for GUI, MS-DOS, Win32 and Unix with xterm.  Defines the maximum
 	time in msec between two mouse clicks for the second click to be
 	recognized as a multi click.
+
+						*'mzschemedll'*
+'mzschemedll'		string	(default depends on the build)
+			global
+			{not in Vi}
+			{only available when compiled with the |+mzscheme/dyn|
+			feature}
+	Specifies the name of the MzScheme shared library. The default is
+	DYNAMIC_MZSCH_DLL which was specified at compile time.
+	Environment variables are expanded |:set_env|.
+	The value must be set in the |vimrc| script or earlier.  In the
+	startup, before the |load-plugins| step.
+	This option cannot be set from a |modeline| or in the |sandbox|, for
+	security reasons.
+
+						*'mzschemegcdll'*
+'mzschemegcdll'		string	(default depends on the build)
+			global
+			{not in Vi}
+			{only available when compiled with the |+mzscheme/dyn|
+			feature}
+	Specifies the name of the MzScheme GC shared library. The default is
+	DYNAMIC_MZGC_DLL which was specified at compile time.
+	The value can be equal to 'mzschemedll' if it includes the GC code.
+	Environment variables are expanded |:set_env|.
+	This option cannot be set from a |modeline| or in the |sandbox|, for
+	security reasons.
 
 						    *'mzquantum'* *'mzq'*
 'mzquantum' 'mzq'	number	(default 100)
@@ -5783,6 +5852,18 @@ A jump table for the options with a short description can be found at |Q_op|.
 		:let &path = &path . "," . substitute($INCL, ';', ',', 'g')
 <	Replace the ';' with a ':' or whatever separator is used.  Note that
 	this doesn't work when $INCL contains a comma or white space.
+
+						*'perldll'*
+'perldll'		string	(default depends on the build)
+			global
+			{not in Vi}
+			{only available when compiled with the |+perl/dyn|
+			feature}
+	Specifies the name of the Perl shared library. The default is
+	DYNAMIC_PERL_DLL, which was specified at compile time.
+	Environment variables are expanded |:set_env|.
+	This option cannot be set from a |modeline| or in the |sandbox|, for
+	security reasons.
 
 			*'preserveindent'* *'pi'* *'nopreserveindent'* *'nopi'*
 'preserveindent' 'pi'	boolean	(default off)
@@ -6079,9 +6160,10 @@ A jump table for the options with a short description can be found at |Q_op|.
 		  geom	    pixelGeometry	int	0 - 2 (see below)
 		  renmode   renderingMode	int	0 - 6 (see below)
 		  taamode   textAntialiasMode	int	0 - 3 (see below)
+		  scrlines  Scroll Lines	int	>= 0  (see below)
 
-		See this URL for detail:
-		  http://msdn.microsoft.com/en-us/library/dd368190.aspx
+		See this URL for detail (except for scrlines):
+		  https://msdn.microsoft.com/en-us/library/dd368190.aspx
 
 		For geom: structure of a device pixel.
 		  0 - DWRITE_PIXEL_GEOMETRY_FLAT
@@ -6089,7 +6171,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 		  2 - DWRITE_PIXEL_GEOMETRY_BGR
 
 		See this URL for detail:
-		  http://msdn.microsoft.com/en-us/library/dd368114.aspx
+		  https://msdn.microsoft.com/en-us/library/dd368114.aspx
 
 		For renmode: method of rendering glyphs.
 		  0 - DWRITE_RENDERING_MODE_DEFAULT
@@ -6101,7 +6183,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 		  6 - DWRITE_RENDERING_MODE_OUTLINE
 
 		See this URL for detail:
-		  http://msdn.microsoft.com/en-us/library/dd368118.aspx
+		  https://msdn.microsoft.com/en-us/library/dd368118.aspx
 
 		For taamode: antialiasing mode used for drawing text.
 		  0 - D2D1_TEXT_ANTIALIAS_MODE_DEFAULT
@@ -6110,15 +6192,55 @@ A jump table for the options with a short description can be found at |Q_op|.
 		  3 - D2D1_TEXT_ANTIALIAS_MODE_ALIASED
 
 		See this URL for detail:
-		  http://msdn.microsoft.com/en-us/library/dd368170.aspx
+		  https://msdn.microsoft.com/en-us/library/dd368170.aspx
+
+		For scrlines: threshold for lines to be scrolled.
+		    0 - Always use scrolling. (default)
+		    1 - Use full page redrawing.
+		  > 1 - If the lines to be scrolled is grater or equal to the
+			specified value, use redrawing.  Otherwise use
+			scrolling.
+
+		If you feel scrolling a page (CTRL-F) is too slow with DirectX
+		renderer, try this "scrlines" option.
+		When set it "1", Vim uses full page redrawing instead of
+		scrolling.  Redrawing a page is faster than scrolling a
+		page in some environments.
+		After that, when you feel scrolling lines (CTRL-Y) becomes
+		slow, please try "2" or greater value for this option.
+		It works threshold line number to switch scrolling to
+		redrawing.  Scrolling a few lines might be faster than
+		redrawing a page in some environments.
 
 		Example: >
 		  set encoding=utf-8
-		  set gfn=Ricty_Diminished:h12:cSHIFTJIS
+		  set gfn=Ricty_Diminished:h12
 		  set rop=type:directx
 <
-		If select a raster font (Courier, Terminal or FixedSys) to
-		'guifont', it fallbacks to be drawn by GDI automatically.
+		If select a raster font (Courier, Terminal or FixedSys which
+		have ".fon" extension in file name) to 'guifont', it will be
+		drawn by GDI as a fallback.
+
+		NOTE: It is known that some fonts and options combination
+		causes trouble on drawing glyphs.
+
+		  - 'renmode:5' and 'renmode:6' will not work with some
+		    special made fonts (True-Type fonts which includes only
+		    bitmap glyphs).
+		  - 'taamode:3' will not work with some vector fonts.
+
+		NOTE: With this option, you can display colored emoji
+		(emoticon) in Windows 8.1 or later.  To display colored emoji,
+		there are some conditions which you should notice.
+
+		  - If your font includes non-colored emoji already, it will
+		    be used.
+		  - If your font doesn't have emoji, the system chooses an
+		    alternative symbol font.  On Windows 10, "Segoe UI Emoji"
+		    will be used.
+		  - When this alternative font didn't have fixed width glyph,
+		    emoji might be rendered beyond the bounding box of drawing
+		    cell.
 
 	Other render types are currently not supported.
 
@@ -8192,7 +8314,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	number, more intelligent detection process runs.
 	The "xterm2" value will be set if the xterm version is reported to be
 	from 95 to 276.  The "sgr" value will be set if the xterm version is
-	277 or highter.
+	277 or higher and when Vim detects Mac Terminal.app or iTerm2.
 	If you do not want 'ttymouse' to be set to "xterm2" or "sgr"
 	automatically, set t_RV to an empty string: >
 		:set t_RV=
@@ -8273,7 +8395,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	Save the whole buffer for undo when reloading it.  This applies to the
 	":e!" command and reloading for when the buffer changed outside of
 	Vim. |FileChangedShell|
-	The save only happens when this options is negative or when the number
+	The save only happens when this option is negative or when the number
 	of lines is smaller than the value of this option.
 	Set this option to zero to disable undo for a reload.
 
@@ -8358,7 +8480,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	security reasons.
 
 						*'viewoptions'* *'vop'*
-'viewoptions' 'vop'	string	(default: "folds,options,cursor")
+'viewoptions' 'vop'	string	(default: "folds,options,cursor,curdir")
 			global
 			{not in Vi}
 			{not available when compiled without the |+mksession|
@@ -8376,6 +8498,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 			slashes
 	   unix		with Unix end-of-line format (single <NL>), even when
 			on Windows or DOS
+	   curdir	the window-local directory, if set with `:lcd`
 
 	"slash" and "unix" are useful on Windows when sharing view files
 	with Unix.  The Unix version of Vim cannot source dos format scripts,

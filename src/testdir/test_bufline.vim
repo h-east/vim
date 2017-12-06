@@ -1,8 +1,6 @@
 " Tests for setbufline() and getbufline()
 
-if !exists('*GetVimCommand')
-  source shared.vim
-endif
+source shared.vim
 
 func Test_setbufline_getbufline()
   new
@@ -27,6 +25,32 @@ func Test_setbufline_getbufline()
   call assert_equal(['e'], getbufline(b, 5))
   call assert_equal([], getbufline(b, 6))
   exe "bwipe! " . b
+endfunc
+
+func Test_setbufline_getbufline_fold()
+  split Xtest
+  setlocal foldmethod=expr foldexpr=0
+  let b = bufnr('%')
+  new
+  call assert_equal(0, setbufline(b, 1, ['foo', 'bar']))
+  call assert_equal(['foo'], getbufline(b, 1))
+  call assert_equal(['bar'], getbufline(b, 2))
+  call assert_equal(['foo', 'bar'], getbufline(b, 1, 2))
+  exe "bwipe!" b
+  bwipe!
+endfunc
+
+func Test_setbufline_getbufline_fold_tab()
+  split Xtest
+  setlocal foldmethod=expr foldexpr=0
+  let b = bufnr('%')
+  tab new
+  call assert_equal(0, setbufline(b, 1, ['foo', 'bar']))
+  call assert_equal(['foo'], getbufline(b, 1))
+  call assert_equal(['bar'], getbufline(b, 2))
+  call assert_equal(['foo', 'bar'], getbufline(b, 1, 2))
+  exe "bwipe!" b
+  bwipe!
 endfunc
 
 func Test_setline_startup()

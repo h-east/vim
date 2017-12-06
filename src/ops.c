@@ -3259,8 +3259,8 @@ op_yank(oparg_T *oap, int deleting, int mess)
 
 	clip_own_selection(&clip_plus);
 	clip_gen_set_selection(&clip_plus);
-	if (!clip_isautosel_star() && !did_star
-					  && curr == &(y_regs[PLUS_REGISTER]))
+	if (!clip_isautosel_star() && !clip_isautosel_plus()
+		&& !did_star && curr == &(y_regs[PLUS_REGISTER]))
 	{
 	    copy_yank_reg(&(y_regs[STAR_REGISTER]));
 	    clip_own_selection(&clip_star);
@@ -5433,7 +5433,7 @@ op_addsub(
 	    }
 	    else /* oap->motion_type == MCHAR */
 	    {
-		if (!oap->inclusive)
+		if (pos.lnum == oap->start.lnum && !oap->inclusive)
 		    dec(&(oap->end));
 		length = (colnr_T)STRLEN(ml_get(pos.lnum));
 		pos.col = 0;

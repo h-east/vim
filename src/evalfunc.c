@@ -24,7 +24,7 @@
 # include <float.h>
 #endif
 
-#ifdef MACOS
+#ifdef MACOS_X
 # include <time.h>	/* for time_t */
 #endif
 
@@ -61,6 +61,9 @@ static void f_atan2(typval_T *argvars, typval_T *rettv);
 #endif
 #ifdef FEAT_BEVAL
 static void f_balloon_show(typval_T *argvars, typval_T *rettv);
+# if defined(FEAT_BEVAL_TERM)
+static void f_balloon_split(typval_T *argvars, typval_T *rettv);
+# endif
 #endif
 static void f_browse(typval_T *argvars, typval_T *rettv);
 static void f_browsedir(typval_T *argvars, typval_T *rettv);
@@ -441,6 +444,7 @@ static void f_win_getid(typval_T *argvars, typval_T *rettv);
 static void f_win_gotoid(typval_T *argvars, typval_T *rettv);
 static void f_win_id2tabwin(typval_T *argvars, typval_T *rettv);
 static void f_win_id2win(typval_T *argvars, typval_T *rettv);
+static void f_win_screenpos(typval_T *argvars, typval_T *rettv);
 static void f_winbufnr(typval_T *argvars, typval_T *rettv);
 static void f_wincol(typval_T *argvars, typval_T *rettv);
 static void f_winheight(typval_T *argvars, typval_T *rettv);
@@ -497,6 +501,9 @@ static struct fst
 #endif
 #ifdef FEAT_BEVAL
     {"balloon_show",	1, 1, f_balloon_show},
+# if defined(FEAT_BEVAL_TERM)
+    {"balloon_split",	1, 1, f_balloon_split},
+# endif
 #endif
     {"browse",		4, 4, f_browse},
     {"browsedir",	2, 2, f_browsedir},
@@ -849,7 +856,7 @@ static struct fst
     {"term_getsize",	1, 1, f_term_getsize},
     {"term_getstatus",	1, 1, f_term_getstatus},
     {"term_gettitle",	1, 1, f_term_gettitle},
-    {"term_gettty",	1, 1, f_term_gettty},
+    {"term_gettty",	1, 2, f_term_gettty},
     {"term_list",	0, 0, f_term_list},
     {"term_scrape",	2, 2, f_term_scrape},
     {"term_sendkeys",	2, 2, f_term_sendkeys},
@@ -899,6 +906,7 @@ static struct fst
     {"win_gotoid",	1, 1, f_win_gotoid},
     {"win_id2tabwin",	1, 1, f_win_id2tabwin},
     {"win_id2win",	1, 1, f_win_id2win},
+    {"win_screenpos",	1, 1, f_win_screenpos},
     {"winbufnr",	1, 1, f_winbufnr},
     {"wincol",		0, 0, f_wincol},
     {"winheight",	1, 1, f_winheight},
@@ -1416,8 +1424,40 @@ f_atan2(typval_T *argvars, typval_T *rettv)
 f_balloon_show(typval_T *argvars, typval_T *rettv UNUSED)
 {
     if (balloonEval != NULL)
-	gui_mch_post_balloon(balloonEval, get_tv_string_chk(&argvars[0]));
+    {
+	if (argvars[0].v_type == VAR_LIST
+# ifdef FEAT_GUI
+		&& !gui.in_use
+# endif
+	   )
+	    post_balloon(balloonEval, NULL, argvars[0].vval.v_list);
+	else
+	    post_balloon(balloonEval, get_tv_string_chk(&argvars[0]), NULL);
+    }
 }
+
+# if defined(FEAT_BEVAL_TERM)
+    static void
+f_balloon_split(typval_T *argvars, typval_T *rettv UNUSED)
+{
+    if (rettv_list_alloc(rettv) == OK)
+    {
+	char_u *msg = get_tv_string_chk(&argvars[0]);
+
+	if (msg != NULL)
+	{
+	    pumitem_T	*array;
+	    int		size = split_message(msg, &array);
+	    int		i;
+
+	    /* Skip the first and last item, they are always empty. */
+	    for (i = 1; i < size - 1; ++i)
+		list_append_string(rettv->vval.v_list, array[i].pum_text, -1);
+	    vim_free(array);
+	}
+    }
+}
+# endif
 #endif
 
 /*
@@ -1644,16 +1684,13 @@ f_bufnr(typval_T *argvars, typval_T *rettv)
     static void
 buf_win_common(typval_T *argvars, typval_T *rettv, int get_nr)
 {
-#ifdef FEAT_WINDOWS
     win_T	*wp;
     int		winnr = 0;
-#endif
     buf_T	*buf;
 
     (void)get_tv_number(&argvars[0]);	    /* issue errmsg if type error */
     ++emsg_off;
     buf = get_buf_tv(&argvars[0], TRUE);
-#ifdef FEAT_WINDOWS
     FOR_ALL_WINDOWS(wp)
     {
 	++winnr;
@@ -1661,10 +1698,6 @@ buf_win_common(typval_T *argvars, typval_T *rettv, int get_nr)
 	    break;
     }
     rettv->vval.v_number = (wp != NULL ? (get_nr ? winnr : wp->w_id) : -1);
-#else
-    rettv->vval.v_number = (curwin->w_buffer == buf
-					  ? (get_nr ? 1 : curwin->w_id) : -1);
-#endif
     --emsg_off;
 }
 
@@ -3279,11 +3312,18 @@ f_feedkeys(typval_T *argvars, typval_T *rettv UNUSED)
 		/* Avoid a 1 second delay when the keys start Insert mode. */
 		msg_scroll = FALSE;
 
-		if (!dangerous)
-		    ++ex_normal_busy;
-		exec_normal(TRUE);
-		if (!dangerous)
-		    --ex_normal_busy;
+#ifdef FEAT_TERMINAL
+		if (term_use_loop())
+		    terminal_loop(FALSE);
+		else
+#endif
+		{
+		    if (!dangerous)
+			++ex_normal_busy;
+		    exec_normal(TRUE);
+		    if (!dangerous)
+			--ex_normal_busy;
+		}
 		msg_scroll |= save_msg_scroll;
 	    }
 	}
@@ -3655,11 +3695,16 @@ f_foldtextresult(typval_T *argvars UNUSED, typval_T *rettv)
     char_u	buf[FOLD_TEXT_LEN];
     foldinfo_T  foldinfo;
     int		fold_count;
+    static int	entered = FALSE;
 #endif
 
     rettv->v_type = VAR_STRING;
     rettv->vval.v_string = NULL;
 #ifdef FEAT_FOLDING
+    if (entered)
+	return; /* reject recursive use */
+    entered = TRUE;
+
     lnum = get_tv_lnum(argvars);
     /* treat illegal types and illegal string values for {lnum} the same */
     if (lnum < 0)
@@ -3673,6 +3718,8 @@ f_foldtextresult(typval_T *argvars UNUSED, typval_T *rettv)
 	    text = vim_strsave(text);
 	rettv->vval.v_string = text;
     }
+
+    entered = FALSE;
 #endif
 }
 
@@ -4396,9 +4443,7 @@ f_getchar(typval_T *argvars, typval_T *rettv)
 	    int		col = mouse_col;
 	    win_T	*win;
 	    linenr_T	lnum;
-# ifdef FEAT_WINDOWS
 	    win_T	*wp;
-# endif
 	    int		winnr = 1;
 
 	    if (row >= 0 && col >= 0)
@@ -4409,10 +4454,8 @@ f_getchar(typval_T *argvars, typval_T *rettv)
 		if (win == NULL)
 		    return;
 		(void)mouse_comp_pos(win, &row, &col, &lnum);
-# ifdef FEAT_WINDOWS
 		for (wp = firstwin; wp != win; wp = wp->w_next)
 		    ++winnr;
-# endif
 		set_vim_var_nr(VV_MOUSE_WIN, winnr);
 		set_vim_var_nr(VV_MOUSE_WINID, win->w_id);
 		set_vim_var_nr(VV_MOUSE_LNUM, lnum);
@@ -4846,7 +4889,7 @@ get_qf_loc_list(int is_qf, win_T *wp, typval_T *what_arg, typval_T *rettv)
 		    dict_T	*d = what_arg->vval.v_dict;
 
 		    if (d != NULL)
-			get_errorlist_properties(wp, d, rettv->vval.v_dict);
+			qf_get_properties(wp, d, rettv->vval.v_dict);
 		}
 		else
 		    EMSG(_(e_dictreq));
@@ -5111,7 +5154,6 @@ f_getregtype(typval_T *argvars, typval_T *rettv)
     rettv->vval.v_string = vim_strsave(buf);
 }
 
-#ifdef FEAT_WINDOWS
 /*
  * Returns information (variables, options, etc.) about a tab page
  * as a dictionary.
@@ -5143,7 +5185,6 @@ get_tabpage_info(tabpage_T *tp, int tp_idx)
 
     return dict;
 }
-#endif
 
 /*
  * "gettabinfo()" function
@@ -5151,7 +5192,6 @@ get_tabpage_info(tabpage_T *tp, int tp_idx)
     static void
 f_gettabinfo(typval_T *argvars, typval_T *rettv)
 {
-#ifdef FEAT_WINDOWS
     tabpage_T	*tp, *tparg = NULL;
     dict_T	*d;
     int		tpnr = 0;
@@ -5179,7 +5219,6 @@ f_gettabinfo(typval_T *argvars, typval_T *rettv)
 	if (tparg != NULL)
 	    return;
     }
-#endif
 }
 
 /*
@@ -5204,8 +5243,8 @@ f_gettabvar(typval_T *argvars, typval_T *rettv)
 	/* Set tp to be our tabpage, temporarily.  Also set the window to the
 	 * first window in the tabpage, otherwise the window is not valid. */
 	if (switch_win(&oldcurwin, &oldtabpage,
-		    tp->tp_firstwin == NULL ? firstwin : tp->tp_firstwin, tp, TRUE)
-									== OK)
+		tp == curtab || tp->tp_firstwin == NULL ? firstwin
+					    : tp->tp_firstwin, tp, TRUE) == OK)
 	{
 	    /* look up the variable */
 	    /* Let gettabvar({nr}, "") return the "t:" dictionary. */
@@ -5234,7 +5273,6 @@ f_gettabwinvar(typval_T *argvars, typval_T *rettv)
     getwinvar(argvars, rettv, 1);
 }
 
-#ifdef FEAT_WINDOWS
 /*
  * Returns information about a window as a dictionary.
  */
@@ -5251,6 +5289,9 @@ get_win_info(win_T *wp, short tpnr, short winnr)
     dict_add_nr_str(dict, "winnr", winnr, NULL);
     dict_add_nr_str(dict, "winid", wp->w_id, NULL);
     dict_add_nr_str(dict, "height", wp->w_height, NULL);
+#ifdef FEAT_MENU
+    dict_add_nr_str(dict, "winbar", wp->w_winbar_height, NULL);
+#endif
     dict_add_nr_str(dict, "width", wp->w_width, NULL);
     dict_add_nr_str(dict, "bufnr", wp->w_buffer->b_fnum, NULL);
 
@@ -5268,7 +5309,6 @@ get_win_info(win_T *wp, short tpnr, short winnr)
 
     return dict;
 }
-#endif
 
 /*
  * "getwininfo()" function
@@ -5276,17 +5316,14 @@ get_win_info(win_T *wp, short tpnr, short winnr)
     static void
 f_getwininfo(typval_T *argvars, typval_T *rettv)
 {
-#ifdef FEAT_WINDOWS
     tabpage_T	*tp;
     win_T	*wp = NULL, *wparg = NULL;
     dict_T	*d;
     short	tabnr = 0, winnr;
-#endif
 
     if (rettv_list_alloc(rettv) != OK)
 	return;
 
-#ifdef FEAT_WINDOWS
     if (argvars[0].v_type != VAR_UNKNOWN)
     {
 	wparg = win_id2wp(argvars);
@@ -5314,7 +5351,6 @@ f_getwininfo(typval_T *argvars, typval_T *rettv)
 		return;
 	}
     }
-#endif
 }
 
 /*
@@ -5362,6 +5398,22 @@ f_win_id2tabwin(typval_T *argvars, typval_T *rettv)
 f_win_id2win(typval_T *argvars, typval_T *rettv)
 {
     rettv->vval.v_number = win_id2win(argvars);
+}
+
+/*
+ * "win_screenpos()" function
+ */
+    static void
+f_win_screenpos(typval_T *argvars, typval_T *rettv)
+{
+    win_T	*wp;
+
+    if (rettv_list_alloc(rettv) == FAIL)
+	return;
+
+    wp = find_win_by_nr(&argvars[0], NULL);
+    list_append_number(rettv->vval.v_list, wp == NULL ? 0 : wp->w_winrow + 1);
+    list_append_number(rettv->vval.v_list, wp == NULL ? 0 : wp->w_wincol + 1);
 }
 
 /*
@@ -5563,14 +5615,13 @@ f_has(typval_T *argvars, typval_T *rettv)
 #ifdef __BEOS__
 	"beos",
 #endif
-#ifdef MACOS
-	"mac",
-#endif
-#if defined(MACOS_X_UNIX)
-	"macunix",  /* built with 'darwin' enabled */
-#endif
-#if defined(__APPLE__) && __APPLE__ == 1
-	"osx",	    /* built with or without 'darwin' enabled */
+#ifdef MACOS_X
+       "mac",		/* Mac OS X (and, once, Mac OS Classic) */
+       "osx",		/* Mac OS X */
+# ifdef MACOS_X_DARWIN
+       "macunix",	/* Mac OS X, with the darwin feature */
+       "osxdarwin",	/* synonym for macunix */
+# endif
 #endif
 #ifdef __QNX__
 	"qnx",
@@ -5605,11 +5656,17 @@ f_has(typval_T *argvars, typval_T *rettv)
 #ifdef FEAT_AUTOCMD
 	"autocmd",
 #endif
-#ifdef FEAT_BEVAL
+#ifdef FEAT_AUTOSERVERNAME
+	"autoservername",
+#endif
+#ifdef FEAT_BEVAL_GUI
 	"balloon_eval",
 # ifndef FEAT_GUI_W32 /* other GUIs always have multiline balloons */
 	"balloon_multiline",
 # endif
+#endif
+#ifdef FEAT_BEVAL_TERM
+	"balloon_eval_term",
 #endif
 #if defined(SOME_BUILTIN_TCAPS) || defined(ALL_BUILTIN_TCAPS)
 	"builtin_terms",
@@ -5987,9 +6044,7 @@ f_has(typval_T *argvars, typval_T *rettv)
 #ifdef FEAT_VIMINFO
 	"viminfo",
 #endif
-#ifdef FEAT_WINDOWS
 	"vertsplit",
-#endif
 #ifdef FEAT_VIRTUALEDIT
 	"virtualedit",
 #endif
@@ -6006,9 +6061,7 @@ f_has(typval_T *argvars, typval_T *rettv)
 #ifdef FEAT_WILDMENU
 	"wildmenu",
 #endif
-#ifdef FEAT_WINDOWS
 	"windows",
-#endif
 #ifdef FEAT_WAK
 	"winaltkeys",
 #endif
@@ -8661,7 +8714,10 @@ remote_common(typval_T *argvars, typval_T *rettv, int expr)
 # endif
     {
 	if (r != NULL)
+	{
 	    EMSG(r);		/* sending worked but evaluation failed */
+	    vim_free(r);
+	}
 	else
 	    EMSG2(_("E241: Unable to send to %s"), server_name);
 	return;
@@ -8721,6 +8777,8 @@ f_remote_foreground(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
     argvars[1].v_type = VAR_STRING;
     argvars[1].vval.v_string = vim_strsave((char_u *)"foreground()");
     argvars[2].v_type = VAR_UNKNOWN;
+    rettv->v_type = VAR_STRING;
+    rettv->vval.v_string = NULL;
     remote_common(argvars, rettv, TRUE);
     vim_free(argvars[1].vval.v_string);
 # endif
@@ -9558,13 +9616,12 @@ f_searchdecl(typval_T *argvars, typval_T *rettv)
 searchpair_cmn(typval_T *argvars, pos_T *match_pos)
 {
     char_u	*spat, *mpat, *epat;
-    char_u	*skip;
+    typval_T	*skip;
     int		save_p_ws = p_ws;
     int		dir;
     int		flags = 0;
     char_u	nbuf1[NUMBUFLEN];
     char_u	nbuf2[NUMBUFLEN];
-    char_u	nbuf3[NUMBUFLEN];
     int		retval = 0;		/* default: FAIL */
     long	lnum_stop = 0;
     long	time_limit = 0;
@@ -9598,10 +9655,16 @@ searchpair_cmn(typval_T *argvars, pos_T *match_pos)
     /* Optional fifth argument: skip expression */
     if (argvars[3].v_type == VAR_UNKNOWN
 	    || argvars[4].v_type == VAR_UNKNOWN)
-	skip = (char_u *)"";
+	skip = NULL;
     else
     {
-	skip = get_tv_string_buf_chk(&argvars[4], nbuf3);
+	skip = &argvars[4];
+	if (skip->v_type != VAR_FUNC && skip->v_type != VAR_PARTIAL
+	    && skip->v_type != VAR_STRING)
+	{
+	    /* Type error */
+	    goto theend;
+	}
 	if (argvars[5].v_type != VAR_UNKNOWN)
 	{
 	    lnum_stop = (long)get_tv_number_chk(&argvars[5], NULL);
@@ -9617,8 +9680,6 @@ searchpair_cmn(typval_T *argvars, pos_T *match_pos)
 #endif
 	}
     }
-    if (skip == NULL)
-	goto theend;	    /* type error */
 
     retval = do_searchpair(spat, mpat, epat, dir, skip, flags,
 					    match_pos, lnum_stop, time_limit);
@@ -9672,7 +9733,7 @@ do_searchpair(
     char_u	*mpat,	    /* middle pattern */
     char_u	*epat,	    /* end pattern */
     int		dir,	    /* BACKWARD or FORWARD */
-    char_u	*skip,	    /* skip expression */
+    typval_T	*skip,	    /* skip expression */
     int		flags,	    /* SP_SETPCMARK and other SP_ values */
     pos_T	*match_pos,
     linenr_T	lnum_stop,  /* stop at this line if not zero */
@@ -9689,6 +9750,7 @@ do_searchpair(
     int		n;
     int		r;
     int		nest = 1;
+    int		use_skip = FALSE;
     int		err;
     int		options = SEARCH_KEEP;
     proftime_T	tm;
@@ -9716,6 +9778,14 @@ do_searchpair(
 							    spat, epat, mpat);
     if (flags & SP_START)
 	options |= SEARCH_START;
+
+    if (skip != NULL)
+    {
+	/* Empty string means to not use the skip expression. */
+	if (skip->v_type == VAR_STRING || skip->v_type == VAR_FUNC)
+	    use_skip = skip->vval.v_string != NULL
+						&& *skip->vval.v_string != NUL;
+    }
 
     save_cursor = curwin->w_cursor;
     pos = curwin->w_cursor;
@@ -9748,11 +9818,12 @@ do_searchpair(
 	options &= ~SEARCH_START;
 
 	/* If the skip pattern matches, ignore this match. */
-	if (*skip != NUL)
+	if (use_skip)
 	{
 	    save_pos = curwin->w_cursor;
 	    curwin->w_cursor = pos;
-	    r = eval_to_bool(skip, &err, NULL, FALSE);
+	    err = FALSE;
+	    r = eval_expr_to_bool(skip, &err);
 	    curwin->w_cursor = save_pos;
 	    if (err)
 	    {
@@ -9905,7 +9976,8 @@ set_buffer_lines(buf_T *buf, linenr_T lnum, typval_T *lines, typval_T *rettv)
     listitem_T	*li = NULL;
     long	added = 0;
     linenr_T	lcount;
-    buf_T	*curbuf_save;
+    buf_T	*curbuf_save = NULL;
+    win_T	*curwin_save = NULL;
     int		is_curbuf = buf == curbuf;
 
     /* When using the current buffer ml_mfp will be set if needed.  Useful when
@@ -9917,8 +9989,22 @@ set_buffer_lines(buf_T *buf, linenr_T lnum, typval_T *lines, typval_T *rettv)
 	return;
     }
 
-    curbuf_save = curbuf;
-    curbuf = buf;
+    if (!is_curbuf)
+    {
+	wininfo_T *wip;
+
+	curbuf_save = curbuf;
+	curwin_save = curwin;
+	curbuf = buf;
+	for (wip = buf->b_wininfo; wip != NULL; wip = wip->wi_next)
+	{
+	    if (wip->wi_win != NULL)
+	    {
+		curwin = wip->wi_win;
+		break;
+	    }
+	}
+    }
 
     lcount = curbuf->b_ml.ml_line_count;
 
@@ -9981,7 +10067,11 @@ set_buffer_lines(buf_T *buf, linenr_T lnum, typval_T *lines, typval_T *rettv)
     if (added > 0)
 	appended_lines_mark(lcount, added);
 
-    curbuf = curbuf_save;
+    if (!is_curbuf)
+    {
+	curbuf = curbuf_save;
+	curwin = curwin_save;
+    }
 }
 
 /*
@@ -10530,10 +10620,8 @@ free_lstval:
     static void
 f_settabvar(typval_T *argvars, typval_T *rettv)
 {
-#ifdef FEAT_WINDOWS
     tabpage_T	*save_curtab;
     tabpage_T	*tp;
-#endif
     char_u	*varname, *tabvarname;
     typval_T	*varp;
 
@@ -10542,22 +10630,14 @@ f_settabvar(typval_T *argvars, typval_T *rettv)
     if (check_restricted() || check_secure())
 	return;
 
-#ifdef FEAT_WINDOWS
     tp = find_tabpage((int)get_tv_number_chk(&argvars[0], NULL));
-#endif
     varname = get_tv_string_chk(&argvars[1]);
     varp = &argvars[2];
 
-    if (varname != NULL && varp != NULL
-#ifdef FEAT_WINDOWS
-	    && tp != NULL
-#endif
-	    )
+    if (varname != NULL && varp != NULL && tp != NULL)
     {
-#ifdef FEAT_WINDOWS
 	save_curtab = curtab;
 	goto_tabpage_tp(tp, FALSE, FALSE);
-#endif
 
 	tabvarname = alloc((unsigned)STRLEN(varname) + 3);
 	if (tabvarname != NULL)
@@ -10568,11 +10648,9 @@ f_settabvar(typval_T *argvars, typval_T *rettv)
 	    vim_free(tabvarname);
 	}
 
-#ifdef FEAT_WINDOWS
 	/* Restore current tabpage */
 	if (valid_tabpage(save_curtab))
 	    goto_tabpage_tp(save_curtab, FALSE, FALSE);
-#endif
     }
 }
 
@@ -12278,7 +12356,6 @@ f_systemlist(typval_T *argvars, typval_T *rettv)
     static void
 f_tabpagebuflist(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
 {
-#ifdef FEAT_WINDOWS
     tabpage_T	*tp;
     win_T	*wp = NULL;
 
@@ -12297,7 +12374,6 @@ f_tabpagebuflist(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
 						wp->w_buffer->b_fnum) == FAIL)
 		break;
     }
-#endif
 }
 
 
@@ -12308,7 +12384,6 @@ f_tabpagebuflist(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
 f_tabpagenr(typval_T *argvars UNUSED, typval_T *rettv)
 {
     int		nr = 1;
-#ifdef FEAT_WINDOWS
     char_u	*arg;
 
     if (argvars[0].v_type != VAR_UNKNOWN)
@@ -12325,12 +12400,10 @@ f_tabpagenr(typval_T *argvars UNUSED, typval_T *rettv)
     }
     else
 	nr = tabpage_index(curtab);
-#endif
     rettv->vval.v_number = nr;
 }
 
 
-#ifdef FEAT_WINDOWS
 static int get_winnr(tabpage_T *tp, typval_T *argvar);
 
 /*
@@ -12379,7 +12452,6 @@ get_winnr(tabpage_T *tp, typval_T *argvar)
 	}
     return nr;
 }
-#endif
 
 /*
  * "tabpagewinnr()" function
@@ -12388,7 +12460,6 @@ get_winnr(tabpage_T *tp, typval_T *argvar)
 f_tabpagewinnr(typval_T *argvars UNUSED, typval_T *rettv)
 {
     int		nr = 1;
-#ifdef FEAT_WINDOWS
     tabpage_T	*tp;
 
     tp = find_tabpage((int)get_tv_number(&argvars[0]));
@@ -12396,7 +12467,6 @@ f_tabpagewinnr(typval_T *argvars UNUSED, typval_T *rettv)
 	nr = 0;
     else
 	nr = get_winnr(tp, &argvars[1]);
-#endif
     rettv->vval.v_number = nr;
 }
 
@@ -13215,9 +13285,7 @@ f_winnr(typval_T *argvars UNUSED, typval_T *rettv)
 {
     int		nr = 1;
 
-#ifdef FEAT_WINDOWS
     nr = get_winnr(curtab, &argvars[0]);
-#endif
     rettv->vval.v_number = nr;
 }
 
@@ -13227,7 +13295,6 @@ f_winnr(typval_T *argvars UNUSED, typval_T *rettv)
     static void
 f_winrestcmd(typval_T *argvars UNUSED, typval_T *rettv)
 {
-#ifdef FEAT_WINDOWS
     win_T	*wp;
     int		winnr = 1;
     garray_T	ga;
@@ -13245,9 +13312,6 @@ f_winrestcmd(typval_T *argvars UNUSED, typval_T *rettv)
     ga_append(&ga, NUL);
 
     rettv->vval.v_string = ga.ga_data;
-#else
-    rettv->vval.v_string = NULL;
-#endif
     rettv->v_type = VAR_STRING;
 }
 
@@ -13291,9 +13355,7 @@ f_winrestview(typval_T *argvars, typval_T *rettv UNUSED)
 
 	check_cursor();
 	win_new_height(curwin, curwin->w_height);
-# ifdef FEAT_WINDOWS
-	win_new_width(curwin, W_WIDTH(curwin));
-# endif
+	win_new_width(curwin, curwin->w_width);
 	changed_window_setting();
 
 	if (curwin->w_topline <= 0)
@@ -13346,11 +13408,7 @@ f_winwidth(typval_T *argvars, typval_T *rettv)
     if (wp == NULL)
 	rettv->vval.v_number = -1;
     else
-#ifdef FEAT_WINDOWS
 	rettv->vval.v_number = wp->w_width;
-#else
-	rettv->vval.v_number = Columns;
-#endif
 }
 
 /*
@@ -13372,6 +13430,9 @@ f_writefile(typval_T *argvars, typval_T *rettv)
 {
     int		binary = FALSE;
     int		append = FALSE;
+#ifdef HAVE_FSYNC
+    int		do_fsync = p_fs;
+#endif
     char_u	*fname;
     FILE	*fd;
     int		ret = 0;
@@ -13404,6 +13465,12 @@ f_writefile(typval_T *argvars, typval_T *rettv)
 	    binary = TRUE;
 	if (vim_strchr(arg2, 'a') != NULL)
 	    append = TRUE;
+#ifdef HAVE_FSYNC
+	if (vim_strchr(arg2, 's') != NULL)
+	    do_fsync = TRUE;
+	else if (vim_strchr(arg2, 'S') != NULL)
+	    do_fsync = FALSE;
+#endif
     }
 
     fname = get_tv_string_chk(&argvars[1]);
@@ -13422,6 +13489,12 @@ f_writefile(typval_T *argvars, typval_T *rettv)
     {
 	if (write_list(fd, list, binary) == FAIL)
 	    ret = -1;
+#ifdef HAVE_FSYNC
+	else if (do_fsync)
+	    /* Ignore the error, the user wouldn't know what to do about it.
+	     * May happen for a device. */
+	    ignored = fsync(fileno(fd));
+#endif
 	fclose(fd);
     }
 

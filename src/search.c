@@ -100,11 +100,14 @@ static int	lastc_bytelen = 1;	/* >1 for multi-byte char */
 #if defined(FEAT_AUTOCMD) || defined(FEAT_EVAL) || defined(PROTO)
 /* copy of spats[], for keeping the search patterns while executing autocmds */
 static struct spat  saved_spats[2];
-static int	    saved_last_idx = 0;
+#endif
 # ifdef FEAT_SEARCH_EXTRA
+/* copy of spats[RE_SEARCH], for keeping the search patterns while incremental
+ * searching */
+static struct spat  saved_last_search_spat;
+static int	    saved_last_idx = 0;
 static int	    saved_no_hlsearch = 0;
 # endif
-#endif
 
 static char_u	    *mr_pattern = NULL;	/* pattern used by search_regcomp() */
 #ifdef FEAT_RIGHTLEFT
@@ -329,9 +332,9 @@ restore_search_patterns(void)
     {
 	vim_free(spats[0].pat);
 	spats[0] = saved_spats[0];
-#if defined(FEAT_EVAL)
+# if defined(FEAT_EVAL)
 	set_vv_searchforward();
-#endif
+# endif
 	vim_free(spats[1].pat);
 	spats[1] = saved_spats[1];
 	last_idx = saved_last_idx;
@@ -357,6 +360,44 @@ free_search_patterns(void)
 	mr_pattern = NULL;
     }
 # endif
+}
+#endif
+
+#ifdef FEAT_SEARCH_EXTRA
+/*
+ * Save and restore the search pattern for incremental highlight search
+ * feature.
+ *
+ * It's similar but differnt from save_search_patterns() and
+ * restore_search_patterns(), because the search pattern must be restored when
+ * cannceling incremental searching even if it's called inside user functions.
+ */
+    void
+save_last_search_pattern(void)
+{
+    saved_last_search_spat = spats[RE_SEARCH];
+    if (spats[RE_SEARCH].pat != NULL)
+	saved_last_search_spat.pat = vim_strsave(spats[RE_SEARCH].pat);
+    saved_last_idx = last_idx;
+    saved_no_hlsearch = no_hlsearch;
+}
+
+    void
+restore_last_search_pattern(void)
+{
+    vim_free(spats[RE_SEARCH].pat);
+    spats[RE_SEARCH] = saved_last_search_spat;
+# if defined(FEAT_EVAL)
+    set_vv_searchforward();
+# endif
+    last_idx = saved_last_idx;
+    SET_NO_HLSEARCH(saved_no_hlsearch);
+}
+
+    char_u *
+last_search_pattern(void)
+{
+    return spats[RE_SEARCH].pat;
 }
 #endif
 
@@ -2245,7 +2286,7 @@ findmatchlimit(
 	    {
 		/*
 		 * A comment may contain / * or / /, it may also start or end
-		 * with / * /.	Ignore a / * after / /.
+		 * with / * /.	Ignore a / * after / / and after *.
 		 */
 		if (pos.col == 0)
 		    continue;
@@ -2271,6 +2312,7 @@ findmatchlimit(
 		}
 		else if (  linep[pos.col - 1] == '/'
 			&& linep[pos.col] == '*'
+			&& (pos.col == 1 || linep[pos.col - 2] != '*')
 			&& (int)pos.col < comment_col)
 		{
 		    count++;
@@ -2608,7 +2650,7 @@ showmatch(
 	if (!curwin->w_p_wrap)
 	    getvcol(curwin, lpos, NULL, &vcol, NULL);
 	if (curwin->w_p_wrap || (vcol >= curwin->w_leftcol
-			       && vcol < curwin->w_leftcol + W_WIDTH(curwin)))
+			       && vcol < curwin->w_leftcol + curwin->w_width))
 	{
 	    mpos = *lpos;    /* save the pos, update_screen() may change it */
 	    save_cursor = curwin->w_cursor;
@@ -3980,7 +4022,7 @@ again:
     {
 	if (do_searchpair((char_u *)"<[^ \t>/!]\\+\\%(\\_s\\_[^>]\\{-}[^/]>\\|$\\|\\_s\\=>\\)",
 		    (char_u *)"",
-		    (char_u *)"</[^>]*>", BACKWARD, (char_u *)"", 0,
+		    (char_u *)"</[^>]*>", BACKWARD, NULL, 0,
 						  NULL, (linenr_T)0, 0L) <= 0)
 	{
 	    curwin->w_cursor = old_pos;
@@ -4014,7 +4056,7 @@ again:
     sprintf((char *)spat, "<%.*s\\>\\%%(\\s\\_[^>]\\{-}[^/]>\\|>\\)\\c", len, p);
     sprintf((char *)epat, "</%.*s>\\c", len, p);
 
-    r = do_searchpair(spat, (char_u *)"", epat, FORWARD, (char_u *)"",
+    r = do_searchpair(spat, (char_u *)"", epat, FORWARD, NULL,
 						    0, NULL, (linenr_T)0, 0L);
 
     vim_free(spat);
@@ -4611,7 +4653,7 @@ current_quote(
 
 #endif /* FEAT_TEXTOBJ */
 
-static int is_one_char(char_u *pattern, int move, pos_T *cur);
+static int is_one_char(char_u *pattern, int move, pos_T *cur, int direction);
 
 /*
  * Find next search match under cursor, cursor at end.
@@ -4632,6 +4674,7 @@ current_search(
     int		flags = 0;
     pos_T	save_VIsual = VIsual;
     int		one_char;
+    int		direction = forward ? FORWARD : BACKWARD;
 
     /* wrapping should not occur */
     p_ws = FALSE;
@@ -4658,8 +4701,10 @@ current_search(
     else
 	orig_pos = pos = curwin->w_cursor;
 
-    /* Is the pattern is zero-width? */
-    one_char = is_one_char(spats[last_idx].pat, TRUE, &curwin->w_cursor);
+    /* Is the pattern is zero-width?, this time, don't care about the direction
+     */
+    one_char = is_one_char(spats[last_idx].pat, TRUE, &curwin->w_cursor,
+								      FORWARD);
     if (one_char == -1)
     {
 	p_ws = old_p_ws;
@@ -4718,11 +4763,11 @@ current_search(
     }
 
     start_pos = pos;
-    flags = forward ? SEARCH_END : 0;
+    flags = forward ? SEARCH_END : SEARCH_START;
 
     /* Check again from the current cursor position,
      * since the next match might actually by only one char wide */
-    one_char = is_one_char(spats[last_idx].pat, FALSE, &pos);
+    one_char = is_one_char(spats[last_idx].pat, FALSE, &pos, direction);
     if (one_char < 0)
 	/* search failed, abort */
 	return FAIL;
@@ -4730,7 +4775,7 @@ current_search(
     /* move to match, except for zero-width matches, in which case, we are
      * already on the next match */
     if (!one_char)
-	result = searchit(curwin, curbuf, &pos, (forward ? FORWARD : BACKWARD),
+	result = searchit(curwin, curbuf, &pos, direction,
 		    spats[last_idx].pat, 0L, flags | SEARCH_KEEP, RE_SEARCH, 0,
 								   NULL, NULL);
 
@@ -4779,10 +4824,11 @@ current_search(
  * Check if the pattern is one character long or zero-width.
  * If move is TRUE, check from the beginning of the buffer, else from position
  * "cur".
+ * "direction" is FORWARD or BACKWARD.
  * Returns TRUE, FALSE or -1 for failure.
  */
     static int
-is_one_char(char_u *pattern, int move, pos_T *cur)
+is_one_char(char_u *pattern, int move, pos_T *cur, int direction)
 {
     regmmatch_T	regmatch;
     int		nmatched = 0;
@@ -4812,7 +4858,7 @@ is_one_char(char_u *pattern, int move, pos_T *cur)
 	flag = SEARCH_START;
     }
 
-    if (searchit(curwin, curbuf, &pos, FORWARD, pattern, 1,
+    if (searchit(curwin, curbuf, &pos, direction, pattern, 1,
 			 SEARCH_KEEP + flag, RE_SEARCH, 0, NULL, NULL) != FAIL)
     {
 	/* Zero-width pattern should match somewhere, then we can check if
@@ -4825,7 +4871,8 @@ is_one_char(char_u *pattern, int move, pos_T *cur)
 			       pos.lnum, regmatch.startpos[0].col, NULL, NULL);
 	    if (!nmatched)
 		break;
-	} while (regmatch.startpos[0].col < pos.col);
+	} while (direction == FORWARD ? regmatch.startpos[0].col < pos.col
+				      : regmatch.startpos[0].col > pos.col);
 
 	if (!called_emsg)
 	{
@@ -4906,7 +4953,7 @@ find_pattern_in_path(
     char_u	*already = NULL;
     char_u	*startp = NULL;
     char_u	*inc_opt = NULL;
-#if defined(FEAT_WINDOWS) && defined(FEAT_QUICKFIX)
+#if defined(FEAT_QUICKFIX)
     win_T	*curwin_save = NULL;
 #endif
 
@@ -5385,7 +5432,7 @@ search_line:
 	    {
 		found = TRUE;
 		if (depth == -1 && lnum == curwin->w_cursor.lnum
-#if defined(FEAT_WINDOWS) && defined(FEAT_QUICKFIX)
+#if defined(FEAT_QUICKFIX)
 						      && g_do_tagpreview == 0
 #endif
 						      )
@@ -5402,7 +5449,7 @@ search_line:
 #ifdef FEAT_GUI
 		    need_mouse_correct = TRUE;
 #endif
-#if defined(FEAT_WINDOWS) && defined(FEAT_QUICKFIX)
+#if defined(FEAT_QUICKFIX)
 		    /* ":psearch" uses the preview window */
 		    if (g_do_tagpreview != 0)
 		    {
@@ -5412,16 +5459,14 @@ search_line:
 #endif
 		    if (action == ACTION_SPLIT)
 		    {
-#ifdef FEAT_WINDOWS
 			if (win_split(0, 0) == FAIL)
-#endif
 			    break;
 			RESET_BINDING(curwin);
 		    }
 		    if (depth == -1)
 		    {
 			/* match in current file */
-#if defined(FEAT_WINDOWS) && defined(FEAT_QUICKFIX)
+#if defined(FEAT_QUICKFIX)
 			if (g_do_tagpreview != 0)
 			{
 			    if (!GETFILE_SUCCESS(getfile(
@@ -5452,7 +5497,7 @@ search_line:
 		    curwin->w_set_curswant = TRUE;
 		}
 
-#if defined(FEAT_WINDOWS) && defined(FEAT_QUICKFIX)
+#if defined(FEAT_QUICKFIX)
 		if (g_do_tagpreview != 0
 			   && curwin != curwin_save && win_valid(curwin_save))
 		{

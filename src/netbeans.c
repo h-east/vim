@@ -107,7 +107,7 @@ netbeans_close(void)
 	nb_channel = NULL;
     }
 
-#ifdef FEAT_BEVAL
+#ifdef FEAT_BEVAL_GUI
     bevalServers &= ~BEVAL_NETBEANS;
 #endif
 
@@ -220,7 +220,7 @@ netbeans_connect(char *params, int doabort)
 	if (nb_channel != NULL)
 	{
 	    /* success */
-# ifdef FEAT_BEVAL
+# ifdef FEAT_BEVAL_GUI
 	    bevalServers |= BEVAL_NETBEANS;
 # endif
 
@@ -1754,10 +1754,8 @@ nb_do_cmd(
 	    buf->modified = buf->bufp->b_changed;
 	    if (prev_b_changed != buf->bufp->b_changed)
 	    {
-#ifdef FEAT_WINDOWS
 		check_status(buf->bufp);
 		redraw_tabline = TRUE;
-#endif
 #ifdef FEAT_TITLE
 		maketitle();
 #endif
@@ -1790,7 +1788,7 @@ nb_do_cmd(
 	}
 	else if (streq((char *)cmd, "showBalloon"))
 	{
-#if defined(FEAT_BEVAL)
+#if defined(FEAT_BEVAL_GUI)
 	    static char	*text = NULL;
 
 	    /*
@@ -2283,10 +2281,8 @@ nb_set_curbuf(buf_T *buf)
     if (curbuf != buf) {
 	if (buf_jump_open_win(buf) != NULL)
 	    return;
-# ifdef FEAT_WINDOWS
 	if ((swb_flags & SWB_USETAB) && buf_jump_open_tab(buf) != NULL)
 	    return;
-# endif
 	set_curbuf(buf, DOBUF_GOTO);
     }
 }
@@ -2510,7 +2506,7 @@ netbeans_beval_cb(
 
     /* Don't do anything when 'ballooneval' is off, messages scrolled the
      * windows up or we have no connection. */
-    if (!p_beval || msg_scrolled > 0 || !NETBEANS_OPEN)
+    if (!can_use_beval() || !NETBEANS_OPEN)
 	return;
 
     if (get_beval_info(beval, TRUE, &wp, &lnum, &text, &col) == OK)
@@ -2876,7 +2872,7 @@ netbeans_button_release(int button)
 
     if (bufno >= 0 && curwin != NULL && curwin->w_buffer == curbuf)
     {
-	int col = mouse_col - W_WINCOL(curwin)
+	int col = mouse_col - curwin->w_wincol
 			      - ((curwin->w_p_nu || curwin->w_p_rnu) ? 9 : 1);
 	long off = pos2off(curbuf, &curwin->w_cursor);
 

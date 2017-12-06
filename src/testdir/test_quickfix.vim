@@ -151,7 +151,7 @@ endfunc
 func XageTests(cchar)
   call s:setup_commands(a:cchar)
 
-  let list = [{'bufnr': 1, 'lnum': 1}]
+  let list = [{'bufnr': bufnr('%'), 'lnum': 1}]
   call g:Xsetlist(list)
 
   " Jumping to a non existent list should return error
@@ -430,6 +430,19 @@ func Xtest_browse(cchar)
 
   call delete('Xqftestfile1')
   call delete('Xqftestfile2')
+
+  " Should be able to use next/prev with invalid entries
+  Xexpr ""
+  call assert_equal(0, g:Xgetlist({'idx' : 0}).idx)
+  call assert_equal(0, g:Xgetlist({'size' : 0}).size)
+  Xaddexpr ['foo', 'bar', 'baz', 'quux', 'shmoo']
+  call assert_equal(5, g:Xgetlist({'size' : 0}).size)
+  Xlast
+  call assert_equal(5, g:Xgetlist({'idx' : 0}).idx)
+  Xfirst
+  call assert_equal(1, g:Xgetlist({'idx' : 0}).idx)
+  2Xnext
+  call assert_equal(3, g:Xgetlist({'idx' : 0}).idx)
 endfunc
 
 func Test_browse()
@@ -486,6 +499,19 @@ func s:test_xhelpgrep(cchar)
 
   " This wipes out the buffer, make sure that doesn't cause trouble.
   Xclose
+
+  if a:cchar == 'l'
+      " When a help window is present, running :lhelpgrep should reuse the
+      " help window and not the current window
+      new | only
+      call g:Xsetlist([], 'f')
+      help index.txt
+      wincmd w
+      lhelpgrep quickfix
+      call assert_equal(1, winnr())
+      call assert_notequal([], getloclist(1))
+      call assert_equal([], getloclist(2))
+  endif
 
   new | only
 
@@ -1684,6 +1710,10 @@ func HistoryTest(cchar)
   call assert_equal('  error list 1 of 3; 1 ' . common, res[0])
   call assert_equal('  error list 2 of 3; 2 ' . common, res[1])
   call assert_equal('> error list 3 of 3; 3 ' . common, res[2])
+
+  call g:Xsetlist([], 'f')
+  let l = split(execute(a:cchar . 'hist'), "\n")
+  call assert_equal('No entries', l[0])
 endfunc
 
 func Test_history()
@@ -1862,6 +1892,11 @@ func Xproperty_tests(cchar)
     let l = g:Xgetlist({'items':1})
     call assert_equal(0, len(l.items))
 
+    call g:Xsetlist([], 'r', {'title' : 'TestTitle'})
+    call g:Xsetlist([], 'r', {'items' : [{'filename' : 'F1', 'lnum' : 10, 'text' : 'L10'}]})
+    call g:Xsetlist([], 'r', {'items' : [{'filename' : 'F1', 'lnum' : 10, 'text' : 'L10'}]})
+    call assert_equal('TestTitle', g:Xgetlist({'title' : 1}).title)
+
     " The following used to crash Vim with address sanitizer
     call g:Xsetlist([], 'f')
     call g:Xsetlist([], 'a', {'items' : [{'filename':'F1', 'lnum':10}]})
@@ -1904,10 +1939,10 @@ func Xproperty_tests(cchar)
     call g:Xsetlist([], 'r', l2)
     let newl1=g:Xgetlist({'nr':1,'all':1})
     let newl2=g:Xgetlist({'nr':2,'all':1})
-    call assert_equal(':Fruits', newl1.title)
+    call assert_equal('Fruits', newl1.title)
     call assert_equal(['Fruits'], newl1.context)
     call assert_equal('Line20', newl1.items[0].text)
-    call assert_equal(':Colors', newl2.title)
+    call assert_equal('Colors', newl2.title)
     call assert_equal(['Colors'], newl2.context)
     call assert_equal('Line10', newl2.items[0].text)
     call g:Xsetlist([], 'f')
@@ -1931,26 +1966,136 @@ func Test_Autocmd()
   cexpr "F1:10:Line 10"
   caddexpr "F1:20:Line 20"
   cgetexpr "F1:30:Line 30"
-  enew! | call append(0, "F2:10:Line 10")
-  cbuffer!
-  enew! | call append(0, "F2:20:Line 20")
-  cgetbuffer
-  enew! | call append(0, "F2:30:Line 30")
-  caddbuffer
-
+  cexpr ""
+  caddexpr ""
+  cgetexpr ""
+  silent! cexpr non_existing_func()
+  silent! caddexpr non_existing_func()
+  silent! cgetexpr non_existing_func()
   let l = ['precexpr',
 	      \ 'postcexpr',
 	      \ 'precaddexpr',
 	      \ 'postcaddexpr',
 	      \ 'precgetexpr',
 	      \ 'postcgetexpr',
-	      \ 'precbuffer',
+	      \ 'precexpr',
+	      \ 'postcexpr',
+	      \ 'precaddexpr',
+	      \ 'postcaddexpr',
+	      \ 'precgetexpr',
+	      \ 'postcgetexpr',
+	      \ 'precexpr',
+	      \ 'precaddexpr',
+	      \ 'precgetexpr']
+  call assert_equal(l, g:acmds)
+
+  let g:acmds = []
+  enew! | call append(0, "F2:10:Line 10")
+  cbuffer!
+  enew! | call append(0, "F2:20:Line 20")
+  cgetbuffer
+  enew! | call append(0, "F2:30:Line 30")
+  caddbuffer
+  new
+  let bnum = bufnr('%')
+  bunload
+  exe 'silent! cbuffer! ' . bnum
+  exe 'silent! cgetbuffer ' . bnum
+  exe 'silent! caddbuffer ' . bnum
+  enew!
+  let l = ['precbuffer',
 	      \ 'postcbuffer',
 	      \ 'precgetbuffer',
 	      \ 'postcgetbuffer',
 	      \ 'precaddbuffer',
-	      \ 'postcaddbuffer']
+	      \ 'postcaddbuffer',
+	      \ 'precbuffer',
+	      \ 'precgetbuffer',
+	      \ 'precaddbuffer']
   call assert_equal(l, g:acmds)
+
+  call writefile(['Xtest:1:Line1'], 'Xtest')
+  call writefile([], 'Xempty')
+  let g:acmds = []
+  cfile Xtest
+  caddfile Xtest
+  cgetfile Xtest
+  cfile Xempty
+  caddfile Xempty
+  cgetfile Xempty
+  silent! cfile do_not_exist
+  silent! caddfile do_not_exist
+  silent! cgetfile do_not_exist
+  let l = ['precfile',
+	      \ 'postcfile',
+	      \ 'precaddfile',
+	      \ 'postcaddfile',
+	      \ 'precgetfile',
+	      \ 'postcgetfile',
+	      \ 'precfile',
+	      \ 'postcfile',
+	      \ 'precaddfile',
+	      \ 'postcaddfile',
+	      \ 'precgetfile',
+	      \ 'postcgetfile',
+	      \ 'precfile',
+	      \ 'postcfile',
+	      \ 'precaddfile',
+	      \ 'postcaddfile',
+	      \ 'precgetfile',
+	      \ 'postcgetfile']
+  call assert_equal(l, g:acmds)
+
+  let g:acmds = []
+  helpgrep quickfix
+  silent! helpgrep non_existing_help_topic
+  vimgrep test Xtest
+  vimgrepadd test Xtest
+  silent! vimgrep non_existing_test Xtest
+  silent! vimgrepadd non_existing_test Xtest
+  set makeprg=
+  silent! make
+  set makeprg&
+  let l = ['prehelpgrep',
+	      \ 'posthelpgrep',
+	      \ 'prehelpgrep',
+	      \ 'posthelpgrep',
+	      \ 'previmgrep',
+	      \ 'postvimgrep',
+	      \ 'previmgrepadd',
+	      \ 'postvimgrepadd',
+	      \ 'previmgrep',
+	      \ 'postvimgrep',
+	      \ 'previmgrepadd',
+	      \ 'postvimgrepadd',
+	      \ 'premake',
+	      \ 'postmake']
+  call assert_equal(l, g:acmds)
+
+  if has('unix')
+    " Run this test only on Unix-like systems. The grepprg may not be set on
+    " non-Unix systems.
+    " The following lines are used for the grep test. Don't remove.
+    " Grep_Autocmd_Text: Match 1
+    " GrepAdd_Autocmd_Text: Match 2
+    let g:acmds = []
+    silent grep Grep_Autocmd_Text test_quickfix.vim
+    silent grepadd GrepAdd_Autocmd_Text test_quickfix.vim
+    silent grep abc123def Xtest
+    silent grepadd abc123def Xtest
+    let l = ['pregrep',
+		\ 'postgrep',
+		\ 'pregrepadd',
+		\ 'postgrepadd',
+		\ 'pregrep',
+		\ 'postgrep',
+		\ 'pregrepadd',
+		\ 'postgrepadd']
+    call assert_equal(l, g:acmds)
+  endif
+
+  call delete('Xtest')
+  call delete('Xempty')
 endfunc
 
 func Test_Autocmd_Exception()

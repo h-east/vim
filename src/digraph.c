@@ -321,7 +321,7 @@ static digr_T digraphdefault[] =
 	};
 
 #  else
-#   if defined(MACOS) && !defined(FEAT_MBYTE)
+#   if defined(MACOS_X) && !defined(FEAT_MBYTE)
 
 	/*
 	 * Macintosh digraphs
@@ -449,7 +449,7 @@ static digr_T digraphdefault[] =
 	{NUL, NUL, NUL}
 	};
 
-#   else	/* !MACOS */
+#   else	/* !MACOS_X */
 
 #    ifdef OLD_DIGRAPHS
 
@@ -2426,9 +2426,7 @@ ex_loadkeymap(exarg_T *eap)
     p_cpo = save_cpo;
 
     curbuf->b_kmap_state |= KEYMAP_LOADED;
-#ifdef FEAT_WINDOWS
     status_redraw_curbuf();
-#endif
 }
 
 /*
@@ -2462,9 +2460,7 @@ keymap_unload(void)
 
     ga_clear(&curbuf->b_kmap_ga);
     curbuf->b_kmap_state &= ~KEYMAP_LOADED;
-#ifdef FEAT_WINDOWS
     status_redraw_curbuf();
-#endif
 }
 
 #endif /* FEAT_KEYMAP */
