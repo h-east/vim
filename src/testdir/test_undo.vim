@@ -350,3 +350,56 @@ func Test_cmd_in_reg_undo()
   only!
   let @a=''
 endfunc
+
+" This used to cause an illegal memory access
+func Test_undo_append()
+  new
+  call feedkeys("axx\<Esc>v", 'xt')
+  undo
+  norm o
+  quit
+endfunc
+
+func Test_undo_0()
+  new
+  set ul=100
+  normal i1
+  undo
+  normal i2
+  undo
+  normal i3
+
+  undo 0
+  let d = undotree()
+  call assert_equal('', getline(1))
+  call assert_equal(0, d.seq_cur)
+
+  redo
+  let d = undotree()
+  call assert_equal('3', getline(1))
+  call assert_equal(3, d.seq_cur)
+
+  undo 2
+  undo 0
+  let d = undotree()
+  call assert_equal('', getline(1))
+  call assert_equal(0, d.seq_cur)
+
+  redo
+  let d = undotree()
+  call assert_equal('2', getline(1))
+  call assert_equal(2, d.seq_cur)
+
+  undo 1
+  undo 0
+  let d = undotree()
+  call assert_equal('', getline(1))
+  call assert_equal(0, d.seq_cur)
+
+  redo
+  let d = undotree()
+  call assert_equal('1', getline(1))
+  call assert_equal(1, d.seq_cur)
+
+  bwipe!
+endfunc

@@ -287,6 +287,24 @@ abandon_cmdline(void)
     redraw_cmdline = TRUE;
 }
 
+#ifdef FEAT_SEARCH_EXTRA
+/*
+ * Guess that the pattern matches everything.  Only finds specific cases, such
+ * as a trailing \|, which can happen while typing a pattern.
+ */
+    static int
+empty_pattern(char_u *p)
+{
+    size_t n = STRLEN(p);
+
+    /* remove trailing \v and the like */
+    while (n >= 2 && p[n - 2] == '\\'
+			  && vim_strchr((char_u *)"mMvVcCZ", p[n - 1]) != NULL)
+	n -= 2;
+    return n == 0 || (n >= 2 && p[n - 2] == '\\' && p[n - 1] == '|');
+}
+#endif
+
 /*
  * getcmdline() - accept a command line starting with firstc.
  *
@@ -2127,11 +2145,11 @@ docomplete:
 # endif
 			old_botline = curwin->w_botline;
 			update_screen(NOT_VALID);
-			restore_last_search_pattern();
 			redrawcmdline();
 		    }
 		    else
 			vim_beep(BO_ERROR);
+		    restore_last_search_pattern();
 		    goto cmdline_not_changed;
 		}
 		break;
@@ -2266,6 +2284,11 @@ cmdline_not_changed:
 #endif
 
 cmdline_changed:
+#ifdef FEAT_AUTOCMD
+	/* Trigger CmdlineChanged autocommands. */
+	trigger_cmd_autocmd(cmdline_type, EVENT_CMDLINECHANGED);
+#endif
+
 #ifdef FEAT_SEARCH_EXTRA
 	/*
 	 * 'incsearch' highlighting.
@@ -2355,6 +2378,11 @@ cmdline_changed:
 	    }
 	    else
 		end_pos = curwin->w_cursor; /* shutup gcc 4 */
+
+	    /* Disable 'hlsearch' highlighting if the pattern matches
+	     * everything. Avoids a flash when typing "foo\|". */
+	    if (empty_pattern(ccline.cmdbuff))
+		SET_NO_HLSEARCH(TRUE);
 
 	    validate_cursor();
 	    /* May redraw the status line to show the cursor position. */

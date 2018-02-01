@@ -1,7 +1,7 @@
 " Vim support file to detect file types
 "
 " Maintainer:	Bram Moolenaar <Bram@vim.org>
-" Last Change:	2017 Nov 23
+" Last Change:	2018 Jan 28
 
 " Listen very carefully, I will say this only once
 if exists("did_load_filetypes")
@@ -239,6 +239,7 @@ endif
 
 " C or lpc
 au BufNewFile,BufRead *.c			call dist#ft#FTlpc()
+au BufNewFile,BufRead *.lpc,*.ulpc		setf lpc
 
 " Calendar
 au BufNewFile,BufRead calendar			setf calendar
@@ -378,7 +379,7 @@ au BufNewFile,BufRead *.cfm,*.cfi,*.cfc		setf cf
 au BufNewFile,BufRead configure.in,configure.ac setf config
 
 " CUDA  Cumpute Unified Device Architecture
-au BufNewFile,BufRead *.cu			setf cuda
+au BufNewFile,BufRead *.cu,*.cuh		setf cuda
 
 " Dockerfile
 au BufNewFile,BufRead Dockerfile,*.Dockerfile	setf dockerfile
@@ -1152,8 +1153,9 @@ au BufNewFile,BufRead *.pod6			setf pod6
 " Also .ctp for Cake template file
 au BufNewFile,BufRead *.php,*.php\d,*.phtml,*.ctp	setf php
 
-" Pike
-au BufNewFile,BufRead *.pike,*.lpc,*.ulpc,*.pmod setf pike
+" Pike and Cmod
+au BufNewFile,BufRead *.pike,*.pmod		setf pike
+au BufNewFile,BufRead *.cmod			setf cmod
 
 " Pinfo config
 au BufNewFile,BufRead */etc/pinforc,*/.pinforc	setf pinfo
@@ -1924,6 +1926,9 @@ au StdinReadPost * if !did_filetype() | runtime! scripts.vim | endif
 " script file.
 " Most of these should call s:StarSetf() to avoid names ending in .gz and the
 " like are used.
+
+" More Apache style config files
+au BufNewFile,BufRead */etc/proftpd/*.conf*,*/etc/proftpd/conf.*/*	call s:StarSetf('apachestyle')
 
 " More Apache config files
 au BufNewFile,BufRead access.conf*,apache.conf*,apache2.conf*,httpd.conf*,srm.conf*	call s:StarSetf('apache')

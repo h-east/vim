@@ -2501,6 +2501,27 @@ out_flush(void)
     }
 }
 
+/*
+ * out_flush_cursor(): flush the output buffer and redraw the cursor
+ */
+    void
+out_flush_cursor(
+    int	    force UNUSED,   /* when TRUE, update cursor even when not moved */
+    int	    clear_selection UNUSED) /* clear selection under cursor */
+{
+    mch_disable_flush();
+    out_flush();
+    mch_enable_flush();
+#ifdef FEAT_GUI
+    if (gui.in_use)
+    {
+	gui_update_cursor(force, clear_selection);
+	gui_may_flush();
+    }
+#endif
+}
+
+
 #if defined(FEAT_MBYTE) || defined(PROTO)
 /*
  * Sometimes a byte out of a multi-byte character is written with out_char().
@@ -3520,6 +3541,9 @@ may_req_ambiguous_char_width(void)
 	 term_windgoto(1, 0);
 	 out_str((char_u *)"  ");
 	 term_windgoto(0, 0);
+
+	 /* Need to reset the known cursor position. */
+	 screen_start();
 
 	 /* check for the characters now, otherwise they might be eaten by
 	  * get_keystroke() */
@@ -4596,7 +4620,7 @@ check_termcode(
 				is_mac_terminal = TRUE;
 			    }
 # ifdef FEAT_MOUSE_SGR
-			    /* Iterm2 sends 0;95;0 */
+			    /* iTerm2 sends 0;95;0 */
 			    if (STRNCMP(tp + extra - 2, "0;95;0c", 7) == 0)
 				is_iterm2 = TRUE;
 # endif
@@ -4608,7 +4632,7 @@ check_termcode(
 			{
 # ifdef FEAT_MOUSE_SGR
 			    /* Xterm version 277 supports SGR.  Also support
-			     * Terminal.app and iterm2. */
+			     * Terminal.app and iTerm2. */
 			    if (version >= 277 || is_iterm2 || is_mac_terminal)
 				set_option_value((char_u *)"ttym", 0L,
 							  (char_u *)"sgr", 0);

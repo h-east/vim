@@ -2402,7 +2402,7 @@ f_count(typval_T *argvars, typval_T *rettv)
 	char_u *p = argvars[0].vval.v_string;
 	char_u *next;
 
-	if (!error && expr != NULL && p != NULL)
+	if (!error && expr != NULL && *expr != NUL && p != NULL)
 	{
 	    if (ic)
 	    {
@@ -2906,6 +2906,7 @@ f_execute(typval_T *argvars, typval_T *rettv)
     int		save_emsg_silent = emsg_silent;
     int		save_emsg_noredir = emsg_noredir;
     int		save_redir_execute = redir_execute;
+    int		save_redir_off = redir_off;
     garray_T	save_ga;
 
     rettv->vval.v_string = NULL;
@@ -2948,6 +2949,7 @@ f_execute(typval_T *argvars, typval_T *rettv)
 	save_ga = redir_execute_ga;
     ga_init2(&redir_execute_ga, (int)sizeof(char), 500);
     redir_execute = TRUE;
+    redir_off = FALSE;
 
     if (cmd != NULL)
 	do_cmdline_cmd(cmd);
@@ -2978,6 +2980,7 @@ f_execute(typval_T *argvars, typval_T *rettv)
     redir_execute = save_redir_execute;
     if (redir_execute)
 	redir_execute_ga = save_ga;
+    redir_off = save_redir_off;
 
     /* "silent reg" or "silent echo x" leaves msg_col somewhere in the
      * line.  Put it back in the first column. */
@@ -4157,6 +4160,7 @@ f_getbufinfo(typval_T *argvars, typval_T *rettv)
     int		filtered = FALSE;
     int		sel_buflisted = FALSE;
     int		sel_bufloaded = FALSE;
+    int		sel_bufmodified = FALSE;
 
     if (rettv_list_alloc(rettv) != OK)
 	return;
@@ -4179,6 +4183,10 @@ f_getbufinfo(typval_T *argvars, typval_T *rettv)
 	    di = dict_find(sel_d, (char_u *)"bufloaded", -1);
 	    if (di != NULL && get_tv_number(&di->di_tv))
 		sel_bufloaded = TRUE;
+
+	    di = dict_find(sel_d, (char_u *)"bufmodified", -1);
+	    if (di != NULL && get_tv_number(&di->di_tv))
+		sel_bufmodified = TRUE;
 	}
     }
     else if (argvars[0].v_type != VAR_UNKNOWN)
@@ -4198,7 +4206,8 @@ f_getbufinfo(typval_T *argvars, typval_T *rettv)
 	if (argbuf != NULL && argbuf != buf)
 	    continue;
 	if (filtered && ((sel_bufloaded && buf->b_ml.ml_mfp == NULL)
-					   || (sel_buflisted && !buf->b_p_bl)))
+			|| (sel_buflisted && !buf->b_p_bl)
+			|| (sel_bufmodified && !buf->b_changed)))
 	    continue;
 
 	d = get_buffer_info(buf);
@@ -5930,13 +5939,23 @@ f_has(typval_T *argvars, typval_T *rettv)
 #ifdef FEAT_PERSISTENT_UNDO
 	"persistent_undo",
 #endif
-#if defined(FEAT_PYTHON) && !defined(DYNAMIC_PYTHON)
+#if defined(FEAT_PYTHON)
+	"python_compiled",
+# if defined(DYNAMIC_PYTHON)
+	"python_dynamic",
+# else
 	"python",
 	"pythonx",
+# endif
 #endif
-#if defined(FEAT_PYTHON3) && !defined(DYNAMIC_PYTHON3)
+#if defined(FEAT_PYTHON3)
+	"python3_compiled",
+# if defined(DYNAMIC_PYTHON3)
+	"python3_dynamic",
+# else
 	"python3",
 	"pythonx",
+# endif
 #endif
 #ifdef FEAT_POSTSCRIPT
 	"postscript",
@@ -11190,7 +11209,10 @@ f_spellbadword(typval_T *argvars UNUSED, typval_T *rettv)
 	/* Find the start and length of the badly spelled word. */
 	len = spell_move_to(curwin, FORWARD, TRUE, TRUE, &attr);
 	if (len != 0)
+	{
 	    word = ml_get_cursor();
+	    curwin->w_set_curswant = TRUE;
+	}
     }
     else if (curwin->w_p_spell && *curbuf->b_s.b_p_spl != NUL)
     {

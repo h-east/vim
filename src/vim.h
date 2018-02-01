@@ -1270,6 +1270,7 @@ enum auto_event
     EVENT_BUFWRITEPRE,		/* before writing a buffer */
     EVENT_BUFWRITECMD,		/* write buffer using command */
     EVENT_CLCOMPLETEDONE,	/* after finishing cmdline complete */
+    EVENT_CMDLINECHANGED,	/* command line was modified*/
     EVENT_CMDLINEENTER,		/* after entering the command line */
     EVENT_CMDLINELEAVE,		/* before leaving the command line */
     EVENT_CMDWINENTER,		/* after entering the cmdline window */
@@ -1340,6 +1341,7 @@ enum auto_event
     EVENT_TEXTCHANGEDI,		/* text was modified in Insert mode*/
     EVENT_CMDUNDEFINED,		/* command undefined */
     EVENT_OPTIONSET,		/* option was set */
+    EVENT_TEXTYANKPOST,		/* after some text was yanked */
     NUM_EVENTS			/* MUST be the last one */
 };
 
@@ -1993,8 +1995,9 @@ typedef int sock_T;
 #define VV_TERMU7RESP	83
 #define VV_TERMSTYLERESP 84
 #define VV_TERMBLINKRESP 85
-#define VV_CLCOMPLETED_ITEM 86
-#define VV_LEN		87	/* number of v: vars */
+#define VV_EVENT	86
+#define VV_CLCOMPLETED_ITEM 87
+#define VV_LEN		88	/* number of v: vars */
 
 /* used for v_number in VAR_SPECIAL */
 #define VVAL_FALSE	0L

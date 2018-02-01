@@ -2104,11 +2104,10 @@ run_message_test: $(MESSAGE_TEST_TARGET)
 # These do not depend on the executable, compile it when needed.
 test1 \
 	test_eval \
-	test_wordcount \
-	test3 test11 test14 test15 test17 \
-	test29 test30 test36 test37 test39 \
+	test3 test11 test14 test17 \
+	test29 test30 test37 test39 \
 	test42 test44 test48 test49 \
-	test50 test52 test59 \
+	test52 test59 \
 	test64 test69 \
 	test70 test72 \
 	test85 test86 test87 test88 \
@@ -2123,6 +2122,7 @@ test_arglist \
 	test_assign \
 	test_autochdir \
 	test_autocmd \
+	test_autoload \
 	test_backspace_opt \
 	test_breakindent \
 	test_bufline \
@@ -2151,6 +2151,7 @@ test_arglist \
 	test_edit \
 	test_erasebackword \
 	test_escaped_glob \
+	test_eval_stuff \
 	test_ex_undo \
 	test_ex_z \
 	test_exec_while_if \
@@ -2299,6 +2300,7 @@ test_arglist \
 	test_window_cmd \
 	test_window_id \
 	test_windows_home \
+	test_wordcount \
 	test_writefile \
 	test_alot_latin \
 	test_alot_utf8 \
