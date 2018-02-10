@@ -1277,6 +1277,7 @@ enum auto_event
     EVENT_CMDWINLEAVE,		/* before leaving the cmdline window */
     EVENT_COLORSCHEME,		/* after loading a colorscheme */
     EVENT_COMPLETEDONE,		/* after finishing insert complete */
+    EVENT_DIRCHANGED,		/* after changing directory as a result of user cmd */
     EVENT_FILEAPPENDPOST,	/* after appending to a file */
     EVENT_FILEAPPENDPRE,	/* before appending to a file */
     EVENT_FILEAPPENDCMD,	/* append to a file using command */
@@ -1337,8 +1338,11 @@ enum auto_event
     EVENT_TABCLOSED,		/* after closing a tab page */
     EVENT_SHELLCMDPOST,		/* after ":!cmd" */
     EVENT_SHELLFILTERPOST,	/* after ":1,2!cmd", ":w !cmd", ":r !cmd". */
-    EVENT_TEXTCHANGED,		/* text was modified */
-    EVENT_TEXTCHANGEDI,		/* text was modified in Insert mode*/
+    EVENT_TEXTCHANGED,		/* text was modified not in Insert mode */
+    EVENT_TEXTCHANGEDI,         /* text was modified in Insert mode without
+				   popup menu visible */
+    EVENT_TEXTCHANGEDP,         /* text was modified in Insert mode with popup
+				   menu visible */
     EVENT_CMDUNDEFINED,		/* command undefined */
     EVENT_OPTIONSET,		/* option was set */
     EVENT_TEXTYANKPOST,		/* after some text was yanked */
@@ -2519,5 +2523,9 @@ typedef enum {
 #   endif
 # endif
 #endif
+
+/* Replacement for nchar used by nv_replace(). */
+#define REPLACE_CR_NCHAR    -1
+#define REPLACE_NL_NCHAR    -2
 
 #endif /* VIM__H */

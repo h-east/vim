@@ -978,7 +978,6 @@ EXTERN char_u	*edit_submode INIT(= NULL); /* msg for CTRL-X submode */
 EXTERN char_u	*edit_submode_pre INIT(= NULL); /* prepended to edit_submode */
 EXTERN char_u	*edit_submode_extra INIT(= NULL);/* appended to edit_submode */
 EXTERN hlf_T	edit_submode_highl;	/* highl. method for extra info */
-EXTERN int	ctrl_x_mode INIT(= 0);	/* Which Ctrl-X mode are we in? */
 #endif
 
 EXTERN int	no_abbr INIT(= TRUE);	/* TRUE when no abbreviations loaded */
@@ -1100,8 +1099,6 @@ EXTERN pos_T	last_cursormoved	      /* for CursorMoved event */
 			= INIT_POS_T(0, 0, 0)
 # endif
 			;
-EXTERN varnumber_T last_changedtick INIT(= 0);   /* for TextChanged event */
-EXTERN buf_T	*last_changedtick_buf INIT(= NULL);
 #endif
 
 EXTERN int	postponed_split INIT(= 0);  /* for CTRL-W CTRL-] command */
@@ -1609,6 +1606,9 @@ EXTERN char_u e_notset[]	INIT(= N_("E764: Option '%s' is not set"));
 EXTERN char_u e_invalidreg[]    INIT(= N_("E850: Invalid register name"));
 #endif
 EXTERN char_u e_dirnotf[]	INIT(= N_("E919: Directory not found in '%s': \"%s\""));
+#ifdef FEAT_AUTOCMD
+EXTERN char_u e_au_recursive[]	INIT(= N_("E952: Autocommand caused recursive behavior"));
+#endif
 
 #ifdef FEAT_GUI_MAC
 EXTERN short disallow_gui	INIT(= FALSE);

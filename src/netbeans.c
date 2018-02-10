@@ -580,8 +580,7 @@ nb_free(void)
 	    buf.bufp->b_was_netbeans_file = FALSE;
 	}
     }
-    vim_free(buf_list);
-    buf_list = NULL;
+    VIM_CLEAR(buf_list);
     buf_list_size = 0;
     buf_list_used = 0;
 
@@ -1477,8 +1476,7 @@ nb_do_cmd(
 		EMSG("E636: invalid buffer identifier in create");
 		return FAIL;
 	    }
-	    vim_free(buf->displayname);
-	    buf->displayname = NULL;
+	    VIM_CLEAR(buf->displayname);
 
 	    netbeansReadFile = 0; /* don't try to open disk file */
 	    do_ecmd(0, NULL, 0, 0, ECMD_ONE, ECMD_HIDE + ECMD_OLDBUF, curwin);
@@ -2663,7 +2661,7 @@ netbeans_file_opened(buf_T *bufp)
     nbdebug(("EVT: %s", buffer));
 
     nb_send(buffer, "netbeans_file_opened");
-    if (p_acd && vim_chdirfile(bufp->b_ffname) == OK)
+    if (p_acd && vim_chdirfile(bufp->b_ffname, "auto") == OK)
 	shorten_fnames(TRUE);
 }
 
@@ -3447,8 +3445,7 @@ print_read_msg(nbbuf_T *buf)
     msg_add_lines(c, (long)lnum, nchars);
 
     /* Now display it */
-    vim_free(keep_msg);
-    keep_msg = NULL;
+    VIM_CLEAR(keep_msg);
     msg_scrolled_ign = TRUE;
     msg_trunc_attr(IObuff, FALSE, 0);
     msg_scrolled_ign = FALSE;
@@ -3475,8 +3472,7 @@ print_save_msg(nbbuf_T *buf, off_T nchars)
 	msg_add_lines(c, buf->bufp->b_ml.ml_line_count,
 						buf->bufp->b_orig_size);
 
-	vim_free(keep_msg);
-	keep_msg = NULL;
+	VIM_CLEAR(keep_msg);
 	msg_scrolled_ign = TRUE;
 	p = msg_trunc_attr(IObuff, FALSE, 0);
 	if ((msg_scrolled && !need_wait_return) || !buf->initDone)

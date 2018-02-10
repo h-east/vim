@@ -1453,6 +1453,8 @@ f_balloon_split(typval_T *argvars, typval_T *rettv UNUSED)
 	    /* Skip the first and last item, they are always empty. */
 	    for (i = 1; i < size - 1; ++i)
 		list_append_string(rettv->vval.v_list, array[i].pum_text, -1);
+	    while (size > 0)
+		vim_free(array[--size].pum_text);
 	    vim_free(array);
 	}
     }
@@ -4633,16 +4635,21 @@ f_getcwd(typval_T *argvars, typval_T *rettv)
 {
     win_T	*wp = NULL;
     char_u	*cwd;
+    int		global = FALSE;
 
     rettv->v_type = VAR_STRING;
     rettv->vval.v_string = NULL;
 
-    wp = find_tabwin(&argvars[0], &argvars[1]);
-    if (wp != NULL)
+    if (argvars[0].v_type == VAR_NUMBER && argvars[0].vval.v_number == -1)
+	global = TRUE;
+    else
+	wp = find_tabwin(&argvars[0], &argvars[1]);
+
+    if (wp != NULL && wp->w_localdir != NULL)
+	rettv->vval.v_string = vim_strsave(wp->w_localdir);
+    else if (wp != NULL || global)
     {
-	if (wp->w_localdir != NULL)
-	    rettv->vval.v_string = vim_strsave(wp->w_localdir);
-	else if (globaldir != NULL)
+	if (globaldir != NULL)
 	    rettv->vval.v_string = vim_strsave(globaldir);
 	else
 	{
@@ -8000,7 +8007,7 @@ f_mode(typval_T *argvars, typval_T *rettv)
 #ifdef FEAT_INS_EXPAND
 	    if (ins_compl_active())
 		buf[1] = 'c';
-	    else if (ctrl_x_mode == 1)
+	    else if (ctrl_x_mode_not_defined_yet())
 		buf[1] = 'x';
 #endif
 	}
@@ -9238,10 +9245,7 @@ f_resolve(typval_T *argvars, typval_T *rettv)
 	    if (*q != NUL)
 		STRMOVE(remain, q - 1);
 	    else
-	    {
-		vim_free(remain);
-		remain = NULL;
-	    }
+		VIM_CLEAR(remain);
 	}
 
 	/* If the result is a relative path name, make it explicitly relative to

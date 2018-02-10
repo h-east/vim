@@ -264,7 +264,7 @@ main
 	 * Hint: to avoid this when typing a command use a forward slash.
 	 * If the cd fails, it doesn't matter.
 	 */
-	(void)vim_chdirfile(params.fname);
+	(void)vim_chdirfile(params.fname, "drop");
 	if (start_dir != NULL)
 	    mch_dirname(start_dir, MAXPATHL);
     }
@@ -314,7 +314,7 @@ main
 						&& STRCMP(NameBuff, "/") == 0)
 	{
 	    if (params.fname != NULL)
-		(void)vim_chdirfile(params.fname);
+		(void)vim_chdirfile(params.fname, "drop");
 	    else
 	    {
 		expand_env((char_u *)"$HOME", NameBuff, MAXPATHL);
@@ -358,6 +358,13 @@ main
      * Print a warning if stdout is not a terminal.
      */
     check_tty(&params);
+
+#ifdef _IOLBF
+    /* Ensure output works usefully without a tty: buffer lines instead of
+     * fully buffered. */
+    if (silent_mode)
+	setvbuf(stdout, NULL, _IOLBF, 0);
+#endif
 
     /* This message comes before term inits, but after setting "silent_mode"
      * when the input is not a tty. */
@@ -1194,13 +1201,10 @@ main_loop(
 #ifdef FEAT_AUTOCMD
 	    /* Trigger TextChanged if b:changedtick differs. */
 	    if (!finish_op && has_textchanged()
-		    && last_changedtick != CHANGEDTICK(curbuf))
+		    && curbuf->b_last_changedtick != CHANGEDTICK(curbuf))
 	    {
-		if (last_changedtick_buf == curbuf)
-		    apply_autocmds(EVENT_TEXTCHANGED, NULL, NULL,
-							       FALSE, curbuf);
-		last_changedtick_buf = curbuf;
-		last_changedtick = CHANGEDTICK(curbuf);
+		apply_autocmds(EVENT_TEXTCHANGED, NULL, NULL, FALSE, curbuf);
+		curbuf->b_last_changedtick = CHANGEDTICK(curbuf);
 	    }
 #endif
 
@@ -2532,7 +2536,7 @@ scripterror:
 
 /*
  * Print a warning if stdout is not a terminal.
- * When starting in Ex mode and commands come from a file, set Silent mode.
+ * When starting in Ex mode and commands come from a file, set silent_mode.
  */
     static void
 check_tty(mparm_T *parmp)
@@ -3947,8 +3951,7 @@ cmdsrv_main(
 		{
 		    /* Output error from remote */
 		    mch_errmsg((char *)res);
-		    vim_free(res);
-		    res = NULL;
+		    VIM_CLEAR(res);
 		}
 		mch_errmsg(_(": Send expression failed.\n"));
 	    }
