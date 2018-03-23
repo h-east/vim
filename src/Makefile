@@ -651,12 +651,16 @@ LINT_OPTIONS = -beprxzF
 
 # PROFILING - Uncomment the next two lines to do profiling with gcc and gprof.
 # Might not work with GUI or Perl.
-# For unknown reasons adding "-lc" fixes a linking problem with some versions
-# of GCC.  That's probably a bug in the "-pg" implementation.
 # After running Vim see the profile result with: gprof vim gmon.out | vim -
 # Need to recompile everything after changing this: "make clean" "make".
 #PROFILE_CFLAGS = -pg -g -DWE_ARE_PROFILING
 #PROFILE_LIBS = -pg
+
+# GCC 5 and later need the -no-pie argument.
+#PROFILE_LIBS = -pg -no-pie
+
+# For unknown reasons adding "-lc" fixes a linking problem with some versions
+# of GCC.  That's probably a bug in the "-pg" implementation.
 #PROFILE_LIBS = -pg -lc
 
 
@@ -1392,6 +1396,8 @@ TERM_DEPS = \
 	libvterm/src/utf8.h \
 	libvterm/src/vterm_internal.h
 
+TERM_SRC = libvterm/src/*.c
+
 ### Command to create dependencies based on #include "..."
 ### prototype headers are ignored due to -DPROTO, system
 ### headers #include <...> are ignored if we use the -MM option, as
@@ -2039,7 +2045,7 @@ notags:
 #	Motif and Athena GUI
 # You can ignore error messages for missing files.
 tags TAGS: notags
-	$(TAGPRG) $(TAGS_SRC) $(TAGS_INCL)
+	$(TAGPRG) $(TAGS_SRC) $(TAGS_INCL) $(TERM_SRC) $(TERM_DEPS)
 
 # Make a highlight file for types.  Requires Exuberant ctags and awk
 types: types.vim
@@ -2130,6 +2136,7 @@ test_arglist \
 	test_cd \
 	test_cdo \
 	test_changedtick \
+	test_changelist \
 	test_channel \
 	test_charsearch \
 	test_charsearch_utf8 \
@@ -2154,6 +2161,7 @@ test_arglist \
 	test_eval_stuff \
 	test_ex_undo \
 	test_ex_z \
+	test_exit \
 	test_exec_while_if \
 	test_execute_func \
 	test_exists \
@@ -2202,6 +2210,7 @@ test_arglist \
 	test_job_fails \
 	test_join \
 	test_json \
+	test_jumplist \
 	test_jumps \
 	test_lambda \
 	test_langmap \
@@ -2883,6 +2892,7 @@ shadow:	runtime pixmaps
 				 ../../testdir/pyxfile \
 				 ../../testdir/sautest \
 				 ../../testdir/samples \
+				 ../../testdir/dumps \
 				 ../../testdir/test83-tags? \
 				 ../../testdir/*.ok .
 

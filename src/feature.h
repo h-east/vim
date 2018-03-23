@@ -440,17 +440,10 @@
 #endif
 
 /*
- * +autocmd		":autocmd" command
- */
-#ifdef FEAT_NORMAL
-# define FEAT_AUTOCMD
-#endif
-
-/*
  * +diff		Displaying diffs in a nice way.
  *			Requires +windows and +autocmd.
  */
-#if defined(FEAT_NORMAL) && defined(FEAT_AUTOCMD)
+#if defined(FEAT_NORMAL)
 # define FEAT_DIFF
 #endif
 
@@ -710,20 +703,6 @@
 #endif
 
 /*
- * +scrollbind		synchronization of split windows
- */
-#if defined(FEAT_NORMAL)
-# define FEAT_SCROLLBIND
-#endif
-
-/*
- * +cursorbind		synchronization of split windows
- */
-#if defined(FEAT_NORMAL)
-# define FEAT_CURSORBIND
-#endif
-
-/*
  * +menu		":menu" command
  */
 #ifdef FEAT_NORMAL
@@ -731,6 +710,13 @@
 # ifdef FEAT_GUI_W32
 #  define FEAT_TEAROFF
 # endif
+#endif
+
+/*
+ * popup menu in a terminal
+ */
+#if defined(FEAT_MENU) && !defined(ALWAYS_USE_GUI) && defined(FEAT_INS_EXPAND)
+# define FEAT_TERM_POPUP_MENU
 #endif
 
 /* There are two ways to use XPM. */
@@ -1339,7 +1325,8 @@
 /*
  * +balloon_eval_term	Allow balloon expression evaluation in the terminal.
  */
-#if defined(FEAT_HUGE) && defined(UNIX) && defined(FEAT_TIMERS)
+#if defined(FEAT_HUGE) && defined(FEAT_TIMERS) && \
+	(defined(UNIX) || (defined(WIN32) && !defined(FEAT_GUI_W32)))
 # define FEAT_BEVAL_TERM
 #endif
 
@@ -1400,4 +1387,11 @@
 #if (defined(UNIX) && !defined(USE_SYSTEM)) \
 	    || (defined(WIN3264) && defined(FEAT_GUI_W32))
 # define FEAT_FILTERPIPE
+#endif
+
+/*
+ * +vtp: Win32 virtual console.
+ */
+#if !defined(FEAT_GUI) && defined(WIN3264)
+# define FEAT_VTP
 #endif

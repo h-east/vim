@@ -75,6 +75,7 @@ NEW_TESTS = test_arabic.res \
 	    test_breakindent.res \
 	    test_bufwintabinfo.res \
 	    test_cdo.res \
+	    test_changelist.res \
 	    test_channel.res \
 	    test_charsearch.res \
 	    test_cindent.res \
@@ -97,6 +98,7 @@ NEW_TESTS = test_arabic.res \
 	    test_exec_while_if.res \
 	    test_exists.res \
 	    test_exists_autocmd.res \
+	    test_exit.res \
 	    test_farsi.res \
 	    test_file_size.res \
 	    test_find_complete.res \
@@ -121,6 +123,7 @@ NEW_TESTS = test_arabic.res \
 	    test_ins_complete.res \
 	    test_job_fails.res \
 	    test_json.res \
+	    test_jumplist.res \
 	    test_langmap.res \
 	    test_let.res \
 	    test_lineending.res \

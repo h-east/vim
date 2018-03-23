@@ -261,7 +261,6 @@ static void set_search_match(pos_T *t);
 #endif
 
 
-#ifdef FEAT_AUTOCMD
     static void
 trigger_cmd_autocmd(int typechar, int evt)
 {
@@ -271,7 +270,6 @@ trigger_cmd_autocmd(int typechar, int evt)
     typestr[1] = NUL;
     apply_autocmds(evt, typestr, typestr, FALSE, curbuf);
 }
-#endif
 
 /*
  * Abandon the command line.
@@ -382,9 +380,7 @@ getcmdline(
      * custom status line may invoke ":normal". */
     struct cmdline_info save_ccline;
 #endif
-#ifdef FEAT_AUTOCMD
     int		cmdline_type;
-#endif
 
 #ifdef FEAT_CLPUM
     /* Don't allow recursive cmdline mode when busy with completion. */
@@ -506,11 +502,11 @@ getcmdline(
 	    b_im_ptr = &curbuf->b_p_imsearch;
 	if (*b_im_ptr == B_IMODE_LMAP)
 	    State |= LANGMAP;
-#ifdef FEAT_MBYTE
+#ifdef HAVE_INPUT_METHOD
 	im_set_active(*b_im_ptr == B_IMODE_IM);
 #endif
     }
-#ifdef FEAT_MBYTE
+#ifdef HAVE_INPUT_METHOD
     else if (p_imcmdline)
 	im_set_active(TRUE);
 #endif
@@ -526,11 +522,9 @@ getcmdline(
      * terminal mode set to cooked.  Need to set raw mode here then. */
     settmode(TMODE_RAW);
 
-#ifdef FEAT_AUTOCMD
     /* Trigger CmdlineEnter autocommands. */
     cmdline_type = firstc == NUL ? '-' : firstc;
     trigger_cmd_autocmd(cmdline_type, EVENT_CMDLINEENTER);
-#endif
 
 #ifdef FEAT_CMDHIST
     init_history();
@@ -1436,7 +1430,7 @@ getcmdline(
 		{
 		    /* ":lmap" mappings exists, toggle use of mappings. */
 		    State ^= LANGMAP;
-#ifdef FEAT_MBYTE
+#ifdef HAVE_INPUT_METHOD
 		    im_set_active(FALSE);	/* Disable input method */
 #endif
 		    if (b_im_ptr != NULL)
@@ -1447,7 +1441,7 @@ getcmdline(
 			    *b_im_ptr = B_IMODE_NONE;
 		    }
 		}
-#ifdef FEAT_MBYTE
+#ifdef HAVE_INPUT_METHOD
 		else
 		{
 		    /* There are no ":lmap" mappings, toggle IM.  When
@@ -2279,10 +2273,8 @@ cmdline_not_changed:
 #endif
 
 cmdline_changed:
-#ifdef FEAT_AUTOCMD
 	/* Trigger CmdlineChanged autocommands. */
 	trigger_cmd_autocmd(cmdline_type, EVENT_CMDLINECHANGED);
-#endif
 
 #ifdef FEAT_SEARCH_EXTRA
 	/*
@@ -2515,13 +2507,11 @@ returncmd:
     if (some_key_typed)
 	need_wait_return = FALSE;
 
-#ifdef FEAT_AUTOCMD
     /* Trigger CmdlineLeave autocommands. */
     trigger_cmd_autocmd(cmdline_type, EVENT_CMDLINELEAVE);
-#endif
 
     State = save_State;
-#ifdef FEAT_MBYTE
+#ifdef HAVE_INPUT_METHOD
     if (b_im_ptr != NULL && *b_im_ptr != B_IMODE_LMAP)
 	im_save_status(b_im_ptr);
     im_set_active(FALSE);
@@ -2625,7 +2615,6 @@ get_text_locked_msg(void)
     return e_secure;
 }
 
-#if defined(FEAT_AUTOCMD) || defined(PROTO)
 /*
  * Check if "curbuf_lock" or "allbuf_lock" is set and return TRUE when it is
  * and give an error message.
@@ -2655,7 +2644,6 @@ allbuf_locked(void)
     }
     return FALSE;
 }
-#endif
 
     static int
 cmdline_charsize(int idx)
@@ -5379,10 +5367,8 @@ ExpandFromContext(
 	    {EXPAND_SYNTIME, get_syntime_arg, TRUE, TRUE},
 #endif
 	    {EXPAND_HIGHLIGHT, get_highlight_name, TRUE, TRUE},
-#ifdef FEAT_AUTOCMD
 	    {EXPAND_EVENTS, get_event_name, TRUE, TRUE},
 	    {EXPAND_AUGROUP, get_augroup_name, TRUE, TRUE},
-#endif
 #ifdef FEAT_CSCOPE
 	    {EXPAND_CSCOPE, get_cscope_name, TRUE, TRUE},
 #endif
@@ -5711,8 +5697,9 @@ ExpandUserDefined(
     char_u	*retstr;
     char_u	*s;
     char_u	*e;
-    char_u      keep;
+    int		keep;
     garray_T	ga;
+    int		skip;
 
     retstr = call_user_expand_func(call_func_retstr, xp, num_file, file);
     if (retstr == NULL)
@@ -5725,23 +5712,19 @@ ExpandUserDefined(
 	if (e == NULL)
 	    e = s + STRLEN(s);
 	keep = *e;
-	*e = 0;
+	*e = NUL;
 
-	if (xp->xp_pattern[0] && vim_regexec(regmatch, s, (colnr_T)0) == 0)
+	skip = xp->xp_pattern[0] && vim_regexec(regmatch, s, (colnr_T)0) == 0;
+	*e = keep;
+
+	if (!skip)
 	{
-	    *e = keep;
-	    if (*e != NUL)
-		++e;
-	    continue;
+	    if (ga_grow(&ga, 1) == FAIL)
+		break;
+	    ((char_u **)ga.ga_data)[ga.ga_len] = vim_strnsave(s, (int)(e - s));
+	    ++ga.ga_len;
 	}
 
-	if (ga_grow(&ga, 1) == FAIL)
-	    break;
-
-	((char_u **)ga.ga_data)[ga.ga_len] = vim_strnsave(s, (int)(e - s));
-	++ga.ga_len;
-
-	*e = keep;
 	if (*e != NUL)
 	    ++e;
     }
@@ -7346,10 +7329,9 @@ open_cmdwin(void)
     /* Save current window sizes. */
     win_size_save(&winsizes);
 
-# ifdef FEAT_AUTOCMD
     /* Don't execute autocommands while creating the window. */
     block_autocmds();
-# endif
+
     /* don't use a new tab page */
     cmdmod.tab = 0;
     cmdmod.noswapfile = 1;
@@ -7358,9 +7340,7 @@ open_cmdwin(void)
     if (win_split((int)p_cwh, WSP_BOT) == FAIL)
     {
 	beep_flush();
-# ifdef FEAT_AUTOCMD
 	unblock_autocmds();
-# endif
 	return K_IGNORE;
     }
     cmdwin_type = get_cmdline_type();
@@ -7379,12 +7359,10 @@ open_cmdwin(void)
 # endif
     RESET_BINDING(curwin);
 
-# ifdef FEAT_AUTOCMD
     /* Do execute autocommands for setting the filetype (load syntax). */
     unblock_autocmds();
     /* But don't allow switching to another buffer. */
     ++curbuf_lock;
-# endif
 
     /* Showing the prompt may have set need_wait_return, reset it. */
     need_wait_return = FALSE;
@@ -7399,9 +7377,7 @@ open_cmdwin(void)
 	}
 	set_option_value((char_u *)"ft", 0L, (char_u *)"vim", OPT_LOCAL);
     }
-# ifdef FEAT_AUTOCMD
     --curbuf_lock;
-# endif
 
     /* Reset 'textwidth' after setting 'filetype' (the Vim filetype plugin
      * sets 'textwidth' to 78). */
@@ -7447,12 +7423,10 @@ open_cmdwin(void)
     setmouse();
 # endif
 
-# ifdef FEAT_AUTOCMD
     /* Trigger CmdwinEnter autocommands. */
     trigger_cmd_autocmd(cmdwin_type, EVENT_CMDWINENTER);
     if (restart_edit != 0)	/* autocmd with ":startinsert" */
 	stuffcharReadbuff(K_NOP);
-# endif
 
     i = RedrawingDisabled;
     RedrawingDisabled = 0;
@@ -7465,20 +7439,16 @@ open_cmdwin(void)
 
     RedrawingDisabled = i;
 
-# ifdef FEAT_AUTOCMD
-
-#  ifdef FEAT_FOLDING
+# ifdef FEAT_FOLDING
     save_KeyTyped = KeyTyped;
-#  endif
+# endif
 
     /* Trigger CmdwinLeave autocommands. */
     trigger_cmd_autocmd(cmdwin_type, EVENT_CMDWINLEAVE);
 
-#  ifdef FEAT_FOLDING
+# ifdef FEAT_FOLDING
     /* Restore KeyTyped in case it is modified by autocommands */
     KeyTyped = save_KeyTyped;
-#  endif
-
 # endif
 
     /* Restore the command line info. */
@@ -7496,7 +7466,7 @@ open_cmdwin(void)
     }
     else
     {
-# if defined(FEAT_AUTOCMD) && defined(FEAT_EVAL)
+# if defined(FEAT_EVAL)
 	/* autocmds may abort script processing */
 	if (aborting() && cmdwin_result != K_IGNORE)
 	    cmdwin_result = Ctrl_C;
@@ -7557,10 +7527,8 @@ open_cmdwin(void)
 	    }
 	}
 
-# ifdef FEAT_AUTOCMD
 	/* Don't execute autocommands while deleting the window. */
 	block_autocmds();
-# endif
 # ifdef FEAT_CONCEAL
 	/* Avoid command-line window first character being concealed. */
 	curwin->w_p_cole = 0;
@@ -7578,9 +7546,7 @@ open_cmdwin(void)
 	/* Restore window sizes. */
 	win_size_restore(&winsizes);
 
-# ifdef FEAT_AUTOCMD
 	unblock_autocmds();
-# endif
     }
 
     ga_clear(&winsizes);

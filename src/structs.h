@@ -101,7 +101,10 @@ typedef struct {
 # endif
 # define guicolor_T long
 # define INVALCOLOR ((guicolor_T)0x1ffffff)
+    /* only used for cterm.bg_rgb and cterm.fg_rgb: use cterm color */
+# define CTERMCOLOR ((guicolor_T)0x1fffffe)
 #endif
+#define COLOR_INVALID(x) ((x) == INVALCOLOR || (x) == CTERMCOLOR)
 
 /*
  * marks: positions in a file
@@ -241,14 +244,12 @@ typedef struct
     char_u	*wo_stl;
 #define w_p_stl w_onebuf_opt.wo_stl	/* 'statusline' */
 #endif
-#ifdef FEAT_SCROLLBIND
     int		wo_scb;
-# define w_p_scb w_onebuf_opt.wo_scb	/* 'scrollbind' */
+#define w_p_scb w_onebuf_opt.wo_scb	/* 'scrollbind' */
     int		wo_diff_saved; /* options were saved for starting diff mode */
-# define w_p_diff_saved w_onebuf_opt.wo_diff_saved
+#define w_p_diff_saved w_onebuf_opt.wo_diff_saved
     int		wo_scb_save;	/* 'scrollbind' saved for diff mode*/
-# define w_p_scb_save w_onebuf_opt.wo_scb_save
-#endif
+#define w_p_scb_save w_onebuf_opt.wo_scb_save
     int		wo_wrap;
 #define w_p_wrap w_onebuf_opt.wo_wrap	/* 'wrap' */
 #ifdef FEAT_DIFF
@@ -261,12 +262,10 @@ typedef struct
     long	wo_cole;		/* 'conceallevel' */
 # define w_p_cole w_onebuf_opt.wo_cole
 #endif
-#ifdef FEAT_CURSORBIND
     int		wo_crb;
-# define w_p_crb w_onebuf_opt.wo_crb	/* 'cursorbind' */
+#define w_p_crb w_onebuf_opt.wo_crb	/* 'cursorbind' */
     int		wo_crb_save;	/* 'cursorbind' state saved for diff mode*/
-# define w_p_crb_save w_onebuf_opt.wo_crb_save
-#endif
+#define w_p_crb_save w_onebuf_opt.wo_crb_save
 #ifdef FEAT_SIGNS
     char_u	*wo_scl;
 # define w_p_scl w_onebuf_opt.wo_scl	/* 'signcolumn' */
@@ -583,9 +582,7 @@ typedef struct
     int		lockmarks;		/* TRUE when ":lockmarks" was used */
     int		keeppatterns;		/* TRUE when ":keeppatterns" was used */
     int		noswapfile;		/* TRUE when ":noswapfile" was used */
-# ifdef FEAT_AUTOCMD
     char_u	*save_ei;		/* saved value of 'eventignore' */
-# endif
     regmatch_T	filter_regmatch;	/* set by :filter /pat/ */
     int		filter_force;		/* set for :filter! */
 } cmdmod_T;
@@ -1263,21 +1260,22 @@ struct listwatch_S
 
 /*
  * Structure to hold info about a list.
+ * Order of members is optimized to reduce padding.
  */
 struct listvar_S
 {
     listitem_T	*lv_first;	/* first item, NULL if none */
     listitem_T	*lv_last;	/* last item, NULL if none */
-    int		lv_refcount;	/* reference count */
-    int		lv_len;		/* number of items */
     listwatch_T	*lv_watch;	/* first watcher, NULL if none */
-    int		lv_idx;		/* cached index of an item */
     listitem_T	*lv_idx_item;	/* when not NULL item at index "lv_idx" */
-    int		lv_copyID;	/* ID used by deepcopy() */
     list_T	*lv_copylist;	/* copied list used by deepcopy() */
-    char	lv_lock;	/* zero, VAR_LOCKED, VAR_FIXED */
     list_T	*lv_used_next;	/* next list in used lists list */
     list_T	*lv_used_prev;	/* previous list in used lists list */
+    int		lv_refcount;	/* reference count */
+    int		lv_len;		/* number of items */
+    int		lv_idx;		/* cached index of an item */
+    int		lv_copyID;	/* ID used by deepcopy() */
+    char	lv_lock;	/* zero, VAR_LOCKED, VAR_FIXED */
 };
 
 /*
@@ -1708,7 +1706,9 @@ struct channel_S {
 #define JO2_HIDDEN	    0x0400	/* "hidden" */
 #define JO2_TERM_OPENCMD    0x0800	/* "term_opencmd" */
 #define JO2_EOF_CHARS	    0x1000	/* "eof_chars" */
-#define JO2_ALL		    0x1FFF
+#define JO2_NORESTORE	    0x2000	/* "norestore" */
+#define JO2_TERM_KILL	    0x4000	/* "term_kill" */
+#define JO2_ALL		    0x7FFF
 
 #define JO_MODE_ALL	(JO_MODE + JO_IN_MODE + JO_OUT_MODE + JO_ERR_MODE)
 #define JO_CB_ALL \
@@ -1771,10 +1771,12 @@ typedef struct
     int		jo_vertical;
     int		jo_curwin;
     int		jo_hidden;
+    int		jo_term_norestore;
     char_u	*jo_term_name;
     char_u	*jo_term_opencmd;
     int		jo_term_finish;
     char_u	*jo_eof_chars;
+    char_u	*jo_term_kill;
 #endif
 } jobopt_T;
 
@@ -1943,10 +1945,8 @@ struct file_buffer
     int		b_nwindows;	/* nr of windows open on this buffer */
 
     int		b_flags;	/* various BF_ flags */
-#ifdef FEAT_AUTOCMD
     int		b_locked;	/* Buffer is being closed or referenced, don't
 				   let autocommands wipe it out. */
-#endif
 
     /*
      * b_ffname has the full path of the file (NULL for no name).
@@ -1983,13 +1983,11 @@ struct file_buffer
 				   incremented for each change, also for undo */
 #define CHANGEDTICK(buf) ((buf)->b_ct_di.di_tv.vval.v_number)
 
-#ifdef FEAT_AUTOCMD
     varnumber_T	b_last_changedtick; /* b:changedtick when TextChanged or
 				       TextChangedI was last triggered. */
-# ifdef FEAT_INS_EXPAND
+#ifdef FEAT_INS_EXPAND
     varnumber_T	b_last_changedtick_pum; /* b:changedtick when TextChangedP was
 					   last triggered. */
-# endif
 #endif
 
     int		b_saving;	/* Set to TRUE if we are in the middle of
@@ -2168,9 +2166,7 @@ struct file_buffer
     char_u	*b_p_fenc;	/* 'fileencoding' */
 #endif
     char_u	*b_p_ff;	/* 'fileformat' */
-#ifdef FEAT_AUTOCMD
     char_u	*b_p_ft;	/* 'filetype' */
-#endif
     char_u	*b_p_fo;	/* 'formatoptions' */
     char_u	*b_p_flp;	/* 'formatlistpat' */
     int		b_p_inf;	/* 'infercase' */
@@ -2445,12 +2441,8 @@ struct diffblock_S
 #endif
 
 #define SNAP_HELP_IDX	0
-#ifdef FEAT_AUTOCMD
-# define SNAP_AUCMD_IDX 1
-# define SNAP_COUNT	2
-#else
-# define SNAP_COUNT	1
-#endif
+#define SNAP_AUCMD_IDX 1
+#define SNAP_COUNT	2
 
 /*
  * Tab pages point to the top frame of each tab page.
@@ -2639,10 +2631,8 @@ struct window_S
 
     win_T	*w_prev;	    /* link to previous window */
     win_T	*w_next;	    /* link to next window */
-#ifdef FEAT_AUTOCMD
     int		w_closing;	    /* window is being closed, don't let
 				       autocommands close it too. */
-#endif
 
     frame_T	*w_frame;	    /* frame containing this window */
 
@@ -2673,10 +2663,8 @@ struct window_S
      */
     linenr_T	w_topline;	    /* buffer line number of the line at the
 				       top of the window */
-#ifdef FEAT_AUTOCMD
     char	w_topline_was_set;  /* flag set to TRUE when topline is set,
 				       e.g. by winrestview() */
-#endif
 #ifdef FEAT_DIFF
     int		w_topfill;	    /* number of filler lines above w_topline */
     int		w_old_topfill;	    /* w_topfill at last redraw */
@@ -2842,9 +2830,7 @@ struct window_S
     /* transform a pointer to a "onebuf" option into a "allbuf" option */
 #define GLOBAL_WO(p)	((char *)p + sizeof(winopt_T))
 
-#ifdef FEAT_SCROLLBIND
     long	w_scbind_pos;
-#endif
 
 #ifdef FEAT_EVAL
     dictitem_T	w_winvar;	/* variable for "w:" Dictionary */
@@ -2970,10 +2956,8 @@ typedef struct oparg_S
     int		block_mode;	/* current operator is Visual block mode */
     colnr_T	start_vcol;	/* start col for block mode operator */
     colnr_T	end_vcol;	/* end col for block mode operator */
-#ifdef FEAT_AUTOCMD
     long	prev_opcount;	/* ca.opcount saved for K_CURSORHOLD */
     long	prev_count0;	/* ca.count0 saved for K_CURSORHOLD */
-#endif
 } oparg_T;
 
 /*
@@ -3157,18 +3141,16 @@ typedef int vimmenu_T;
 
 /*
  * Struct to save values in before executing autocommands for a buffer that is
- * not the current buffer.  Without FEAT_AUTOCMD only "curbuf" is remembered.
+ * not the current buffer.
  */
 typedef struct
 {
     buf_T	*save_curbuf;	/* saved curbuf */
-#ifdef FEAT_AUTOCMD
     int		use_aucmd_win;	/* using aucmd_win */
     win_T	*save_curwin;	/* saved curwin */
     win_T	*new_curwin;	/* new curwin */
     bufref_T	new_curbuf;	/* new curbuf */
     char_u	*globaldir;	/* saved value of globaldir */
-#endif
 } aco_save_T;
 
 /*
@@ -3263,6 +3245,22 @@ typedef struct {
 } context_sha256_T;
 
 /*
+ * types for expressions.
+ */
+typedef enum
+{
+    TYPE_UNKNOWN = 0
+    , TYPE_EQUAL	/* == */
+    , TYPE_NEQUAL	/* != */
+    , TYPE_GREATER	/* >  */
+    , TYPE_GEQUAL	/* >= */
+    , TYPE_SMALLER	/* <  */
+    , TYPE_SEQUAL	/* <= */
+    , TYPE_MATCH	/* =~ */
+    , TYPE_NOMATCH	/* !~ */
+} exptype_T;
+
+/*
  * Structure used for reading in json_decode().
  */
 struct js_reader
@@ -3314,6 +3312,7 @@ typedef struct
 
     int		evim_mode;		/* started as "evim" */
     char_u	*use_vimrc;		/* vimrc from -u argument */
+    int		clean;			/* --clean argument */
 
     int		n_commands;		     /* no. of commands from + or -c */
     char_u	*commands[MAX_ARG_CMDS];     /* commands from + or -c arg. */

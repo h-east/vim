@@ -30,6 +30,7 @@ LANGUAGES = \
 		pt_BR \
 		ru \
 		sk \
+		sr \
 		sv \
 		uk \
 		vi \
@@ -72,6 +73,7 @@ MOFILES = \
 		pt_BR.mo \
 		ru.mo \
 		sk.mo \
+		sr.mo \
 		sv.mo \
 		uk.mo \
 		vi.mo \
@@ -113,6 +115,7 @@ CHECKFILES = \
 		pt_BR.ck \
 		ru.ck \
 		sk.ck \
+		sr.ck \
 		sv.ck \
 		uk.ck \
 		vi.ck \
@@ -280,7 +283,7 @@ checkclean:
 
 $(PACKAGE).pot: ../*.c ../if_perl.xs ../GvimExt/gvimext.cpp ../globals.h ../if_py_both.h
 	cd ..; $(XGETTEXT) --default-domain=$(PACKAGE) \
-		--add-comments --keyword=_ --keyword=N_ \
+		--add-comments --keyword=_ --keyword=N_ --keyword=NGETTEXT:1,2 \
 		*.c if_perl.xs GvimExt/gvimext.cpp globals.h if_py_both.h
 	mv -f ../$(PACKAGE).po $(PACKAGE).pot
 

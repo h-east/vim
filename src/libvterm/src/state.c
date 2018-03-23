@@ -1506,6 +1506,22 @@ static int on_osc(const char *command, size_t cmdlen, void *user)
     settermprop_string(state, VTERM_PROP_TITLE, command + 2, cmdlen - 2);
     return 1;
   }
+  else if(strneq(command, "10;", 3)) {
+    /* request foreground color: <Esc>]10;?<0x07> */
+    int red = state->default_fg.red;
+    int blue = state->default_fg.blue;
+    int green = state->default_fg.green;
+    vterm_push_output_sprintf_ctrl(state->vt, C1_OSC, "10;rgb:%02x%02x/%02x%02x/%02x%02x\x07", red, red, green, green, blue, blue);
+    return 1;
+  }
+  else if(strneq(command, "11;", 3)) {
+    /* request background color: <Esc>]11;?<0x07> */
+    int red = state->default_bg.red;
+    int blue = state->default_bg.blue;
+    int green = state->default_bg.green;
+    vterm_push_output_sprintf_ctrl(state->vt, C1_OSC, "11;rgb:%02x%02x/%02x%02x/%02x%02x\x07", red, red, green, green, blue, blue);
+    return 1;
+  }
   else if(strneq(command, "12;", 3)) {
     settermprop_string(state, VTERM_PROP_CURSORCOLOR, command + 3, cmdlen - 3);
     return 1;
@@ -1775,6 +1791,14 @@ void vterm_state_reset(VTermState *state, int hard)
 void vterm_state_get_cursorpos(const VTermState *state, VTermPos *cursorpos)
 {
   *cursorpos = state->pos;
+}
+
+void vterm_state_get_mousestate(const VTermState *state, VTermMouseState *mousestate)
+{
+  mousestate->pos.col = state->mouse_col;
+  mousestate->pos.row = state->mouse_row;
+  mousestate->buttons = state->mouse_buttons;
+  mousestate->flags = state->mouse_flags;
 }
 
 void vterm_state_set_callbacks(VTermState *state, const VTermStateCallbacks *callbacks, void *user)

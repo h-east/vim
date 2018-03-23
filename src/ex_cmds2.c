@@ -73,6 +73,16 @@ static void do_setdebugtracelevel(char_u *arg);
 static void do_checkbacktracelevel(void);
 static void do_showbacktrace(char_u *cmd);
 
+static char_u *debug_oldval = NULL;	/* old and newval for debug expressions */
+static char_u *debug_newval = NULL;
+static int     debug_expr   = 0;        /* use debug_expr */
+
+    int
+has_watchexpr(void)
+{
+    return debug_expr;
+}
+
 /*
  * do_debug(): Debug mode.
  * Repeatedly get Ex commands, until told to continue normal execution.
@@ -135,13 +145,24 @@ do_debug(char_u *cmd)
 
     if (!debug_did_msg)
 	MSG(_("Entering Debug mode.  Type \"cont\" to continue."));
+    if (debug_oldval != NULL)
+    {
+	smsg((char_u *)_("Oldval = \"%s\""), debug_oldval);
+	vim_free(debug_oldval);
+	debug_oldval = NULL;
+    }
+    if (debug_newval != NULL)
+    {
+	smsg((char_u *)_("Newval = \"%s\""), debug_newval);
+	vim_free(debug_newval);
+	debug_newval = NULL;
+    }
     if (sourcing_name != NULL)
 	msg(sourcing_name);
     if (sourcing_lnum != 0)
 	smsg((char_u *)_("line %ld: %s"), (long)sourcing_lnum, cmd);
     else
 	smsg((char_u *)_("cmd: %s"), cmd);
-
     /*
      * Repeat getting a command and executing it.
      */
@@ -528,11 +549,15 @@ dbg_check_skipped(exarg_T *eap)
 struct debuggy
 {
     int		dbg_nr;		/* breakpoint number */
-    int		dbg_type;	/* DBG_FUNC or DBG_FILE */
-    char_u	*dbg_name;	/* function or file name */
+    int		dbg_type;	/* DBG_FUNC, DBG_FILE or DBG_EXPR */
+    char_u	*dbg_name;	/* function, expression or file name */
     regprog_T	*dbg_prog;	/* regexp program */
     linenr_T	dbg_lnum;	/* line number in function or file */
     int		dbg_forceit;	/* ! used */
+#ifdef FEAT_EVAL
+    typval_T    *dbg_val;       /* last result of watchexpression */
+#endif
+    int		dbg_level;      /* stored nested level for expr */
 };
 
 static garray_T dbg_breakp = {0, 0, sizeof(struct debuggy), 4, NULL};
@@ -546,6 +571,7 @@ static garray_T prof_ga = {0, 0, sizeof(struct debuggy), 4, NULL};
 #endif
 #define DBG_FUNC	1
 #define DBG_FILE	2
+#define DBG_EXPR	3
 
 static int dbg_parsearg(char_u *arg, garray_T *gap);
 static linenr_T debuggy_find(int file,char_u *fname, linenr_T after, garray_T *gap, int *fp);
@@ -589,6 +615,12 @@ dbg_parsearg(
 	bp->dbg_type = DBG_FILE;
 	here = TRUE;
     }
+    else if (
+#ifdef FEAT_PROFILE
+	    gap != &prof_ga &&
+#endif
+	    STRNCMP(p, "expr", 4) == 0)
+	bp->dbg_type = DBG_EXPR;
     else
     {
 	EMSG2(_(e_invarg2), p);
@@ -624,6 +656,12 @@ dbg_parsearg(
 	bp->dbg_name = vim_strsave(p);
     else if (here)
 	bp->dbg_name = vim_strsave(curbuf->b_ffname);
+    else if (bp->dbg_type == DBG_EXPR)
+    {
+	bp->dbg_name = vim_strsave(p);
+	if (bp->dbg_name != NULL)
+	    bp->dbg_val = eval_expr(bp->dbg_name, NULL);
+    }
     else
     {
 	/* Expand the file name in the same way as do_source().  This means
@@ -671,26 +709,35 @@ ex_breakadd(exarg_T *eap)
 	bp = &DEBUGGY(gap, gap->ga_len);
 	bp->dbg_forceit = eap->forceit;
 
-	pat = file_pat_to_reg_pat(bp->dbg_name, NULL, NULL, FALSE);
-	if (pat != NULL)
+	if (bp->dbg_type != DBG_EXPR)
 	{
-	    bp->dbg_prog = vim_regcomp(pat, RE_MAGIC + RE_STRING);
-	    vim_free(pat);
+	    pat = file_pat_to_reg_pat(bp->dbg_name, NULL, NULL, FALSE);
+	    if (pat != NULL)
+	    {
+		bp->dbg_prog = vim_regcomp(pat, RE_MAGIC + RE_STRING);
+		vim_free(pat);
+	    }
+	    if (pat == NULL || bp->dbg_prog == NULL)
+		vim_free(bp->dbg_name);
+	    else
+	    {
+		if (bp->dbg_lnum == 0)	/* default line number is 1 */
+		    bp->dbg_lnum = 1;
+#ifdef FEAT_PROFILE
+		if (eap->cmdidx != CMD_profile)
+#endif
+		{
+		    DEBUGGY(gap, gap->ga_len).dbg_nr = ++last_breakp;
+		    ++debug_tick;
+		}
+		++gap->ga_len;
+	    }
 	}
-	if (pat == NULL || bp->dbg_prog == NULL)
-	    vim_free(bp->dbg_name);
 	else
 	{
-	    if (bp->dbg_lnum == 0)	/* default line number is 1 */
-		bp->dbg_lnum = 1;
-#ifdef FEAT_PROFILE
-	    if (eap->cmdidx != CMD_profile)
-#endif
-	    {
-		DEBUGGY(gap, gap->ga_len).dbg_nr = ++last_breakp;
-		++debug_tick;
-	    }
-	    ++gap->ga_len;
+	    /* DBG_EXPR */
+	    DEBUGGY(gap, gap->ga_len++).dbg_nr = ++last_breakp;
+	    ++debug_tick;
 	}
     }
 }
@@ -750,7 +797,7 @@ ex_breakdel(exarg_T *eap)
     }
     else
     {
-	/* ":breakdel {func|file} [lnum] {name}" */
+	/* ":breakdel {func|file|expr} [lnum] {name}" */
 	if (dbg_parsearg(eap->arg, gap) == FAIL)
 	    return;
 	bp = &DEBUGGY(gap, gap->ga_len);
@@ -778,6 +825,11 @@ ex_breakdel(exarg_T *eap)
 	while (gap->ga_len > 0)
 	{
 	    vim_free(DEBUGGY(gap, todel).dbg_name);
+#ifdef FEAT_EVAL
+	    if (DEBUGGY(gap, todel).dbg_type == DBG_EXPR
+		    && DEBUGGY(gap, todel).dbg_val != NULL)
+		free_tv(DEBUGGY(gap, todel).dbg_val);
+#endif
 	    vim_regfree(DEBUGGY(gap, todel).dbg_prog);
 	    --gap->ga_len;
 	    if (todel < gap->ga_len)
@@ -814,11 +866,15 @@ ex_breaklist(exarg_T *eap UNUSED)
 	    bp = &BREAKP(i);
 	    if (bp->dbg_type == DBG_FILE)
 		home_replace(NULL, bp->dbg_name, NameBuff, MAXPATHL, TRUE);
-	    smsg((char_u *)_("%3d  %s %s  line %ld"),
+	    if (bp->dbg_type != DBG_EXPR)
+		smsg((char_u *)_("%3d  %s %s  line %ld"),
 		    bp->dbg_nr,
 		    bp->dbg_type == DBG_FUNC ? "func" : "file",
 		    bp->dbg_type == DBG_FUNC ? bp->dbg_name : NameBuff,
 		    (long)bp->dbg_lnum);
+	    else
+		smsg((char_u *)_("%3d  expr %s"),
+		    bp->dbg_nr, bp->dbg_name);
 	}
 }
 
@@ -889,7 +945,8 @@ debuggy_find(
 	/* Skip entries that are not useful or are for a line that is beyond
 	 * an already found breakpoint. */
 	bp = &DEBUGGY(gap, i);
-	if (((bp->dbg_type == DBG_FILE) == file && (
+	if (((bp->dbg_type == DBG_FILE) == file &&
+		bp->dbg_type != DBG_EXPR && (
 #ifdef FEAT_PROFILE
 		gap == &prof_ga ||
 #endif
@@ -910,6 +967,63 @@ debuggy_find(
 	    }
 	    got_int |= prev_got_int;
 	}
+#ifdef FEAT_EVAL
+	else if (bp->dbg_type == DBG_EXPR)
+	{
+	    typval_T *tv;
+	    int	      line = FALSE;
+
+	    prev_got_int = got_int;
+	    got_int = FALSE;
+
+	    tv = eval_expr(bp->dbg_name, NULL);
+	    if (tv != NULL)
+	    {
+		if (bp->dbg_val == NULL)
+		{
+		    debug_oldval = typval_tostring(NULL);
+		    bp->dbg_val = tv;
+		    debug_newval = typval_tostring(bp->dbg_val);
+		    line = TRUE;
+		}
+		else
+		{
+		    if (typval_compare(tv, bp->dbg_val, TYPE_EQUAL,
+							     TRUE, FALSE) == OK
+			    && tv->vval.v_number == FALSE)
+		    {
+			typval_T *v;
+
+			line = TRUE;
+			debug_oldval = typval_tostring(bp->dbg_val);
+			/* Need to evaluate again, typval_compare() overwrites
+			 * "tv". */
+			v = eval_expr(bp->dbg_name, NULL);
+			debug_newval = typval_tostring(v);
+			free_tv(bp->dbg_val);
+			bp->dbg_val = v;
+		    }
+		    free_tv(tv);
+		}
+	    }
+	    else if (bp->dbg_val != NULL)
+	    {
+		debug_oldval = typval_tostring(bp->dbg_val);
+		debug_newval = typval_tostring(NULL);
+		free_tv(bp->dbg_val);
+		bp->dbg_val = NULL;
+		line = TRUE;
+	    }
+
+	    if (line)
+	    {
+		lnum = after > 0 ? after : 1;
+		break;
+	    }
+
+	    got_int |= prev_got_int;
+	}
+#endif
     }
     if (name != fname)
 	vim_free(name);
@@ -1931,17 +2045,15 @@ autowrite_all(void)
     FOR_ALL_BUFFERS(buf)
 	if (bufIsChanged(buf) && !buf->b_p_ro)
 	{
-#ifdef FEAT_AUTOCMD
 	    bufref_T	bufref;
 
 	    set_bufref(&bufref, buf);
-#endif
+
 	    (void)buf_write_all(buf, FALSE);
-#ifdef FEAT_AUTOCMD
+
 	    /* an autocommand may have deleted the buffer */
 	    if (!bufref_valid(&bufref))
 		buf = firstbuf;
-#endif
 	}
 }
 
@@ -1953,11 +2065,9 @@ autowrite_all(void)
 check_changed(buf_T *buf, int flags)
 {
     int		forceit = (flags & CCGD_FORCEIT);
-#ifdef FEAT_AUTOCMD
     bufref_T	bufref;
 
     set_bufref(&bufref, buf);
-#endif
 
     if (       !forceit
 	    && bufIsChanged(buf)
@@ -1979,24 +2089,22 @@ check_changed(buf_T *buf, int flags)
 # endif
 					))
 			++count;
-# ifdef FEAT_AUTOCMD
 	    if (!bufref_valid(&bufref))
 		/* Autocommand deleted buffer, oops!  It's not changed now. */
 		return FALSE;
-# endif
+
 	    dialog_changed(buf, count > 1);
-# ifdef FEAT_AUTOCMD
+
 	    if (!bufref_valid(&bufref))
 		/* Autocommand deleted buffer, oops!  It's not changed now. */
 		return FALSE;
-# endif
 	    return bufIsChanged(buf);
 	}
 #endif
 	if (flags & CCGD_EXCMD)
 	    no_write_message();
 	else
-	    no_write_message_nobang();
+	    no_write_message_nobang(curbuf);
 	return TRUE;
     }
     return FALSE;
@@ -2083,11 +2191,9 @@ dialog_changed(
 			)
 		    && !buf2->b_p_ro)
 	    {
-#ifdef FEAT_AUTOCMD
 		bufref_T bufref;
 
 		set_bufref(&bufref, buf2);
-#endif
 #ifdef FEAT_BROWSE
 		/* May get file name, when there is none */
 		browse_save_fname(buf2);
@@ -2096,11 +2202,10 @@ dialog_changed(
 				  buf2->b_fname, buf2->b_ffname, FALSE) == OK)
 		    /* didn't hit Cancel */
 		    (void)buf_write_all(buf2, FALSE);
-#ifdef FEAT_AUTOCMD
+
 		/* an autocommand may have deleted the buffer */
 		if (!bufref_valid(&bufref))
 		    buf2 = firstbuf;
-#endif
 	    }
 	}
     }
@@ -2149,7 +2254,7 @@ add_bufnum(int *bufnrs, int *bufnump, int nr)
 /*
  * Return TRUE if any buffer was changed and cannot be abandoned.
  * That changed buffer becomes the current buffer.
- * When "unload" is true the current buffer is unloaded instead of making it
+ * When "unload" is TRUE the current buffer is unloaded instead of making it
  * hidden.  This is used for ":q!".
  */
     int
@@ -2167,6 +2272,7 @@ check_changed_any(
     tabpage_T   *tp;
     win_T	*wp;
 
+    /* Make a list of all buffers, with the most important ones first. */
     FOR_ALL_BUFFERS(buf)
 	++bufcount;
 
@@ -2179,17 +2285,19 @@ check_changed_any(
 
     /* curbuf */
     bufnrs[bufnum++] = curbuf->b_fnum;
-    /* buf in curtab */
+
+    /* buffers in current tab */
     FOR_ALL_WINDOWS(wp)
 	if (wp->w_buffer != curbuf)
 	    add_bufnum(bufnrs, &bufnum, wp->w_buffer->b_fnum);
 
-    /* buf in other tab */
+    /* buffers in other tabs */
     FOR_ALL_TABPAGES(tp)
 	if (tp != curtab)
 	    for (wp = tp->tp_firstwin; wp != NULL; wp = wp->w_next)
 		add_bufnum(bufnrs, &bufnum, wp->w_buffer->b_fnum);
-    /* any other buf */
+
+    /* any other buffer */
     FOR_ALL_BUFFERS(buf)
 	add_bufnum(bufnrs, &bufnum, buf->b_fnum);
 
@@ -2203,6 +2311,14 @@ check_changed_any(
 	    bufref_T bufref;
 
 	    set_bufref(&bufref, buf);
+#ifdef FEAT_TERMINAL
+	    if (term_job_running(buf->b_term))
+	    {
+		if (term_try_stop_job(buf) == FAIL)
+		    break;
+	    }
+	    else
+#endif
 	    /* Try auto-writing the buffer.  If this fails but the buffer no
 	    * longer exists it's not changed, that's OK. */
 	    if (check_changed(buf, (p_awa ? CCGD_AW : 0)
@@ -2215,6 +2331,7 @@ check_changed_any(
     if (i >= bufnum)
 	goto theend;
 
+    /* Get here if "buf" cannot be abandoned. */
     ret = TRUE;
     exiting = FALSE;
 #if defined(FEAT_GUI_DIALOG) || defined(FEAT_CON_DIALOG)
@@ -2256,19 +2373,15 @@ check_changed_any(
 	FOR_ALL_TAB_WINDOWS(tp, wp)
 	    if (wp->w_buffer == buf)
 	    {
-#ifdef FEAT_AUTOCMD
 		bufref_T bufref;
 
 		set_bufref(&bufref, buf);
-#endif
+
 		goto_tabpage_win(tp, wp);
-#ifdef FEAT_AUTOCMD
+
 		/* Paranoia: did autocms wipe out the buffer with changes? */
 		if (!bufref_valid(&bufref))
-		{
 		    goto theend;
-		}
-#endif
 		goto buf_found;
 	    }
 buf_found:
@@ -2306,20 +2419,16 @@ check_fname(void)
 buf_write_all(buf_T *buf, int forceit)
 {
     int	    retval;
-#ifdef FEAT_AUTOCMD
     buf_T	*old_curbuf = curbuf;
-#endif
 
     retval = (buf_write(buf, buf->b_ffname, buf->b_fname,
 				   (linenr_T)1, buf->b_ml.ml_line_count, NULL,
 						  FALSE, forceit, TRUE, FALSE));
-#ifdef FEAT_AUTOCMD
     if (curbuf != old_curbuf)
     {
 	msg_source(HL_ATTR(HLF_W));
 	MSG(_("Warning: Entered other buffer unexpectedly (check autocommands)"));
     }
-#endif
     return retval;
 }
 
@@ -2432,7 +2541,6 @@ get_arglist_exp(
 }
 #endif
 
-#if defined(FEAT_GUI) || defined(FEAT_CLIENTSERVER) || defined(PROTO)
 /*
  * Redefine the argument list.
  */
@@ -2441,7 +2549,6 @@ set_arglist(char_u *str)
 {
     do_arglist(str, AL_SET, 0);
 }
-#endif
 
 /*
  * "what" == AL_SET: Redefine the argument list to 'str'.
@@ -2941,7 +3048,7 @@ ex_listdo(exarg_T *eap)
     tabpage_T	*tp;
     buf_T	*buf = curbuf;
     int		next_fnum = 0;
-#if defined(FEAT_AUTOCMD) && defined(FEAT_SYN_HL)
+#if defined(FEAT_SYN_HL)
     char_u	*save_ei = NULL;
 #endif
     char_u	*p_shm_save;
@@ -2959,7 +3066,7 @@ ex_listdo(exarg_T *eap)
     }
 #endif
 
-#if defined(FEAT_AUTOCMD) && defined(FEAT_SYN_HL)
+#if defined(FEAT_SYN_HL)
     if (eap->cmdidx != CMD_windo && eap->cmdidx != CMD_tabdo)
 	/* Don't do syntax HL autocommands.  Skipping the syntax file is a
 	 * great speed improvement. */
@@ -3137,11 +3244,10 @@ ex_listdo(exarg_T *eap)
 	    if (eap->cmdidx == CMD_windo)
 	    {
 		validate_cursor();	/* cursor may have moved */
-#ifdef FEAT_SCROLLBIND
+
 		/* required when 'scrollbind' has been set */
 		if (curwin->w_p_scb)
 		    do_check_scrollbind(TRUE);
-#endif
 	    }
 
 	    if (eap->cmdidx == CMD_windo || eap->cmdidx == CMD_tabdo)
@@ -3153,7 +3259,7 @@ ex_listdo(exarg_T *eap)
 	listcmd_busy = FALSE;
     }
 
-#if defined(FEAT_AUTOCMD) && defined(FEAT_SYN_HL)
+#if defined(FEAT_SYN_HL)
     if (save_ei != NULL)
     {
 	au_event_restore(save_ei);
@@ -3548,6 +3654,8 @@ source_in_path(char_u *path, char_u *name, int flags)
 }
 
 
+#if defined(FEAT_EVAL) || defined(PROTO)
+
 /*
  * Expand wildcards in "pat" and invoke do_source() for each match.
  */
@@ -3688,7 +3796,6 @@ load_pack_plugin(char_u *fname)
     vim_snprintf((char *)pat, len, plugpat, ffname);
     source_all_matches(pat);
 
-#ifdef FEAT_AUTOCMD
     {
 	char_u *cmd = vim_strsave((char_u *)"g:did_load_filetypes");
 
@@ -3703,7 +3810,6 @@ load_pack_plugin(char_u *fname)
 	}
 	vim_free(cmd);
     }
-#endif
     vim_free(pat);
     retval = OK;
 
@@ -3799,8 +3905,9 @@ ex_packadd(exarg_T *eap)
 	vim_free(pat);
     }
 }
+#endif
 
-#if defined(FEAT_EVAL) && defined(FEAT_AUTOCMD)
+#if defined(FEAT_EVAL) || defined(PROTO)
 /*
  * ":options"
  */
@@ -4196,23 +4303,21 @@ do_source(
 	goto theend;
     }
 
-#ifdef FEAT_AUTOCMD
     /* Apply SourceCmd autocommands, they should get the file and source it. */
     if (has_autocmd(EVENT_SOURCECMD, fname_exp, NULL)
 	    && apply_autocmds(EVENT_SOURCECMD, fname_exp, fname_exp,
 							       FALSE, curbuf))
     {
-# ifdef FEAT_EVAL
+#ifdef FEAT_EVAL
 	retval = aborting() ? FAIL : OK;
-# else
+#else
 	retval = OK;
-# endif
+#endif
 	goto theend;
     }
 
     /* Apply SourcePre autocommands, they may get the file. */
     apply_autocmds(EVENT_SOURCEPRE, fname_exp, fname_exp, FALSE, curbuf);
-#endif
 
 #ifdef USE_FOPEN_NOINH
     cookie.fp = fopen_noinh_readbin((char *)fname_exp);

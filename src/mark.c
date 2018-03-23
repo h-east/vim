@@ -27,13 +27,9 @@
 #define EXTRA_MARKS 10					/* marks 0-9 */
 static xfmark_T namedfm[NMARKS + EXTRA_MARKS];		/* marks with file nr */
 
-static void fname2fnum(xfmark_T *fm);
 static void fmarks_check_one(xfmark_T *fm, char_u *name, buf_T *buf);
 static char_u *mark_line(pos_T *mp, int lead_len);
 static void show_one_mark(int, char_u *, pos_T *, char_u *, int current);
-#ifdef FEAT_JUMPLIST
-static void cleanup_jumplist(void);
-#endif
 #ifdef FEAT_VIMINFO
 static void write_one_filemark(FILE *fp, xfmark_T *fm, int c1, int c2);
 #endif
@@ -225,7 +221,7 @@ movemark(int count)
     pos_T	*pos;
     xfmark_T	*jmp;
 
-    cleanup_jumplist();
+    cleanup_jumplist(curwin, TRUE);
 
     if (curwin->w_jumplistlen == 0)	    /* nothing to jump to */
 	return (pos_T *)NULL;
@@ -519,7 +515,7 @@ getnextmark(
  * This is used for marks obtained from the .viminfo file.  It's postponed
  * until the mark is used to avoid a long startup delay.
  */
-    static void
+    void
 fname2fnum(xfmark_T *fm)
 {
     char_u	*p;
@@ -895,15 +891,14 @@ ex_jumps(exarg_T *eap UNUSED)
     int		i;
     char_u	*name;
 
-    cleanup_jumplist();
+    cleanup_jumplist(curwin, TRUE);
+
     /* Highlight title */
     MSG_PUTS_TITLE(_("\n jump line  col file/text"));
     for (i = 0; i < curwin->w_jumplistlen && !got_int; ++i)
     {
 	if (curwin->w_jumplist[i].fmark.mark.lnum != 0)
 	{
-	    if (curwin->w_jumplist[i].fmark.fnum == 0)
-		fname2fnum(&curwin->w_jumplist[i]);
 	    name = fm_getname(&curwin->w_jumplist[i].fmark, 16);
 	    if (name == NULL)	    /* file name not available */
 		continue;
@@ -1305,34 +1300,49 @@ mark_col_adjust(
 #ifdef FEAT_JUMPLIST
 /*
  * When deleting lines, this may create duplicate marks in the
- * jumplist. They will be removed here for the current window.
+ * jumplist. They will be removed here for the specified window.
+ * When "loadfiles" is TRUE first ensure entries have the "fnum" field set
+ * (this may be a bit slow).
  */
-    static void
-cleanup_jumplist(void)
+    void
+cleanup_jumplist(win_T *wp, int loadfiles)
 {
     int	    i;
     int	    from, to;
 
-    to = 0;
-    for (from = 0; from < curwin->w_jumplistlen; ++from)
+    if (loadfiles)
     {
-	if (curwin->w_jumplistidx == from)
-	    curwin->w_jumplistidx = to;
-	for (i = from + 1; i < curwin->w_jumplistlen; ++i)
-	    if (curwin->w_jumplist[i].fmark.fnum
-					== curwin->w_jumplist[from].fmark.fnum
-		    && curwin->w_jumplist[from].fmark.fnum != 0
-		    && curwin->w_jumplist[i].fmark.mark.lnum
-				  == curwin->w_jumplist[from].fmark.mark.lnum)
-		break;
-	if (i >= curwin->w_jumplistlen)	    /* no duplicate */
-	    curwin->w_jumplist[to++] = curwin->w_jumplist[from];
-	else
-	    vim_free(curwin->w_jumplist[from].fname);
+	/* If specified, load all the files from the jump list. This is
+	 * needed to properly clean up duplicate entries, but will take some
+	 * time. */
+	for (i = 0; i < wp->w_jumplistlen; ++i)
+	{
+	    if ((wp->w_jumplist[i].fmark.fnum == 0) &&
+		    (wp->w_jumplist[i].fmark.mark.lnum != 0))
+		fname2fnum(&wp->w_jumplist[i]);
+	}
     }
-    if (curwin->w_jumplistidx == curwin->w_jumplistlen)
-	curwin->w_jumplistidx = to;
-    curwin->w_jumplistlen = to;
+
+    to = 0;
+    for (from = 0; from < wp->w_jumplistlen; ++from)
+    {
+	if (wp->w_jumplistidx == from)
+	    wp->w_jumplistidx = to;
+	for (i = from + 1; i < wp->w_jumplistlen; ++i)
+	    if (wp->w_jumplist[i].fmark.fnum
+					== wp->w_jumplist[from].fmark.fnum
+		    && wp->w_jumplist[from].fmark.fnum != 0
+		    && wp->w_jumplist[i].fmark.mark.lnum
+				  == wp->w_jumplist[from].fmark.mark.lnum)
+		break;
+	if (i >= wp->w_jumplistlen)	    /* no duplicate */
+	    wp->w_jumplist[to++] = wp->w_jumplist[from];
+	else
+	    vim_free(wp->w_jumplist[from].fname);
+    }
+    if (wp->w_jumplistidx == wp->w_jumplistlen)
+	wp->w_jumplistidx = to;
+    wp->w_jumplistlen = to;
 }
 
 /*
@@ -1741,7 +1751,7 @@ write_viminfo_filemarks(FILE *fp)
     /* Write the jumplist with -' */
     fputs(_("\n# Jumplist (newest first):\n"), fp);
     setpcmark();	/* add current cursor position */
-    cleanup_jumplist();
+    cleanup_jumplist(curwin, FALSE);
     vi_idx = 0;
     idx = curwin->w_jumplistlen - 1;
     for (i = 0; i < JUMPLISTSIZE; ++i)

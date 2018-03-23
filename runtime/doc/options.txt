@@ -1,4 +1,4 @@
-*options.txt*	For Vim version 8.0.  Last change: 2018 Feb 03
+*options.txt*	For Vim version 8.0.  Last change: 2018 Mar 13
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -50,7 +50,7 @@ achieve special effects.  These options come in three forms:
 :se[t] {option}&vi	Reset option to its Vi default value. {not in Vi}
 :se[t] {option}&vim	Reset option to its Vim default value. {not in Vi}
 
-:se[t] all&		Set all options to their default value.  The values of 
+:se[t] all&		Set all options to their default value.  The values of
 			these options are not changed:
 			  all terminal options, starting with t_
 			  'columns'
@@ -402,8 +402,8 @@ Setting the filetype
 			used to set the option value in, unless this is a help
 			window, in which case the window below help window is
 			used (skipping the option-window).
-			{not available when compiled without the |+eval| or
-			|+autocmd| features}
+			{not available when compiled without the |+eval|
+			feature}
 
 								*$HOME*
 Using "~" is like using "$HOME", but it is only recognized at the start of an
@@ -1325,7 +1325,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 			    characters.  It permits dynamic French paragraph
 			    indentation (negative) or emphasizing the line
 			    continuation (positive).
-		sbr	    Display the 'showbreak' value before applying the 
+		sbr	    Display the 'showbreak' value before applying the
 			    additional indent.
 	The default value for min is 20 and shift is 0.
 
@@ -1385,8 +1385,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 			written
 	  nowrite	buffer which will not be written
 	  acwrite	buffer which will always be written with BufWriteCmd
-			autocommands. {not available when compiled without the
-			|+autocmd| feature}
+			autocommands.
 	  quickfix	quickfix buffer, contains list of errors |:cwindow|
 			or list of locations |:lwindow|
 	  help		help buffer (you are not supposed to set this
@@ -1846,7 +1845,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	'copyindent'	+ off		don't copy indent structure
 	'cpoptions'	& (all flags)	Vi-compatible flags
 	'cscopepathcomp'+ 0		don't show directories in tags list
-	'cscoperelative'+ off		
+	'cscoperelative'+ off		don't use basename of path as prefix
 	'cscopetag'	+ off		don't use cscope for ":tag"
 	'cscopetagorder'+ 0		see |cscopetagorder|
 	'cscopeverbose'	+ off		see |cscopeverbose|
@@ -2504,8 +2503,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 'cursorbind' 'crb'	boolean  (default off)
 			local to window
 			{not in Vi}
-			{not available when compiled without the |+cursorbind|
-			feature}
 	When this option is set, as the cursor in the current
 	window moves other cursorbound windows (windows that also have
 	this option set) move their cursors to the corresponding line and
@@ -2956,8 +2953,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 'eventignore' 'ei'	string	(default "")
 			global
 			{not in Vi}
-			{not available when compiled without the |+autocmd|
-			feature}
 	A list of autocommand event names, which are to be ignored.
 	When set to "all" or when "all" is one of the items, all autocommand
 	events are ignored, autocommands will not be executed.
@@ -3206,8 +3201,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 'filetype' 'ft'		string (default: "")
 			local to buffer
 			{not in Vi}
-			{not available when compiled without the |+autocmd|
-			feature}
 	When this option is set, the FileType autocommand event is triggered.
 	All autocommands that match with the value of this option will be
 	executed.  Thus the value of 'filetype' is used in place of the file
@@ -3506,7 +3499,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	when internal formatting is used.  Make sure the cursor is kept in the
 	same spot relative to the text then!  The |mode()| function will
 	return "i" or "R" in this situation.
-	
+
 	When the expression evaluates to non-zero Vim will fall back to using
 	the internal format mechanism.
 
@@ -3890,7 +3883,14 @@ A jump table for the options with a short description can be found at |Q_op|.
 	To avoid problems with flags that are added in the future, use the
 	"+=" and "-=" feature of ":set" |add-option-flags|.
 
-	Valid letters are as follows:
+	Valid characters are as follows:
+								*'go-!'*
+	  '!'	External commands are executed in a terminal window.  Without
+		this flag the MS-Windows GUI will open a console window to
+		execute the command.  The Unix GUI will simulate a dumb
+		terminal to list the command output.
+		The terminal window will be positioned at the bottom, and grow
+		upwards as needed.
 							*guioptions_a* *'go-a'*
 	  'a'	Autoselect:  If present, then whenever VISUAL mode is started,
 		or the Visual area extended, Vim tries to become the owner of
@@ -5152,8 +5152,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 			global or local to buffer |global-local|
 			{not in Vi}
 	Program to use for the ":make" command.  See |:make_makeprg|.
-	This option may contain '%' and '#' characters (see  |:_%| and |:_#|), 
-	which are expanded to the current and alternate file name.  Use |::S| 
+	This option may contain '%' and '#' characters (see  |:_%| and |:_#|),
+	which are expanded to the current and alternate file name.  Use |::S|
 	to escape file names in case they contain special characters.
 	Environment variables are expanded |:set_env|.  See |option-backslash|
 	about including spaces and backslashes.
@@ -5241,8 +5241,11 @@ A jump table for the options with a short description can be found at |Q_op|.
 			{not in Vi}
 	Maximum amount of memory (in Kbyte) to use for one buffer.  When this
 	limit is reached allocating extra memory for a buffer will cause
-	other memory to be freed.  The maximum usable value is about 2000000.
-	Use this to work without a limit.  Also see 'maxmemtot'.
+	other memory to be freed.
+	The maximum usable value is about 2000000.  Use this to work without a
+	limit.
+	The value is ignored when 'swapfile' is off.
+	Also see 'maxmemtot'.
 
 						*'maxmempattern'* *'mmp'*
 'maxmempattern' 'mmp'	number	(default 1000)
@@ -5271,6 +5274,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 	need more than 2 Gbyte for text editing?  Keep in mind that text is
 	stored in the swap file, one can edit files > 2 Gbyte anyway.  We do
 	need the memory to store undo info.
+	Buffers with 'swapfile' off still count to the total amount of memory
+	used.
 	Also see 'maxmem'.
 
 						*'menuitems'* *'mis'*
@@ -5367,6 +5372,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 	an explanation.
 	When 'buftype' is "nowrite" or "nofile" this option may be set, but
 	will be ignored.
+	Note that the text may actually be the same, e.g. 'modified' is set
+	when using "rA" on an "A".
 
 						*'more'* *'nomore'*
 'more'			boolean	(Vim default: on, Vi default: off)
@@ -5455,6 +5462,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 	In the "popup" model the right mouse button produces a pop-up menu.
 	You need to define this first, see |popup-menu|.
+	In a terminal the popup menu works if Vim is compiled with the
+	|+insert_expand| option.
 
 	Note that you can further refine the meaning of buttons with mappings.
 	See |gui-mouse-mapping|.  But mappings are NOT used for modeless
@@ -5994,14 +6003,13 @@ A jump table for the options with a short description can be found at |Q_op|.
 	|ins-completion-menu|.
 
 						*'pumwidth'* *'pw'*
-'pumwidth' 'pw'		number	(default 0)
+'pumwidth' 'pw'		number	(default 15)
 			global
 			{not available when compiled without the
 			|+insert_expand| feature}
 			{not in Vi}
-	Determines the minium width to use for the popup menu for Insert mode
-	completion.  When zero the default of 15 screen cells is used.
-	|ins-completion-menu|.
+	Determines the minimum width to use for the popup menu for Insert mode
+	completion.  |ins-completion-menu|.
 
 						*'pythondll'*
 'pythondll'		string	(default depends on the build)
@@ -6156,7 +6164,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	characters are put before the number.
 	See |hl-LineNr|  and |hl-CursorLineNr| for the highlighting used for
 	the number.
-	
+
 	The number in front of the cursor line also depends on the value of
 	'number', see |number_relativenumber| for all combinations of the two
 	options.
@@ -6475,6 +6483,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 	to find files which replace a distributed runtime files.  You can put
 	a directory after $VIMRUNTIME to find files which add to distributed
 	runtime files.
+	When Vim is started with |--clean| the home directory entries are not
+	included.
 	This option cannot be set from a |modeline| or in the |sandbox|, for
 	security reasons.
 
@@ -6493,8 +6503,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 'scrollbind' 'scb'	boolean  (default off)
 			local to window
 			{not in Vi}
-			{not available when compiled without the |+scrollbind|
-			feature}
 	See also |scroll-binding|.  When this option is set, the current
 	window scrolls as other scrollbind windows (windows that also have
 	this option set) scroll.  This option is useful for viewing the
@@ -6532,8 +6540,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 						*'scrollopt'* *'sbo'*
 'scrollopt' 'sbo'	string	(default "ver,jump")
 			global
-			{not available when compiled without the |+scrollbind|
-			feature}
 			{not in Vi}
 	This is a comma-separated list of words that specifies how
 	'scrollbind' windows should behave.  'sbo' stands for ScrollBind
@@ -6623,7 +6629,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 						*'sessionoptions'* *'ssop'*
 'sessionoptions' 'ssop'	string	(default: "blank,buffers,curdir,folds,
-					       help,options,tabpages,winsize")
+					 help,options,tabpages,winsize,terminal")
 			global
 			{not in Vi}
 			{not available when compiled without the |+mksession|
@@ -6655,6 +6661,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	   tabpages	all tab pages; without this only the current tab page
 			is restored, so that you can make a session for each
 			tab page separately
+	   terminal	include terminal windows where the command can be restored
 	   unix		with Unix end-of-line format (single <NL>), even when
 			on Windows or DOS
 	   winpos	position of the whole Vim window
@@ -7450,7 +7457,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 	W F   Preview window flag, text is ",PRV".
 	y F   Type of file in the buffer, e.g., "[vim]".  See 'filetype'.
 	Y F   Type of file in the buffer, e.g., ",VIM".  See 'filetype'.
-	      {not available when compiled without |+autocmd| feature}
 	q S   "[Quickfix List]", "[Location List]" or empty.
 	k S   Value of "b:keymap_name" or 'keymap' when |:lmap| mappings are
 	      being used: "<keymap>"
@@ -7595,6 +7601,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	Also see |swap-file| and |'swapsync'|.
 	If you want to open a new buffer without creating a swap file for it,
 	use the |:noswapfile| modifier.
+	See 'directory' for where the swap file is created.
 
 	This option is used together with 'bufhidden' and 'buftype' to
 	specify special kinds of buffers.   See |special-buffers|.
@@ -7941,17 +7948,24 @@ A jump table for the options with a short description can be found at |Q_op|.
 		:set encoding=utf-8
 <	You need to do this when your system has no locale support for UTF-8.
 
-						*'termguicolors'* *'tgc'*
+					*'termguicolors'* *'tgc'* *E954*
 'termguicolors' 'tgc'	boolean (default off)
 			global
 			{not in Vi}
 			{not available when compiled without the
 			|+termguicolors| feature}
 	When on, uses |highlight-guifg| and |highlight-guibg| attributes in
-	the terminal (thus using 24-bit color). Requires a ISO-8613-3
-	compatible terminal.
-	If setting this option does not work (produces a colorless UI)
-	reading |xterm-true-color| might help.
+	the terminal (thus using 24-bit color).
+
+	Requires a ISO-8613-3 compatible terminal.  If setting this option
+	does not work (produces a colorless UI) reading |xterm-true-color|
+	might help.
+
+	For Win32 console, Windows 10 version 1703 (Creators Update) or later
+	is required. Use this check to find out: >
+		if has('vcon')
+<	This requires Vim to be built with the |+vtp| feature.
+
 	Note that the "cterm" attributes are still used, not the "gui" ones.
 	NOTE: This option is reset when 'compatible' is set.
 
@@ -8038,7 +8052,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	non-keyword characters (white space is preferred).  Maximum line
 	length is 510 bytes.
 	To obtain a file to be used here, check out this ftp site:
-	[Sorry this link doesn't work anymore, do you know the right one?] 
+	[Sorry this link doesn't work anymore, do you know the right one?]
 	ftp://ftp.ox.ac.uk/pub/wordlists/  First get the README file.
 	To include a comma in a file name precede it with a backslash.  Spaces
 	after a comma are ignored, otherwise spaces are included in the file

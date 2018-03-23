@@ -115,6 +115,7 @@ endfunc
 
 " Wait for up to a second for "expr" to become true.  "expr" can be a
 " stringified expression to evaluate, or a funcref without arguments.
+" A second argument can be used to specify a different timeout in msec.
 "
 " Return time slept in milliseconds.  With the +reltime feature this can be
 " more than the actual waiting time.  Without +reltime it can also be less.
@@ -178,17 +179,20 @@ endfunc
 " The Makefile writes it as the first line in the "vimcmd" file.
 func GetVimProg()
   if !filereadable('vimcmd')
-    return ''
+    " Assume the script was sourced instead of running "make".
+    return '../vim'
   endif
   return readfile('vimcmd')[0]
 endfunc
 
 " Get the command to run Vim, with -u NONE and --not-a-term arguments.
 " If there is an argument use it instead of "NONE".
-" Returns an empty string on error.
 func GetVimCommand(...)
   if !filereadable('vimcmd')
-    return ''
+    echo 'Cannot read the "vimcmd" file, falling back to ../vim.'
+    let lines = ['../vim']
+  else
+    let lines = readfile('vimcmd')
   endif
   if a:0 == 0
     let name = 'NONE'
@@ -199,7 +203,6 @@ func GetVimCommand(...)
   " "vimcmd" file, including environment options.
   " Other Makefiles just write the executable in the first line, so fall back
   " to that if there is no second line.
-  let lines = readfile('vimcmd')
   let cmd = get(lines, 1, lines[0])
   let cmd = substitute(cmd, '-u \f\+', '-u ' . name, '')
   if cmd !~ '-u '. name
@@ -207,6 +210,14 @@ func GetVimCommand(...)
   endif
   let cmd .= ' --not-a-term'
   let cmd = substitute(cmd, 'VIMRUNTIME=.*VIMRUNTIME;', '', '')
+  return cmd
+endfunc
+
+" Get the command to run Vim, with --clean.
+func GetVimCommandClean()
+  let cmd = GetVimCommand()
+  let cmd = substitute(cmd, '-u NONE', '--clean', '')
+  let cmd = substitute(cmd, '--not-a-term', '', '')
   return cmd
 endfunc
 
@@ -247,4 +258,32 @@ endfunc
 
 func CanRunGui()
   return has('gui') && ($DISPLAY != "" || has('gui_running'))
+endfunc
+
+func WorkingClipboard()
+  if !has('clipboard')
+    return 0
+  endif
+  if has('x11')
+    return $DISPLAY != ""
+  endif
+  return 1
+endfunc
+
+" Get line "lnum" as displayed on the screen.
+" Trailing white space is trimmed.
+func! Screenline(lnum)
+  let chars = []
+  for c in range(1, winwidth(0))
+    call add(chars, nr2char(screenchar(a:lnum, c)))
+  endfor
+  let line = join(chars, '')
+  return matchstr(line, '^.\{-}\ze\s*$')
+endfunc
+
+" Stops the shell running in terminal "buf".
+func Stop_shell_in_terminal(buf)
+  call term_sendkeys(a:buf, "exit\r")
+  let job = term_getjob(a:buf)
+  call WaitFor({-> job_status(job) == "dead"})
 endfunc

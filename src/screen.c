@@ -1181,6 +1181,11 @@ win_update(win_T *wp)
      */
     if (term_update_window(wp) == OK)
     {
+# ifdef FEAT_MENU
+	/* Draw the window toolbar, if there is one. */
+	if (winbar_height(wp) > 0)
+	    redraw_win_toolbar(wp);
+# endif
 	wp->w_redr_type = 0;
 	return;
     }
@@ -2177,6 +2182,25 @@ win_update(win_T *wp)
      * End of loop over all window lines.
      */
 
+#ifdef FEAT_VTP
+    /* Rewrite the character at the end of the screen line. */
+    if (use_vtp())
+    {
+	int i;
+
+	for (i = 0; i < Rows; ++i)
+# ifdef FEAT_MBYTE
+	    if (enc_utf8)
+		if ((*mb_off2cells)(LineOffset[i] + Columns - 2,
+					   LineOffset[i] + screen_Columns) > 1)
+		    screen_draw_rectangle(i, Columns - 2, 1, 2, FALSE);
+		else
+		    screen_draw_rectangle(i, Columns - 1, 1, 1, FALSE);
+	    else
+# endif
+		screen_char(LineOffset[i] + Columns - 1, i, Columns - 1);
+    }
+#endif
 
     if (idx > wp->w_lines_valid)
 	wp->w_lines_valid = idx;
@@ -8052,16 +8076,13 @@ screen_start_highlight(int attr)
 	    }
 	    if ((attr & HL_BOLD) && *T_MD != NUL)	/* bold */
 		out_str(T_MD);
-	    else if (aep != NULL && cterm_normal_fg_bold &&
+	    else if (aep != NULL && cterm_normal_fg_bold && (
 #ifdef FEAT_TERMGUICOLORS
-			(p_tgc ?
-			    (aep->ae_u.cterm.fg_rgb != INVALCOLOR):
+			p_tgc && aep->ae_u.cterm.fg_rgb != CTERMCOLOR
+			  ? aep->ae_u.cterm.fg_rgb != INVALCOLOR
+			  :
 #endif
-			    (t_colors > 1 && aep->ae_u.cterm.fg_color)
-#ifdef FEAT_TERMGUICOLORS
-			)
-#endif
-		    )
+			    t_colors > 1 && aep->ae_u.cterm.fg_color))
 		/* If the Normal FG color has BOLD attribute and the new HL
 		 * has a FG color defined, clear BOLD. */
 		out_str(T_ME);
@@ -8087,28 +8108,39 @@ screen_start_highlight(int attr)
 	    if (aep != NULL)
 	    {
 #ifdef FEAT_TERMGUICOLORS
-		if (p_tgc)
+		/* When 'termguicolors' is set but fg or bg is unset,
+		 * fall back to the cterm colors.   This helps for SpellBad,
+		 * where the GUI uses a red undercurl. */
+		if (p_tgc && aep->ae_u.cterm.fg_rgb != CTERMCOLOR)
 		{
 		    if (aep->ae_u.cterm.fg_rgb != INVALCOLOR)
 			term_fg_rgb_color(aep->ae_u.cterm.fg_rgb);
+		}
+		else
+#endif
+		if (t_colors > 1)
+		{
+		    if (aep->ae_u.cterm.fg_color)
+			term_fg_color(aep->ae_u.cterm.fg_color - 1);
+		}
+#ifdef FEAT_TERMGUICOLORS
+		if (p_tgc && aep->ae_u.cterm.bg_rgb != CTERMCOLOR)
+		{
 		    if (aep->ae_u.cterm.bg_rgb != INVALCOLOR)
 			term_bg_rgb_color(aep->ae_u.cterm.bg_rgb);
 		}
 		else
 #endif
+		if (t_colors > 1)
 		{
-		    if (t_colors > 1)
-		    {
-			if (aep->ae_u.cterm.fg_color)
-			    term_fg_color(aep->ae_u.cterm.fg_color - 1);
-			if (aep->ae_u.cterm.bg_color)
-			    term_bg_color(aep->ae_u.cterm.bg_color - 1);
-		    }
-		    else
-		    {
-			if (aep->ae_u.term.start != NULL)
-			    out_str(aep->ae_u.term.start);
-		    }
+		    if (aep->ae_u.cterm.bg_color)
+			term_bg_color(aep->ae_u.cterm.bg_color - 1);
+		}
+
+		if (!IS_CTERM)
+		{
+		    if (aep->ae_u.term.start != NULL)
+			out_str(aep->ae_u.term.start);
 		}
 	    }
 	}
@@ -8148,17 +8180,19 @@ screen_stop_highlight(void)
 		     * Assume that t_me restores the original colors!
 		     */
 		    aep = syn_cterm_attr2entry(screen_attr);
-		    if (aep != NULL &&
+		    if (aep != NULL && ((
 #ifdef FEAT_TERMGUICOLORS
-			    (p_tgc ?
-				(aep->ae_u.cterm.fg_rgb != INVALCOLOR
-				 || aep->ae_u.cterm.bg_rgb != INVALCOLOR):
+			    p_tgc && aep->ae_u.cterm.fg_rgb != CTERMCOLOR
+				? aep->ae_u.cterm.fg_rgb != INVALCOLOR
+				:
 #endif
-				(aep->ae_u.cterm.fg_color || aep->ae_u.cterm.bg_color)
+				aep->ae_u.cterm.fg_color) || (
 #ifdef FEAT_TERMGUICOLORS
-			    )
+			    p_tgc && aep->ae_u.cterm.bg_rgb != CTERMCOLOR
+				? aep->ae_u.cterm.bg_rgb != INVALCOLOR
+				:
 #endif
-			)
+				aep->ae_u.cterm.bg_color)))
 			do_ME = TRUE;
 		}
 		else
@@ -8743,11 +8777,9 @@ screenalloc(int doclear)
     tabpage_T	    *tp;
     static int	    entered = FALSE;		/* avoid recursiveness */
     static int	    done_outofmem_msg = FALSE;	/* did outofmem message */
-#ifdef FEAT_AUTOCMD
     int		    retry_count = 0;
 
 retry:
-#endif
     /*
      * Allocation of the screen buffers is done only when the size changes and
      * when Rows and Columns have been set and we have started doing full
@@ -8799,10 +8831,8 @@ retry:
      */
     FOR_ALL_TAB_WINDOWS(tp, wp)
 	win_free_lsize(wp);
-#ifdef FEAT_AUTOCMD
     if (aucmd_win != NULL)
 	win_free_lsize(aucmd_win);
-#endif
 
     new_ScreenLines = (schar_T *)lalloc((long_u)(
 			      (Rows + 1) * Columns * sizeof(schar_T)), FALSE);
@@ -8835,11 +8865,9 @@ retry:
 	    goto give_up;
 	}
     }
-#ifdef FEAT_AUTOCMD
     if (aucmd_win != NULL && aucmd_win->w_lines == NULL
 					&& win_alloc_lines(aucmd_win) == FAIL)
 	outofmem = TRUE;
-#endif
 give_up:
 
 #ifdef FEAT_MBYTE
@@ -9008,7 +9036,6 @@ give_up:
     entered = FALSE;
     --RedrawingDisabled;
 
-#ifdef FEAT_AUTOCMD
     /*
      * Do not apply autocommands more than 3 times to avoid an endless loop
      * in case applying autocommands always changes Rows or Columns.
@@ -9020,7 +9047,6 @@ give_up:
 	 * jump back to check if we need to allocate the screen again. */
 	goto retry;
     }
-#endif
 }
 
     void
@@ -9455,7 +9481,17 @@ windgoto(int row, int col)
     void
 setcursor(void)
 {
-    if (redrawing())
+    setcursor_mayforce(FALSE);
+}
+
+/*
+ * Set cursor to its position in the current window.
+ * When "force" is TRUE also when not redrawing.
+ */
+    void
+setcursor_mayforce(int force)
+{
+    if (force || redrawing())
     {
 	validate_cursor();
 	windgoto(W_WINROW(curwin) + curwin->w_wrow,
@@ -10187,7 +10223,7 @@ screen_del_lines(
 }
 
 /*
- * show the current mode and ruler
+ * Show the current mode and ruler.
  *
  * If clear_cmdline is TRUE, clear the rest of the cmdline.
  * If clear_cmdline is FALSE there may be a message there that needs to be
@@ -10301,7 +10337,6 @@ showmode(void)
 			msg_puts_attr(edit_submode_extra, sub_attr);
 		    }
 		}
-		length = 0;
 	    }
 	    else
 #endif

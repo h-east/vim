@@ -4458,7 +4458,7 @@ get_job_options(typval_T *tv, jobopt_T *opt, int supported, int supported2)
 	return OK;
     if (tv->v_type != VAR_DICT)
     {
-	EMSG(_(e_invarg));
+	EMSG(_(e_dictreq));
 	return FAIL;
     }
     dict = tv->vval.v_dict;
@@ -4541,7 +4541,7 @@ get_job_options(typval_T *tv, jobopt_T *opt, int supported, int supported2)
 		opt->jo_io_buf[part] = get_tv_number(item);
 		if (opt->jo_io_buf[part] <= 0)
 		{
-		    EMSG2(_(e_invarg2), get_tv_string(item));
+		    EMSG3(_(e_invargNval), hi->hi_key, get_tv_string(item));
 		    return FAIL;
 		}
 		if (buflist_findnr(opt->jo_io_buf[part]) == NULL)
@@ -4590,7 +4590,7 @@ get_job_options(typval_T *tv, jobopt_T *opt, int supported, int supported2)
 		*lp = get_tv_number(item);
 		if (*lp < 0)
 		{
-		    EMSG2(_(e_invarg2), get_tv_string(item));
+		    EMSG3(_(e_invargNval), hi->hi_key, get_tv_string(item));
 		    return FAIL;
 		}
 	    }
@@ -4601,7 +4601,7 @@ get_job_options(typval_T *tv, jobopt_T *opt, int supported, int supported2)
 		opt->jo_set |= JO_CHANNEL;
 		if (item->v_type != VAR_CHANNEL)
 		{
-		    EMSG2(_(e_invarg2), "channel");
+		    EMSG2(_(e_invargval), "channel");
 		    return FAIL;
 		}
 		opt->jo_channel = item->vval.v_channel;
@@ -4614,7 +4614,7 @@ get_job_options(typval_T *tv, jobopt_T *opt, int supported, int supported2)
 		opt->jo_callback = get_callback(item, &opt->jo_partial);
 		if (opt->jo_callback == NULL)
 		{
-		    EMSG2(_(e_invarg2), "callback");
+		    EMSG2(_(e_invargval), "callback");
 		    return FAIL;
 		}
 	    }
@@ -4626,7 +4626,7 @@ get_job_options(typval_T *tv, jobopt_T *opt, int supported, int supported2)
 		opt->jo_out_cb = get_callback(item, &opt->jo_out_partial);
 		if (opt->jo_out_cb == NULL)
 		{
-		    EMSG2(_(e_invarg2), "out_cb");
+		    EMSG2(_(e_invargval), "out_cb");
 		    return FAIL;
 		}
 	    }
@@ -4638,7 +4638,7 @@ get_job_options(typval_T *tv, jobopt_T *opt, int supported, int supported2)
 		opt->jo_err_cb = get_callback(item, &opt->jo_err_partial);
 		if (opt->jo_err_cb == NULL)
 		{
-		    EMSG2(_(e_invarg2), "err_cb");
+		    EMSG2(_(e_invargval), "err_cb");
 		    return FAIL;
 		}
 	    }
@@ -4650,7 +4650,7 @@ get_job_options(typval_T *tv, jobopt_T *opt, int supported, int supported2)
 		opt->jo_close_cb = get_callback(item, &opt->jo_close_partial);
 		if (opt->jo_close_cb == NULL)
 		{
-		    EMSG2(_(e_invarg2), "close_cb");
+		    EMSG2(_(e_invargval), "close_cb");
 		    return FAIL;
 		}
 	    }
@@ -4663,7 +4663,7 @@ get_job_options(typval_T *tv, jobopt_T *opt, int supported, int supported2)
 		    never = TRUE;
 		else if (STRCMP(val, "auto") != 0)
 		{
-		    EMSG2(_(e_invarg2), "drop");
+		    EMSG3(_(e_invargNval), "drop", val);
 		    return FAIL;
 		}
 		opt->jo_drop_never = never;
@@ -4676,7 +4676,7 @@ get_job_options(typval_T *tv, jobopt_T *opt, int supported, int supported2)
 		opt->jo_exit_cb = get_callback(item, &opt->jo_exit_partial);
 		if (opt->jo_exit_cb == NULL)
 		{
-		    EMSG2(_(e_invarg2), "exit_cb");
+		    EMSG2(_(e_invargval), "exit_cb");
 		    return FAIL;
 		}
 	    }
@@ -4689,7 +4689,7 @@ get_job_options(typval_T *tv, jobopt_T *opt, int supported, int supported2)
 		opt->jo_term_name = get_tv_string_chk(item);
 		if (opt->jo_term_name == NULL)
 		{
-		    EMSG2(_(e_invarg2), "term_name");
+		    EMSG2(_(e_invargval), "term_name");
 		    return FAIL;
 		}
 	    }
@@ -4700,7 +4700,7 @@ get_job_options(typval_T *tv, jobopt_T *opt, int supported, int supported2)
 		val = get_tv_string(item);
 		if (STRCMP(val, "open") != 0 && STRCMP(val, "close") != 0)
 		{
-		    EMSG2(_(e_invarg2), val);
+		    EMSG3(_(e_invargNval), "term_finish", val);
 		    return FAIL;
 		}
 		opt->jo_set2 |= JO2_TERM_FINISH;
@@ -4724,7 +4724,7 @@ get_job_options(typval_T *tv, jobopt_T *opt, int supported, int supported2)
 		}
 		if (p == NULL)
 		{
-		    EMSG2(_(e_invarg2), "term_opencmd");
+		    EMSG2(_(e_invargval), "term_opencmd");
 		    return FAIL;
 		}
 	    }
@@ -4738,7 +4738,7 @@ get_job_options(typval_T *tv, jobopt_T *opt, int supported, int supported2)
 		p = opt->jo_eof_chars = get_tv_string_chk(item);
 		if (p == NULL)
 		{
-		    EMSG2(_(e_invarg2), "term_opencmd");
+		    EMSG2(_(e_invargval), "eof_chars");
 		    return FAIL;
 		}
 	    }
@@ -4746,43 +4746,57 @@ get_job_options(typval_T *tv, jobopt_T *opt, int supported, int supported2)
 	    {
 		if (!(supported2 & JO2_TERM_ROWS))
 		    break;
-		opt->jo_set |= JO2_TERM_ROWS;
+		opt->jo_set2 |= JO2_TERM_ROWS;
 		opt->jo_term_rows = get_tv_number(item);
 	    }
 	    else if (STRCMP(hi->hi_key, "term_cols") == 0)
 	    {
 		if (!(supported2 & JO2_TERM_COLS))
 		    break;
-		opt->jo_set |= JO2_TERM_COLS;
+		opt->jo_set2 |= JO2_TERM_COLS;
 		opt->jo_term_cols = get_tv_number(item);
 	    }
 	    else if (STRCMP(hi->hi_key, "vertical") == 0)
 	    {
 		if (!(supported2 & JO2_VERTICAL))
 		    break;
-		opt->jo_set |= JO2_VERTICAL;
+		opt->jo_set2 |= JO2_VERTICAL;
 		opt->jo_vertical = get_tv_number(item);
 	    }
 	    else if (STRCMP(hi->hi_key, "curwin") == 0)
 	    {
 		if (!(supported2 & JO2_CURWIN))
 		    break;
-		opt->jo_set |= JO2_CURWIN;
+		opt->jo_set2 |= JO2_CURWIN;
 		opt->jo_curwin = get_tv_number(item);
 	    }
 	    else if (STRCMP(hi->hi_key, "hidden") == 0)
 	    {
 		if (!(supported2 & JO2_HIDDEN))
 		    break;
-		opt->jo_set |= JO2_HIDDEN;
+		opt->jo_set2 |= JO2_HIDDEN;
 		opt->jo_hidden = get_tv_number(item);
+	    }
+	    else if (STRCMP(hi->hi_key, "norestore") == 0)
+	    {
+		if (!(supported2 & JO2_NORESTORE))
+		    break;
+		opt->jo_set2 |= JO2_NORESTORE;
+		opt->jo_term_norestore = get_tv_number(item);
+	    }
+	    else if (STRCMP(hi->hi_key, "term_kill") == 0)
+	    {
+		if (!(supported2 & JO2_TERM_KILL))
+		    break;
+		opt->jo_set2 |= JO2_TERM_KILL;
+		opt->jo_term_kill = get_tv_string_chk(item);
 	    }
 #endif
 	    else if (STRCMP(hi->hi_key, "env") == 0)
 	    {
 		if (!(supported2 & JO2_ENV))
 		    break;
-		opt->jo_set |= JO2_ENV;
+		opt->jo_set2 |= JO2_ENV;
 		opt->jo_env = item->vval.v_dict;
 		++item->vval.v_dict->dv_refcount;
 	    }
@@ -4793,10 +4807,10 @@ get_job_options(typval_T *tv, jobopt_T *opt, int supported, int supported2)
 		opt->jo_cwd = get_tv_string_buf_chk(item, opt->jo_cwd_buf);
 		if (opt->jo_cwd == NULL || !mch_isdir(opt->jo_cwd))
 		{
-		    EMSG2(_(e_invarg2), "cwd");
+		    EMSG2(_(e_invargval), "cwd");
 		    return FAIL;
 		}
-		opt->jo_set |= JO2_CWD;
+		opt->jo_set2 |= JO2_CWD;
 	    }
 	    else if (STRCMP(hi->hi_key, "waittime") == 0)
 	    {
@@ -4838,7 +4852,7 @@ get_job_options(typval_T *tv, jobopt_T *opt, int supported, int supported2)
 		    opt->jo_part = PART_OUT;
 		else
 		{
-		    EMSG2(_(e_invarg2), val);
+		    EMSG3(_(e_invargNval), "part", val);
 		    return FAIL;
 		}
 	    }
@@ -4858,7 +4872,7 @@ get_job_options(typval_T *tv, jobopt_T *opt, int supported, int supported2)
 							     opt->jo_soe_buf);
 		if (opt->jo_stoponexit == NULL)
 		{
-		    EMSG2(_(e_invarg2), "stoponexit");
+		    EMSG2(_(e_invargval), "stoponexit");
 		    return FAIL;
 		}
 	    }
@@ -5369,11 +5383,13 @@ job_check_ended(void)
 
 /*
  * Create a job and return it.  Implements job_start().
+ * "argv_arg" is only for Unix.
+ * When "argv_arg" is NULL then "argvars" is used.
  * The returned job has a refcount of one.
  * Returns NULL when out of memory.
  */
     job_T *
-job_start(typval_T *argvars, jobopt_T *opt_arg)
+job_start(typval_T *argvars, char **argv_arg, jobopt_T *opt_arg)
 {
     job_T	*job;
     char_u	*cmd = NULL;
@@ -5460,6 +5476,13 @@ job_start(typval_T *argvars, jobopt_T *opt_arg)
 
     job_set_options(job, &opt);
 
+#ifdef USE_ARGV
+    if (argv_arg != NULL)
+    {
+	argv = argv_arg;
+    }
+    else
+#endif
     if (argvars[0].v_type == VAR_STRING)
     {
 	/* Command is a string. */
@@ -5470,6 +5493,7 @@ job_start(typval_T *argvars, jobopt_T *opt_arg)
 	    goto theend;
 	}
 #ifdef USE_ARGV
+	/* This will modify "cmd". */
 	if (mch_parse_cmd(cmd, FALSE, &argv, &argc) == FAIL)
 	    goto theend;
 	argv[argc] = NULL;
@@ -5536,7 +5560,8 @@ job_start(typval_T *argvars, jobopt_T *opt_arg)
 
 theend:
 #ifdef USE_ARGV
-    vim_free(argv);
+    if (argv != argv_arg)
+	vim_free(argv);
 #else
     vim_free(ga.ga_data);
 #endif

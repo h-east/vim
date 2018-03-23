@@ -1,4 +1,4 @@
-*eval.txt*	For Vim version 8.0.  Last change: 2018 Feb 09
+*eval.txt*	For Vim version 8.0.  Last change: 2018 Mar 20
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -1246,8 +1246,8 @@ The arguments are optional.  Example: >
 							*closure*
 Lambda expressions can access outer scope variables and arguments.  This is
 often called a closure.  Example where "i" and "a:arg" are used in a lambda
-while they exist in the function scope.  They remain valid even after the
-function returns: >
+while they already exist in the function scope.  They remain valid even after
+the function returns: >
 	:function Foo(arg)
 	:  let i = 3
 	:  return {x -> x + i - a:arg}
@@ -1256,7 +1256,10 @@ function returns: >
 	:echo Bar(6)
 <	5
 
-See also |:func-closure|.  Lambda and closure support can be checked with: >
+Note that the variables must exist in the outer scope before the lamba is
+defined for this to work.  See also |:func-closure|.
+
+Lambda and closure support can be checked with: >
 	if has('lambda')
 
 Examples for using a lambda expression with |sort()|, |map()| and |filter()|: >
@@ -2017,8 +2020,11 @@ argidx()			Number	current index in the argument list
 arglistid([{winnr} [, {tabnr}]]) Number	argument list id
 argv({nr})			String	{nr} entry of the argument list
 argv()				List	the argument list
+assert_beeps({cmd})		none	assert {cmd} causes a beep
 assert_equal({exp}, {act} [, {msg}])
 				none	assert {exp} is equal to {act}
+assert_equalfile({fname-one}, {fname-two})
+				none	assert file contents is equal
 assert_exception({error} [, {msg}])
 				none	assert {error} is in v:exception
 assert_fails({cmd} [, {error}])	none	assert {cmd} fails
@@ -2151,6 +2157,7 @@ getbufline({expr}, {lnum} [, {end}])
 				List	lines {lnum} to {end} of buffer {expr}
 getbufvar({expr}, {varname} [, {def}])
 				any	variable {varname} in buffer {expr}
+getchangelist({expr})		List	list of change list items
 getchar([expr])			Number	get one character from the user
 getcharmod()			Number	modifiers for the last typed character
 getcharsearch()			Dict	last character search
@@ -2167,6 +2174,8 @@ getfperm({fname})		String	file permissions of file {fname}
 getfsize({fname})		Number	size in bytes of file {fname}
 getftime({fname})		Number	last modification time of file
 getftype({fname})		String	description of type of file {fname}
+getjumplist([{winnr} [, {tabnr}]])
+				List	list of jump list items
 getline({lnum})			String	line {lnum} of current buffer
 getline({lnum}, {end})		List	lines {lnum} to {end} of current buffer
 getloclist({nr} [, {what}])	List	list of location list items
@@ -2183,8 +2192,9 @@ gettabvar({nr}, {varname} [, {def}])
 gettabwinvar({tabnr}, {winnr}, {name} [, {def}])
 				any	{name} in {winnr} in tab page {tabnr}
 getwininfo([{winid}])		List	list of windows
-getwinposx()			Number	X coord in pixels of GUI Vim window
-getwinposy()			Number	Y coord in pixels of GUI Vim window
+getwinpos([{timeout}])		List	X and Y coord in pixels of the Vim window
+getwinposx()			Number	X coord in pixels of the Vim window
+getwinposy()			Number	Y coord in pixels of the Vim window
 getwinvar({nr}, {varname} [, {def}])
 				any	variable {varname} in window {nr}
 glob({expr} [, {nosuf} [, {list} [, {alllinks}]]])
@@ -2406,6 +2416,12 @@ tagfiles()			List	tags files used
 tan({expr})			Float	tangent of {expr}
 tanh({expr})			Float	hyperbolic tangent of {expr}
 tempname()			String	name for a temporary file
+term_dumpdiff({filename}, {filename} [, {options}])
+				Number  display difference between two dumps
+term_dumpload({filename} [, {options}])
+				Number	displaying a screen dump
+term_dumpwrite({buf}, {filename} [, {options}])
+				none	dump terminal window contents
 term_getaltscreen({buf})	Number	get the alternate screen flag
 term_getattr({attr}, {what})	Number	get the value of attribute {what}
 term_getcursor({buf})		List	get the cursor position of a terminal
@@ -2419,6 +2435,8 @@ term_gettty({buf}, [{input}])	String	get the tty name of a terminal
 term_list()			List	get the list of terminal buffers
 term_scrape({buf}, {row})	List	get row of a terminal screen
 term_sendkeys({buf}, {keys})	none	send keystrokes to a terminal
+term_setkill({buf}, {how}) 	none	set signal to stop job in terminal
+term_setrestore({buf}, {command}) none	set command to restore terminal
 term_start({cmd}, {options})	Job	open a terminal window and run a job
 term_wait({buf} [, {time}])	Number  wait for screen to be updated
 test_alloc_fail({id}, {countdown}, {repeat})
@@ -2445,6 +2463,7 @@ tolower({expr})			String	the String {expr} switched to lowercase
 toupper({expr})			String	the String {expr} switched to uppercase
 tr({src}, {fromstr}, {tostr})	String	translate chars of {src} in {fromstr}
 					to chars in {tostr}
+trim({text}[, {mask}]) 		String	trim characters in {mask} from {text}
 trunc({expr})			Float	truncate Float {expr}
 type({name})			Number	type of variable {name}
 undofile({name})		String	undo file name for {name}
@@ -2566,6 +2585,11 @@ argv([{nr}])	The result is the {nr}th file in the argument list of the
 <		Without the {nr} argument a |List| with the whole |arglist| is
 		returned.
 
+assert_beeps({cmd})					*assert_beeps()*
+		Run {cmd} and add an error message to |v:errors| if it does
+		NOT produce a beep or visual bell.
+		Also see |assert_fails()|.
+
 							*assert_equal()*
 assert_equal({expected}, {actual} [, {msg}])
 		When {expected} and {actual} are not equal an error message is
@@ -2580,6 +2604,14 @@ assert_equal({expected}, {actual} [, {msg}])
 	assert_equal('foo', 'bar')
 <		Will result in a string to be added to |v:errors|:
 	test.vim line 12: Expected 'foo' but got 'bar' ~
+
+							*assert_equalfile()*
+assert_equalfile({fname-one}, {fname-two})
+		When the files {fname-one} and {fname-two} do not contain
+		exactly the same text an error message is added to |v:errors|.
+		When {fname-one} or {fname-two} does not exist the error will
+		mention that.
+		Mainly useful with |terminal-diff|.
 
 assert_exception({error} [, {msg}])			*assert_exception()*
 		When v:exception does not contain the string {error} an error
@@ -2598,6 +2630,8 @@ assert_fails({cmd} [, {error}])					*assert_fails()*
 		Run {cmd} and add an error message to |v:errors| if it does
 		NOT produce an error.
 		When {error} is given it must match in |v:errmsg|.
+		Note that beeping is not considered an error, and some failing
+		commands only beep.  Use |assert_beeps()| for those.
 
 assert_false({actual} [, {msg}])				*assert_false()*
 		When {actual} is not false an error message is added to
@@ -3139,8 +3173,8 @@ char2nr({expr} [, {utf8}])					*char2nr()*
 			char2nr("ABC")		returns 65
 <		When {utf8} is omitted or zero, the current 'encoding' is used.
 		Example for "utf-8": >
-			char2nr("แ")		returns 225
-			char2nr("แ"[0])		returns 195
+			char2nr("รก")		returns 225
+			char2nr("รก"[0])		returns 195
 <		With {utf8} set to 1, always treat as utf-8 characters.
 		A combining character is a separate character.
 		|nr2char()| does the opposite.
@@ -4268,6 +4302,22 @@ getbufvar({expr}, {varname} [, {def}])				*getbufvar()*
 			:let bufmodified = getbufvar(1, "&mod")
 			:echo "todo myvar = " . getbufvar("todo", "myvar")
 <
+getchangelist({expr})					*getchangelist()*
+		Returns the |changelist| for the buffer {expr}. For the use
+		of {expr}, see |bufname()| above. If buffer {expr} doesn't
+		exist, an empty list is returned.
+
+		The returned list contains two entries: a list with the change
+		locations and the current position in the list.  Each
+		entry in the change list is a dictionary with the following
+		entries:
+			col		column number
+			coladd		column offset for 'virtualedit'
+			lnum		line number
+		If buffer {expr} is the current buffer, then the current
+		position refers to the position in the list. For other
+		buffers, it is set to the length of the list.
+
 getchar([expr])						*getchar()*
 		Get a single character from the user or input stream.
 		If [expr] is omitted, wait until a character is available.
@@ -4560,6 +4610,25 @@ getftype({fname})					*getftype()*
 		"file" are returned.  On MS-Windows a symbolic link to a
 		directory returns "dir" instead of "link".
 
+getjumplist([{winnr} [, {tabnr}]])			*getjumplist()*
+		Returns the |jumplist| for the specified window.
+
+		Without arguments use the current window.
+		With {winnr} only use this window in the current tab page.
+		{winnr} can also be a |window-ID|.
+		With {winnr} and {tabnr} use the window in the specified tab
+		page.
+
+		The returned list contains two entries: a list with the jump
+		locations and the last used jump position number in the list.
+		Each entry in the jump location list is a dictionary with
+		the following entries:
+			bufnr		buffer number
+			col		column number
+			coladd		column offset for 'virtualedit'
+			filename	filename if available
+			lnum		line number
+
 							*getline()*
 getline({lnum} [, {end}])
 		Without {end} the result is a String, which is line {lnum}
@@ -4813,16 +4882,36 @@ gettabwinvar({tabnr}, {winnr}, {varname} [, {def}])		*gettabwinvar()*
 			:let list_is_on = gettabwinvar(1, 2, '&list')
 			:echo "myvar = " . gettabwinvar(3, 1, 'myvar')
 <
+getwinpos([{timeout}])					*getwinpos()*
+		The result is a list with two numbers, the result of
+		getwinposx() and getwinposy() combined: 
+			[x-pos, y-pos]
+		{timeout} can be used to specify how long to wait in msec for
+		a response from the terminal.  When omitted 100 msec is used.
+		Use a longer time for a remote terminal.
+		When using a value less than 10 and no response is received
+		within that time, a previously reported position is returned,
+		if available.  This can be used to poll for the position and
+		do some work in the mean time: >
+			while 1
+			  let res = getwinpos(1)
+			  if res[0] >= 0
+			    break
+			  endif
+			  " Do some work here
+			endwhile
+<
 							*getwinposx()*
 getwinposx()	The result is a Number, which is the X coordinate in pixels of
 		the left hand side of the GUI Vim window. Also works for an
-		xterm.
+		xterm (uses a timeout of 100 msec).
 		The result will be -1 if the information is not available.
 		The value can be used with `:winpos`.
 
 							*getwinposy()*
 getwinposy()	The result is a Number, which is the Y coordinate in pixels of
-		the top of the GUI Vim window.  Also works for an xterm.
+		the top of the GUI Vim window.  Also works for an xterm (uses
+		a timeout of 100 msec).
 		The result will be -1 if the information is not available.
 		The value can be used with `:winpos`.
 
@@ -6524,7 +6613,7 @@ remote_expr({server}, {string} [, {idvar} [, {timeout}]])
 		between (not at the end), like with join(expr, "\n").
 		If {idvar} is present and not empty, it is taken as the name
 		of a variable and a {serverid} for later use with
-		remote_read() is stored there.
+		|remote_read()| is stored there.
 		If {timeout} is given the read times out after this many
 		seconds.  Otherwise a timeout of 600 seconds is used.
 		See also |clientserver| |RemoteReply|.
@@ -8088,6 +8177,70 @@ tempname()					*tempname()* *temp-file-name*
 		For MS-Windows forward slashes are used when the 'shellslash'
 		option is set or when 'shellcmdflag' starts with '-'.
 
+							*term_dumpdiff()*
+term_dumpdiff({filename}, {filename} [, {options}])
+		Open a new window displaying the difference between the two
+		files.  The files must have been created with
+		|term_dumpwrite()|.
+		Returns the buffer number or zero when the diff fails.
+		Also see |terminal-diff|.
+		NOTE: this does not work with double-width characters yet.
+
+		The top part of the buffer contains the contents of the first
+		file, the bottom part of the buffer contains the contents of
+		the second file.  The middle part shows the differences.
+		The parts are separated by a line of dashes.
+
+		If the {options} argument is present, it must be a Dict with
+		these possible members:
+		   "term_name"	     name to use for the buffer name, instead
+				     of the first file name.
+		   "term_rows"	     vertical size to use for the terminal,
+				     instead of using 'termsize'
+		   "term_cols"	     horizontal size to use for the terminal,
+				     instead of using 'termsize'
+		   "vertical"	     split the window vertically
+		   "curwin"	     use the current window, do not split the
+				     window; fails if the current buffer
+				     cannot be |abandon|ed
+		   "norestore"	     do not add the terminal window to a
+				     session file
+
+		Each character in the middle part indicates a difference. If
+		there are multiple differences only the first in this list is
+		used:
+			X	different character
+			w	different width
+			f	different foreground color
+			b	different background color
+			a	different attribute
+			+	missing position in first file
+			-	missing position in second file
+
+		Using the "s" key the top and bottom parts are swapped.  This
+		makes it easy to spot a difference.
+
+							*term_dumpload()*
+term_dumpload({filename} [, {options}])
+		Open a new window displaying the contents of {filename}
+		The file must have been created with |term_dumpwrite()|.
+		Returns the buffer number or zero when it fails.
+		Also see |terminal-diff|.
+
+		For {options} see |term_dumpdiff()|.
+
+							*term_dumpwrite()*
+term_dumpwrite({buf}, {filename} [, {options}])
+		Dump the contents of the terminal screen of {buf} in the file
+		{filename}.  This uses a format that can be used with
+		|term_dumpload()| and |term_dumpdiff()|.
+		If {filename} already exists an error is given.	*E953*
+		Also see |terminal-diff|.
+
+		{options} is a dictionary with these optional entries:
+			"rows"		maximum number of rows to dump
+			"columns"	maximum number of columns to dump
+
 term_getaltscreen({buf})				*term_getaltscreen()*
 		Returns 1 if the terminal of {buf} is using the alternate
 		screen.
@@ -8138,6 +8291,8 @@ term_getline({buf}, {row})				*term_getline()*
 		The first line has {row} one.  When {row} is "." the cursor
 		line is used.  When {row} is invalid an empty string is
 		returned.
+
+		To get attributes of each character use |term_scrape()|.
 		{only available when compiled with the |+terminal| feature}
 
 term_getscrolled({buf})					*term_getscrolled()*
@@ -8223,6 +8378,28 @@ term_sendkeys({buf}, {keys})				*term_sendkeys()*
 		means the character CTRL-X.
 		{only available when compiled with the |+terminal| feature}
 
+term_setkill({buf}, {how})				*term_setkill()*
+		When exiting Vim or trying to close the terminal window in
+		another way, {how} defines whether the job in the terminal can
+		be stopped.
+		When {how} is empty (the default), the job will not be
+		stopped, trying to exit will result in |E947|.
+		Otherwise, {how} specifies what signal to send to the job.
+		See |job_stop()| for the values.
+
+		After sending the signal Vim will wait for up to a second to
+		check that the job actually stopped.
+
+term_setrestore({buf}, {command})			*term_setrestore()*
+		Set the command to write in a session file to restore the job
+		in this terminal.  The line written in the session file is: >
+			terminal ++curwin ++cols=%d ++rows=%d {command}
+<		Make sure to escape the command properly.
+
+		Use an empty {command} to run 'shell'.
+		Use "NONE" to not restore this window.
+		{only available when compiled with the |+terminal| feature}
+
 term_setsize({buf}, {expr})				*term_setsize()*
 		Not implemented yet.
 		{only available when compiled with the |+terminal| feature}
@@ -8266,6 +8443,10 @@ term_start({cmd}, {options})				*term_start()*
 				     window; fails if the current buffer
 				     cannot be |abandon|ed
 		   "hidden"	     do not open a window
+		   "norestore"	     do not add the terminal window to a
+				     session file
+		   "term_kill"	     what to do when trying to close the
+				     terminal window, see |term_setkill()|
 		   "term_finish"     What to do when the job is finished:
 					"close": close any windows
 					"open": open window if needed
@@ -8478,6 +8659,22 @@ tr({src}, {fromstr}, {tostr})				*tr()*
 <		returns "Hello THere" >
 			echo tr("<blob>", "<>", "{}")
 <		returns "{blob}"
+
+trim({text}[, {mask}])						*trim()*
+		Return {text} as a String where any character in {mask} is
+		removed from the beginning and  end of {text}.
+		If {mask} is not given, {mask} is all characters up to 0x20,
+		which includes Tab, space, NL and CR, plus the non-breaking
+		space character 0xa0.
+		This code deals with multibyte characters properly.
+
+		Examples: >
+			echo trim("  \r\t\t\r RESERVE \t \t\n\x0B\x0B")."_TAIL"
+<		returns "RESERVE_TAIL" >
+			echo trim("needrmvRESERVEnnneeedddrrmmmmvv", "ednmrv")
+<		returns "RESERVE" >
+			echo trim("rm<blob1><blob2><any_chars>rrmm<blob1><blob2><blob2>", "rm<blob1><blob2>")
+<		returns "any_chas"
 
 trunc({expr})							*trunc()*
 		Return the largest integral value with magnitude less than or
@@ -9058,6 +9255,8 @@ ttyout			output is a terminal (tty)
 unix			Unix version of Vim. *+unix*
 unnamedplus		Compiled with support for "unnamedplus" in 'clipboard'
 user_commands		User-defined commands.
+vcon			Win32: Virtual console support is working, can use
+			'termguicolors'. Also see |+vtp|.
 vertsplit		Compiled with vertically split windows |:vsplit|.
 vim_starting		True while initial source'ing takes place. |startup|
 			*vim_starting*
@@ -9068,6 +9267,8 @@ visualextra		Compiled with extra Visual mode commands.
 			|blockwise-operators|.
 vms			VMS version of Vim.
 vreplace		Compiled with |gR| and |gr| commands.
+vtp			Compiled for vcon support |+vtp| (check vcon to find
+			out if it works in the current console).
 wildignore		Compiled with 'wildignore' option.
 wildmenu		Compiled with 'wildmenu' option.
 win32			Win32 version of Vim (MS-Windows 95 and later, 32 or
@@ -9306,8 +9507,7 @@ may be larger.
 It is also possible to define a function without any arguments.  You must
 still supply the () then.
 
-It is allowed to define another function inside a function
-body.
+It is allowed to define another function inside a function body.
 
 							*local-variables*
 Inside a function local variables can be used.  These will disappear when the

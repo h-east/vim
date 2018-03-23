@@ -294,6 +294,7 @@ $VIM_POSIX	vi_diff.txt	/*$VIM_POSIX*
 'gfw'	options.txt	/*'gfw'*
 'ghr'	options.txt	/*'ghr'*
 'go'	options.txt	/*'go'*
+'go-!'	options.txt	/*'go-!'*
 'go-A'	options.txt	/*'go-A'*
 'go-F'	options.txt	/*'go-F'*
 'go-L'	options.txt	/*'go-L'*
@@ -782,8 +783,10 @@ $VIM_POSIX	vi_diff.txt	/*$VIM_POSIX*
 'prompt'	options.txt	/*'prompt'*
 'pt'	options.txt	/*'pt'*
 'pumheight'	options.txt	/*'pumheight'*
+'pumwidth'	options.txt	/*'pumwidth'*
 'pvh'	options.txt	/*'pvh'*
 'pvw'	options.txt	/*'pvw'*
+'pw'	options.txt	/*'pw'*
 'pythondll'	options.txt	/*'pythondll'*
 'pythonhome'	options.txt	/*'pythonhome'*
 'pythonthreedll'	options.txt	/*'pythonthreedll'*
@@ -1355,6 +1358,7 @@ $VIM_POSIX	vi_diff.txt	/*$VIM_POSIX*
 +visual	various.txt	/*+visual*
 +visualextra	various.txt	/*+visualextra*
 +vreplace	various.txt	/*+vreplace*
++vtp	various.txt	/*+vtp*
 +wildignore	various.txt	/*+wildignore*
 +wildmenu	various.txt	/*+wildmenu*
 +windows	various.txt	/*+windows*
@@ -4584,6 +4588,8 @@ E95	message.txt	/*E95*
 E950	message.txt	/*E950*
 E951	pattern.txt	/*E951*
 E952	autocmd.txt	/*E952*
+E953	eval.txt	/*E953*
+E954	options.txt	/*E954*
 E96	diff.txt	/*E96*
 E97	diff.txt	/*E97*
 E98	diff.txt	/*E98*
@@ -4595,6 +4601,7 @@ EncodingChanged	autocmd.txt	/*EncodingChanged*
 Eterm	syntax.txt	/*Eterm*
 Ex	intro.txt	/*Ex*
 Ex-mode	intro.txt	/*Ex-mode*
+ExitPre	autocmd.txt	/*ExitPre*
 Exuberant_ctags	tagsrch.txt	/*Exuberant_ctags*
 F	motion.txt	/*F*
 FALSE	eval.txt	/*FALSE*
@@ -4825,8 +4832,10 @@ Tcl	if_tcl.txt	/*Tcl*
 TermChanged	autocmd.txt	/*TermChanged*
 TermResponse	autocmd.txt	/*TermResponse*
 Terminal-mode	terminal.txt	/*Terminal-mode*
+TerminalOpen	autocmd.txt	/*TerminalOpen*
 TextChanged	autocmd.txt	/*TextChanged*
 TextChangedI	autocmd.txt	/*TextChangedI*
+TextChangedP	autocmd.txt	/*TextChangedP*
 TextYankPost	autocmd.txt	/*TextYankPost*
 Transact-SQL	ft_sql.txt	/*Transact-SQL*
 U	undo.txt	/*U*
@@ -5087,7 +5096,9 @@ asin()	eval.txt	/*asin()*
 asm.vim	syntax.txt	/*asm.vim*
 asm68k	syntax.txt	/*asm68k*
 asmh8300.vim	syntax.txt	/*asmh8300.vim*
+assert_beeps()	eval.txt	/*assert_beeps()*
 assert_equal()	eval.txt	/*assert_equal()*
+assert_equalfile()	eval.txt	/*assert_equalfile()*
 assert_exception()	eval.txt	/*assert_exception()*
 assert_fails()	eval.txt	/*assert_fails()*
 assert_false()	eval.txt	/*assert_false()*
@@ -6562,6 +6573,7 @@ get-ms-debuggers	debug.txt	/*get-ms-debuggers*
 getbufinfo()	eval.txt	/*getbufinfo()*
 getbufline()	eval.txt	/*getbufline()*
 getbufvar()	eval.txt	/*getbufvar()*
+getchangelist()	eval.txt	/*getchangelist()*
 getchar()	eval.txt	/*getchar()*
 getcharmod()	eval.txt	/*getcharmod()*
 getcharsearch()	eval.txt	/*getcharsearch()*
@@ -6577,6 +6589,7 @@ getfperm()	eval.txt	/*getfperm()*
 getfsize()	eval.txt	/*getfsize()*
 getftime()	eval.txt	/*getftime()*
 getftype()	eval.txt	/*getftype()*
+getjumplist()	eval.txt	/*getjumplist()*
 getlatestvimscripts-install	pi_getscript.txt	/*getlatestvimscripts-install*
 getline()	eval.txt	/*getline()*
 getloclist()	eval.txt	/*getloclist()*
@@ -6596,6 +6609,7 @@ gettabinfo()	eval.txt	/*gettabinfo()*
 gettabvar()	eval.txt	/*gettabvar()*
 gettabwinvar()	eval.txt	/*gettabwinvar()*
 getwininfo()	eval.txt	/*getwininfo()*
+getwinpos()	eval.txt	/*getwinpos()*
 getwinposx()	eval.txt	/*getwinposx()*
 getwinposy()	eval.txt	/*getwinposy()*
 getwinvar()	eval.txt	/*getwinvar()*
@@ -8901,6 +8915,9 @@ term++open	terminal.txt	/*term++open*
 term-dependent-settings	term.txt	/*term-dependent-settings*
 term-list	syntax.txt	/*term-list*
 term.txt	term.txt	/*term.txt*
+term_dumpdiff()	eval.txt	/*term_dumpdiff()*
+term_dumpload()	eval.txt	/*term_dumpload()*
+term_dumpwrite()	eval.txt	/*term_dumpwrite()*
 term_getaltscreen()	eval.txt	/*term_getaltscreen()*
 term_getattr()	eval.txt	/*term_getattr()*
 term_getcursor()	eval.txt	/*term_getcursor()*
@@ -8914,6 +8931,8 @@ term_gettty()	eval.txt	/*term_gettty()*
 term_list()	eval.txt	/*term_list()*
 term_scrape()	eval.txt	/*term_scrape()*
 term_sendkeys()	eval.txt	/*term_sendkeys()*
+term_setkill()	eval.txt	/*term_setkill()*
+term_setrestore()	eval.txt	/*term_setrestore()*
 term_setsize()	eval.txt	/*term_setsize()*
 term_start()	eval.txt	/*term_start()*
 term_wait()	eval.txt	/*term_wait()*
@@ -8931,10 +8950,15 @@ termdebug-example	terminal.txt	/*termdebug-example*
 termdebug-starting	terminal.txt	/*termdebug-starting*
 termdebug-stepping	terminal.txt	/*termdebug-stepping*
 termdebug-variables	terminal.txt	/*termdebug-variables*
+termdebug_popup	terminal.txt	/*termdebug_popup*
+termdebug_wide	terminal.txt	/*termdebug_wide*
 terminal	terminal.txt	/*terminal*
 terminal-colors	os_unix.txt	/*terminal-colors*
 terminal-cursor-style	terminal.txt	/*terminal-cursor-style*
 terminal-debug	terminal.txt	/*terminal-debug*
+terminal-diff	terminal.txt	/*terminal-diff*
+terminal-diffscreendump	terminal.txt	/*terminal-diffscreendump*
+terminal-dumptest	terminal.txt	/*terminal-dumptest*
 terminal-functions	usr_41.txt	/*terminal-functions*
 terminal-info	term.txt	/*terminal-info*
 terminal-key-codes	term.txt	/*terminal-key-codes*
@@ -8942,6 +8966,8 @@ terminal-ms-windows	terminal.txt	/*terminal-ms-windows*
 terminal-options	term.txt	/*terminal-options*
 terminal-output-codes	term.txt	/*terminal-output-codes*
 terminal-resizing	terminal.txt	/*terminal-resizing*
+terminal-screendump	terminal.txt	/*terminal-screendump*
+terminal-session	terminal.txt	/*terminal-session*
 terminal-size-color	terminal.txt	/*terminal-size-color*
 terminal-special-keys	terminal.txt	/*terminal-special-keys*
 terminal-testing	terminal.txt	/*terminal-testing*

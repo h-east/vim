@@ -1,6 +1,7 @@
 " Test for completion menu
 
 source shared.vim
+source screendump.vim
 
 let g:months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 let g:setting = ''
@@ -742,5 +743,76 @@ func Test_balloon_split()
         \ ], balloon_split(
         \ 'struct = 0x234 {long = 2343 "\\"some long string that will be wrapped in two\\"", next = 123}'))
 endfunc
+
+func Test_popup_position()
+  if !CanRunVimInTerminal()
+    return
+  endif
+  call writefile([
+	\ '123456789_123456789_123456789_a',
+	\ '123456789_123456789_123456789_b',
+	\ '            123',
+	\ ], 'Xtest')
+  let buf = RunVimInTerminal('Xtest', {})
+  call term_sendkeys(buf, ":vsplit\<CR>")
+
+  " default pumwidth in left window: overlap in right window
+  call term_sendkeys(buf, "GA\<C-N>")
+  call VerifyScreenDump(buf, 'Test_popup_position_01', {'rows': 8})
+  call term_sendkeys(buf, "\<Esc>u")
+
+  " default pumwidth: fill until right of window
+  call term_sendkeys(buf, "\<C-W>l")
+  call term_sendkeys(buf, "GA\<C-N>")
+  call VerifyScreenDump(buf, 'Test_popup_position_02', {'rows': 8})
+
+  " larger pumwidth: used as minimum width
+  call term_sendkeys(buf, "\<Esc>u")
+  call term_sendkeys(buf, ":set pumwidth=30\<CR>")
+  call term_sendkeys(buf, "GA\<C-N>")
+  call VerifyScreenDump(buf, 'Test_popup_position_03', {'rows': 8})
+
+  " completed text wider than the window and 'pumwidth' smaller than available
+  " space
+  call term_sendkeys(buf, "\<Esc>u")
+  call term_sendkeys(buf, ":set pumwidth=20\<CR>")
+  call term_sendkeys(buf, "ggI123456789_\<Esc>")
+  call term_sendkeys(buf, "jI123456789_\<Esc>")
+  call term_sendkeys(buf, "GA\<C-N>")
+  call VerifyScreenDump(buf, 'Test_popup_position_04', {'rows': 10})
+  
+  call term_sendkeys(buf, "\<Esc>u")
+  call StopVimInTerminal(buf)
+  call delete('Xtest')
+endfunc
+
+func Test_popup_command()
+  if !CanRunVimInTerminal() || !has('menu')
+    return
+  endif
+
+  call writefile([
+	\ 'one two three four five',
+	\ 'and one two Xthree four five',
+	\ 'one more two three four five',
+	\ ], 'Xtest')
+  let buf = RunVimInTerminal('Xtest', {})
+  call term_sendkeys(buf, ":source $VIMRUNTIME/menu.vim\<CR>")
+  call term_sendkeys(buf, "/X\<CR>:popup PopUp\<CR>")
+  call VerifyScreenDump(buf, 'Test_popup_command_01', {})
+
+  " Select a word
+  call term_sendkeys(buf, "jj")
+  call VerifyScreenDump(buf, 'Test_popup_command_02', {})
+
+  " Select a word
+  call term_sendkeys(buf, "j\<CR>")
+  call VerifyScreenDump(buf, 'Test_popup_command_03', {})
+
+  call term_sendkeys(buf, "\<Esc>")
+  call StopVimInTerminal(buf)
+  call delete('Xtest')
+endfunc
+
 
 " vim: shiftwidth=2 sts=2 expandtab

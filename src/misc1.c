@@ -3183,12 +3183,10 @@ changed_common(
     if (must_redraw < VALID)
 	must_redraw = VALID;
 
-#ifdef FEAT_AUTOCMD
     /* when the cursor line is changed always trigger CursorMoved */
     if (lnum <= curwin->w_cursor.lnum
 		 && lnume + (xtra < 0 ? -xtra : xtra) > curwin->w_cursor.lnum)
 	last_cursormoved.lnum = 0;
-#endif
 }
 
 /*
@@ -3252,18 +3250,14 @@ change_warning(
 
     if (curbuf->b_did_warn == FALSE
 	    && curbufIsChanged() == 0
-#ifdef FEAT_AUTOCMD
 	    && !autocmd_busy
-#endif
 	    && curbuf->b_p_ro)
     {
-#ifdef FEAT_AUTOCMD
 	++curbuf_lock;
 	apply_autocmds(EVENT_FILECHANGEDRO, NULL, NULL, FALSE, curbuf);
 	--curbuf_lock;
 	if (!curbuf->b_p_ro)
 	    return;
-#endif
 	/*
 	 * Do what msg() does, but with a column offset if the warning should
 	 * be after the mode message.
@@ -3688,6 +3682,10 @@ beep_flush(void)
 vim_beep(
     unsigned val) /* one of the BO_ values, e.g., BO_OPER */
 {
+#ifdef FEAT_EVAL
+    called_vim_beep = TRUE;
+#endif
+
     if (emsg_silent == 0)
     {
 	if (!((bo_flags & val) || (bo_flags & BO_ALL)))
@@ -3710,7 +3708,22 @@ vim_beep(
 			&& !(gui.in_use && gui.starting)
 #endif
 			)
+		{
 		    out_str_cf(T_VB);
+#ifdef FEAT_VTP
+		    /* No restore color information, refresh the screen. */
+		    if (has_vtp_working() != 0
+# ifdef FEAT_TERMGUICOLORS
+			    && p_tgc
+# endif
+			)
+		    {
+			redraw_later(CLEAR);
+			update_screen(0);
+			redrawcmd();
+		    }
+#endif
+		}
 		else
 		    out_char(BELL);
 #ifdef ELAPSED_FUNC
@@ -3718,8 +3731,9 @@ vim_beep(
 #endif
 	}
 
-	/* When 'verbose' is set and we are sourcing a script or executing a
-	 * function give the user a hint where the beep comes from. */
+	/* When 'debug' contains "beep" produce a message.  If we are sourcing
+	 * a script or executing a function give the user a hint where the beep
+	 * comes from. */
 	if (vim_strchr(p_debug, 'e') != NULL)
 	{
 	    msg_source(HL_ATTR(HLF_W));
