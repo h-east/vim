@@ -27,12 +27,17 @@
 
 #define ESC_S "\x1b"
 
+#define INTERMED_MAX 16
+
+#define CSI_ARGS_MAX 16
+#define CSI_LEADER_MAX 16
+
 typedef struct VTermEncoding VTermEncoding;
 
 typedef struct {
   VTermEncoding *enc;
 
-  /* This size should be increased if required by other stateful encodings */
+  // This size should be increased if required by other stateful encodings
   char           data[4*sizeof(uint32_t)];
 } VTermEncodingInstance;
 
@@ -100,9 +105,9 @@ struct VTermState
 
   /* Last glyph output, for Unicode recombining purposes */
   uint32_t *combine_chars;
-  size_t combine_chars_size; /* Number of ELEMENTS in the above */
-  int combine_width; /* The width of the glyph above */
-  VTermPos combine_pos;   /* Position before movement */
+  size_t combine_chars_size; // Number of ELEMENTS in the above
+  int combine_width; // The width of the glyph above
+  VTermPos combine_pos;   // Position before movement
 
   struct {
     unsigned int keypad:1;
@@ -118,6 +123,7 @@ struct VTermState
     unsigned int screen:1;
     unsigned int leftrightmargin:1;
     unsigned int bracketpaste:1;
+    unsigned int report_focus:1;
   } mode;
 
   VTermEncodingInstance encoding[4], encoding_utf8;
@@ -127,7 +133,7 @@ struct VTermState
 
   VTermColor default_fg;
   VTermColor default_bg;
-  VTermColor colors[16]; /* Store the 8 ANSI and the 8 ANSI high-brights only */
+  VTermColor colors[16]; // Store the 8 ANSI and the 8 ANSI high-brights only
 
   int fg_index;
   int bg_index;
@@ -148,6 +154,13 @@ struct VTermState
   } saved;
 };
 
+typedef enum {
+  VTERM_PARSER_OSC,
+  VTERM_PARSER_DCS,
+
+  VTERM_N_PARSER_TYPES
+} VTermParserStringType;
+
 struct VTerm
 {
   VTermAllocatorFunctions *allocator;
@@ -161,22 +174,37 @@ struct VTerm
     unsigned int ctrl8bit:1;
   } mode;
 
-  enum VTermParserState {
-    NORMAL,
-    CSI,
-    OSC,
-    DCS,
-    ESC,
-    ESC_IN_OSC,
-    ESC_IN_DCS
-  } parser_state;
-  const VTermParserCallbacks *parser_callbacks;
-  void *cbdata;
+  struct {
+    enum VTermParserState {
+      NORMAL,
+      CSI_LEADER,
+      CSI_ARGS,
+      CSI_INTERMED,
+      ESC,
+      /* below here are the "string states" */
+      STRING,
+      ESC_IN_STRING,
+    } state;
+
+    int intermedlen;
+    char intermed[INTERMED_MAX];
+
+    int csi_leaderlen;
+    char csi_leader[CSI_LEADER_MAX];
+
+    int csi_argi;
+    long csi_args[CSI_ARGS_MAX];
+
+    const VTermParserCallbacks *callbacks;
+    void *cbdata;
+
+    VTermParserStringType stringtype;
+    char  *strbuffer;
+    size_t strbuffer_len;
+    size_t strbuffer_cur;
+  } parser;
 
   /* len == malloc()ed size; cur == number of valid bytes */
-  char  *strbuffer;
-  size_t strbuffer_len;
-  size_t strbuffer_cur;
 
   char  *outbuffer;
   size_t outbuffer_len;
@@ -220,7 +248,7 @@ enum {
   C1_DCS = 0x90,
   C1_CSI = 0x9b,
   C1_ST  = 0x9c,
-  C1_OSC = 0x9d
+  C1_OSC = 0x9d,
 };
 
 void vterm_state_push_output_sprintf_CSI(VTermState *vts, const char *format, ...);

@@ -302,6 +302,45 @@ empty_pattern(char_u *p)
 }
 #endif
 
+#ifdef FEAT_SEARCH_EXTRA
+typedef struct {
+    colnr_T	vs_curswant;
+    colnr_T	vs_leftcol;
+    linenr_T	vs_topline;
+# ifdef FEAT_DIFF
+    int		vs_topfill;
+# endif
+    linenr_T	vs_botline;
+    linenr_T	vs_empty_rows;
+} viewstate_T;
+
+    static void
+save_viewstate(viewstate_T *vs)
+{
+    vs->vs_curswant = curwin->w_curswant;
+    vs->vs_leftcol = curwin->w_leftcol;
+    vs->vs_topline = curwin->w_topline;
+# ifdef FEAT_DIFF
+    vs->vs_topfill = curwin->w_topfill;
+# endif
+    vs->vs_botline = curwin->w_botline;
+    vs->vs_empty_rows = curwin->w_empty_rows;
+}
+
+    static void
+restore_viewstate(viewstate_T *vs)
+{
+    curwin->w_curswant = vs->vs_curswant;
+    curwin->w_leftcol = vs->vs_leftcol;
+    curwin->w_topline = vs->vs_topline;
+# ifdef FEAT_DIFF
+    curwin->w_topfill = vs->vs_topfill;
+# endif
+    curwin->w_botline = vs->vs_botline;
+    curwin->w_empty_rows = vs->vs_empty_rows;
+}
+#endif
+
 /*
  * getcmdline() - accept a command line starting with firstc.
  *
@@ -340,20 +379,10 @@ getcmdline(
 #ifdef FEAT_SEARCH_EXTRA
     pos_T	search_start;		/* where 'incsearch' starts searching */
     pos_T       save_cursor;
-    colnr_T	old_curswant;
-    colnr_T     init_curswant = curwin->w_curswant;
-    colnr_T	old_leftcol;
-    colnr_T     init_leftcol = curwin->w_leftcol;
-    linenr_T	old_topline;
-    linenr_T    init_topline = curwin->w_topline;
+    viewstate_T	init_viewstate;
+    viewstate_T	old_viewstate;
     pos_T       match_start = curwin->w_cursor;
     pos_T       match_end;
-# ifdef FEAT_DIFF
-    int		old_topfill;
-    int		init_topfill = curwin->w_topfill;
-# endif
-    linenr_T	old_botline;
-    linenr_T	init_botline = curwin->w_botline;
     int		did_incsearch = FALSE;
     int		incsearch_postponed = FALSE;
 #endif
@@ -409,13 +438,8 @@ getcmdline(
     CLEAR_POS(&match_end);
     save_cursor = curwin->w_cursor;	    /* may be restored later */
     search_start = curwin->w_cursor;
-    old_curswant = curwin->w_curswant;
-    old_leftcol = curwin->w_leftcol;
-    old_topline = curwin->w_topline;
-# ifdef FEAT_DIFF
-    old_topfill = curwin->w_topfill;
-# endif
-    old_botline = curwin->w_botline;
+    save_viewstate(&init_viewstate);
+    save_viewstate(&old_viewstate);
 #endif
 
     /*
@@ -555,6 +579,10 @@ getcmdline(
 	dont_scroll = FALSE;	/* allow scrolling here */
 #endif
 	quit_more = FALSE;	/* reset after CTRL-D which had a more-prompt */
+
+	did_emsg = FALSE;	/* There can't really be a reason why an error
+				   that occurs while typing a command should
+				   cause the command not to be executed. */
 
 	cursorcmd();		/* set the cursor on the right spot */
 
@@ -1367,13 +1395,7 @@ getcmdline(
 			search_start = save_cursor;
 			/* save view settings, so that the screen
 			 * won't be restored at the wrong position */
-			old_curswant = init_curswant;
-			old_leftcol = init_leftcol;
-			old_topline = init_topline;
-# ifdef FEAT_DIFF
-			old_topfill = init_topfill;
-# endif
-			old_botline = init_botline;
+			old_viewstate = init_viewstate;
 		    }
 #endif
 		    redrawcmd();
@@ -2126,13 +2148,7 @@ docomplete:
 			update_topline();
 			validate_cursor();
 			highlight_match = TRUE;
-			old_curswant = curwin->w_curswant;
-			old_leftcol = curwin->w_leftcol;
-			old_topline = curwin->w_topline;
-# ifdef FEAT_DIFF
-			old_topfill = curwin->w_topfill;
-# endif
-			old_botline = curwin->w_botline;
+			save_viewstate(&old_viewstate);
 			update_screen(NOT_VALID);
 			redrawcmdline();
 		    }
@@ -2301,7 +2317,7 @@ cmdline_changed:
 	    if (ccline.cmdlen == 0)
 	    {
 		i = 0;
-		SET_NO_HLSEARCH(TRUE); /* turn off previous highlight */
+		set_no_hlsearch(TRUE); /* turn off previous highlight */
 		redraw_all_later(SOME_VALID);
 	    }
 	    else
@@ -2343,12 +2359,7 @@ cmdline_changed:
 
 	    /* first restore the old curwin values, so the screen is
 	     * positioned in the same way as the actual search command */
-	    curwin->w_leftcol = old_leftcol;
-	    curwin->w_topline = old_topline;
-# ifdef FEAT_DIFF
-	    curwin->w_topfill = old_topfill;
-# endif
-	    curwin->w_botline = old_botline;
+	    restore_viewstate(&old_viewstate);
 	    changed_cline_bef_curs();
 	    update_topline();
 
@@ -2369,7 +2380,7 @@ cmdline_changed:
 	    /* Disable 'hlsearch' highlighting if the pattern matches
 	     * everything. Avoids a flash when typing "foo\|". */
 	    if (empty_pattern(ccline.cmdbuff))
-		SET_NO_HLSEARCH(TRUE);
+		set_no_hlsearch(TRUE);
 
 	    validate_cursor();
 	    /* May redraw the status line to show the cursor position. */
@@ -2458,13 +2469,7 @@ returncmd:
 	    }
 	    curwin->w_cursor = search_start;
 	}
-	curwin->w_curswant = old_curswant;
-	curwin->w_leftcol = old_leftcol;
-	curwin->w_topline = old_topline;
-# ifdef FEAT_DIFF
-	curwin->w_topfill = old_topfill;
-# endif
-	curwin->w_botline = old_botline;
+	restore_viewstate(&old_viewstate);
 	highlight_match = FALSE;
 	validate_cursor();	/* needed for TAB */
 	redraw_all_later(SOME_VALID);
@@ -5385,6 +5390,7 @@ ExpandFromContext(
 #endif
 	    {EXPAND_ENV_VARS, get_env_name, TRUE, TRUE},
 	    {EXPAND_USER, get_users, TRUE, FALSE},
+	    {EXPAND_ARGLIST, get_arglist_name, TRUE, FALSE},
 	};
 	int	i;
 

@@ -6592,7 +6592,7 @@ set_cmdarg(exarg_T *eap, char_u *oldarg)
 	len += 7;
 
     if (eap->force_ff != 0)
-	len += (unsigned)STRLEN(eap->cmd + eap->force_ff) + 6;
+	len += 10; /* " ++ff=unix" */
 # ifdef FEAT_MBYTE
     if (eap->force_enc != 0)
 	len += (unsigned)STRLEN(eap->cmd + eap->force_enc) + 7;
@@ -6616,7 +6616,9 @@ set_cmdarg(exarg_T *eap, char_u *oldarg)
 
     if (eap->force_ff != 0)
 	sprintf((char *)newval + STRLEN(newval), " ++ff=%s",
-						eap->cmd + eap->force_ff);
+						eap->force_ff == 'u' ? "unix"
+						: eap->force_ff == 'd' ? "dos"
+						: "mac");
 #ifdef FEAT_MBYTE
     if (eap->force_enc != 0)
 	sprintf((char *)newval + STRLEN(newval), " ++enc=%s",
@@ -7105,7 +7107,7 @@ get_tv_string_buf_chk(typval_T *varp, char_u *buf)
     {
 	case VAR_NUMBER:
 	    vim_snprintf((char *)buf, NUMBUFLEN, "%lld",
-					    (varnumber_T)varp->vval.v_number);
+					    (long long)varp->vval.v_number);
 	    return buf;
 	case VAR_FUNC:
 	case VAR_PARTIAL:
@@ -8815,7 +8817,7 @@ assert_error(garray_T *gap)
     list_append_string(vimvars[VV_ERRORS].vv_list, gap->ga_data, gap->ga_len);
 }
 
-    void
+    int
 assert_equal_common(typval_T *argvars, assert_type_T atype)
 {
     garray_T	ga;
@@ -8828,10 +8830,12 @@ assert_equal_common(typval_T *argvars, assert_type_T atype)
 								       atype);
 	assert_error(&ga);
 	ga_clear(&ga);
+	return 1;
     }
+    return 0;
 }
 
-    void
+    int
 assert_equalfile(typval_T *argvars)
 {
     char_u	buf1[NUMBUFLEN];
@@ -8843,7 +8847,7 @@ assert_equalfile(typval_T *argvars)
     FILE	*fd2;
 
     if (fname1 == NULL || fname2 == NULL)
-	return;
+	return 0;
 
     IObuff[0] = NUL;
     fd1 = mch_fopen((char *)fname1, READBIN);
@@ -8897,10 +8901,12 @@ assert_equalfile(typval_T *argvars)
 	ga_concat(&ga, IObuff);
 	assert_error(&ga);
 	ga_clear(&ga);
+	return 1;
     }
+    return 0;
 }
 
-    void
+    int
 assert_match_common(typval_T *argvars, assert_type_T atype)
 {
     garray_T	ga;
@@ -8918,10 +8924,12 @@ assert_match_common(typval_T *argvars, assert_type_T atype)
 									atype);
 	assert_error(&ga);
 	ga_clear(&ga);
+	return 1;
     }
+    return 0;
 }
 
-    void
+    int
 assert_inrange(typval_T *argvars)
 {
     garray_T	ga;
@@ -8934,7 +8942,7 @@ assert_inrange(typval_T *argvars)
     char_u	numbuf[NUMBUFLEN];
 
     if (error)
-	return;
+	return 0;
     if (actual < lower || actual > upper)
     {
 	prepare_assert_error(&ga);
@@ -8951,13 +8959,16 @@ assert_inrange(typval_T *argvars)
 	}
 	assert_error(&ga);
 	ga_clear(&ga);
+	return 1;
     }
+    return 0;
 }
 
 /*
  * Common for assert_true() and assert_false().
+ * Return non-zero for failure.
  */
-    void
+    int
 assert_bool(typval_T *argvars, int isTrue)
 {
     int		error = FALSE;
@@ -8965,7 +8976,7 @@ assert_bool(typval_T *argvars, int isTrue)
 
     if (argvars[0].v_type == VAR_SPECIAL
 	    && argvars[0].vval.v_number == (isTrue ? VVAL_TRUE : VVAL_FALSE))
-	return;
+	return 0;
     if (argvars[0].v_type != VAR_NUMBER
 	    || (get_tv_number_chk(&argvars[0], &error) == 0) == isTrue
 	    || error)
@@ -8976,10 +8987,12 @@ assert_bool(typval_T *argvars, int isTrue)
 		NULL, &argvars[0], ASSERT_OTHER);
 	assert_error(&ga);
 	ga_clear(&ga);
+	return 1;
     }
+    return 0;
 }
 
-    void
+    int
 assert_report(typval_T *argvars)
 {
     garray_T	ga;
@@ -8988,9 +9001,10 @@ assert_report(typval_T *argvars)
     ga_concat(&ga, get_tv_string(&argvars[0]));
     assert_error(&ga);
     ga_clear(&ga);
+    return 1;
 }
 
-    void
+    int
 assert_exception(typval_T *argvars)
 {
     garray_T	ga;
@@ -9002,6 +9016,7 @@ assert_exception(typval_T *argvars)
 	ga_concat(&ga, (char_u *)"v:exception is not set");
 	assert_error(&ga);
 	ga_clear(&ga);
+	return 1;
     }
     else if (error != NULL
 	&& strstr((char *)vimvars[VV_EXCEPTION].vv_str, (char *)error) == NULL)
@@ -9011,14 +9026,17 @@ assert_exception(typval_T *argvars)
 				  &vimvars[VV_EXCEPTION].vv_tv, ASSERT_OTHER);
 	assert_error(&ga);
 	ga_clear(&ga);
+	return 1;
     }
+    return 0;
 }
 
-    void
+    int
 assert_beeps(typval_T *argvars)
 {
     char_u	*cmd = get_tv_string_chk(&argvars[0]);
     garray_T	ga;
+    int		ret = 0;
 
     called_vim_beep = FALSE;
     suppress_errthrow = TRUE;
@@ -9031,17 +9049,20 @@ assert_beeps(typval_T *argvars)
 	ga_concat(&ga, cmd);
 	assert_error(&ga);
 	ga_clear(&ga);
+	ret = 1;
     }
 
     suppress_errthrow = FALSE;
     emsg_on_display = FALSE;
+    return ret;
 }
 
-    void
+    int
 assert_fails(typval_T *argvars)
 {
     char_u	*cmd = get_tv_string_chk(&argvars[0]);
     garray_T	ga;
+    int		ret = 0;
 
     called_emsg = FALSE;
     suppress_errthrow = TRUE;
@@ -9054,6 +9075,7 @@ assert_fails(typval_T *argvars)
 	ga_concat(&ga, cmd);
 	assert_error(&ga);
 	ga_clear(&ga);
+	ret = 1;
     }
     else if (argvars[1].v_type != VAR_UNKNOWN)
     {
@@ -9068,6 +9090,7 @@ assert_fails(typval_T *argvars)
 				     &vimvars[VV_ERRMSG].vv_tv, ASSERT_OTHER);
 	    assert_error(&ga);
 	    ga_clear(&ga);
+	ret = 1;
 	}
     }
 
@@ -9076,6 +9099,7 @@ assert_fails(typval_T *argvars)
     emsg_silent = FALSE;
     emsg_on_display = FALSE;
     set_vim_var_string(VV_ERRMSG, NULL, 0);
+    return ret;
 }
 
 /*

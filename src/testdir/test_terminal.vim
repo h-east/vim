@@ -45,11 +45,17 @@ func Test_terminal_basic()
   call assert_equal('t', mode())
   call assert_equal('yes', b:done)
   call assert_match('%aR[^\n]*running]', execute('ls'))
+  call assert_match('%aR[^\n]*running]', execute('ls R'))
+  call assert_notmatch('%[^\n]*running]', execute('ls F'))
+  call assert_notmatch('%[^\n]*running]', execute('ls ?'))
 
   call Stop_shell_in_terminal(buf)
   call term_wait(buf)
   call assert_equal('n', mode())
   call assert_match('%aF[^\n]*finished]', execute('ls'))
+  call assert_match('%aF[^\n]*finished]', execute('ls F'))
+  call assert_notmatch('%[^\n]*finished]', execute('ls R'))
+  call assert_notmatch('%[^\n]*finished]', execute('ls ?'))
 
   " closing window wipes out the terminal buffer a with finished job
   close
@@ -77,8 +83,7 @@ func Test_terminal_wipe_buffer()
   let buf = Run_shell_in_terminal({})
   call assert_fails(buf . 'bwipe', 'E517')
   exe buf . 'bwipe!'
-  call WaitFor('job_status(g:job) == "dead"')
-  call assert_equal('dead', job_status(g:job))
+  call WaitForAssert({-> assert_equal('dead', job_status(g:job))})
   call assert_equal("", bufname(buf))
 
   unlet g:job
@@ -94,7 +99,7 @@ func Test_terminal_split_quit()
   call assert_equal('run', job_status(g:job))
 
   quit!
-  call WaitFor('job_status(g:job) == "dead"')
+  call WaitForAssert({-> assert_equal('dead', job_status(g:job))})
   call assert_equal('dead', job_status(g:job))
 
   exe buf . 'bwipe'
@@ -265,6 +270,27 @@ func Test_terminal_scroll()
   call delete('Xtext')
 endfunc
 
+func Test_terminal_scrollback()
+  let buf = Run_shell_in_terminal({})
+  set termwinscroll=100
+  call writefile(range(150), 'Xtext')
+  if has('win32')
+    call term_sendkeys(buf, "type Xtext\<CR>")
+  else
+    call term_sendkeys(buf, "cat Xtext\<CR>")
+  endif
+  let rows = term_getsize(buf)[0]
+  " On MS-Windows there is an empty line, check both last line and above it.
+  call WaitFor({-> term_getline(buf, rows - 1) . term_getline(buf, rows - 2) =~ '149'})
+  let lines = line('$')
+  call assert_inrange(91, 100, lines)
+
+  call Stop_shell_in_terminal(buf)
+  call term_wait(buf)
+  exe buf . 'bwipe'
+  set termwinscroll&
+endfunc
+
 func Test_terminal_size()
   let cmd = Get_cat_123_cmd()
 
@@ -280,9 +306,19 @@ func Test_terminal_size()
 
   vsplit
   exe 'terminal ++rows=5 ++cols=33 ' . cmd
-  let size = term_getsize('')
+  call assert_equal([5, 33], term_getsize(''))
+
+  call term_setsize('', 6, 0)
+  call assert_equal([6, 33], term_getsize(''))
+
+  call term_setsize('', 0, 35)
+  call assert_equal([6, 35], term_getsize(''))
+
+  call term_setsize('', 7, 30)
+  call assert_equal([7, 30], term_getsize(''))
+
   bwipe!
-  call assert_equal([5, 33], size)
+  call assert_fails("call term_setsize('', 7, 30)", "E955:")
 
   call term_start(cmd, {'term_rows': 6, 'term_cols': 36})
   let size = term_getsize('')
@@ -749,6 +785,12 @@ func Test_terminal_composing_unicode()
   let g:job = term_getjob(buf)
   call term_wait(buf, 50)
 
+  if has('win32')
+    call assert_equal('cmd', job_info(g:job).cmd[0])
+  else
+    call assert_equal(&shell, job_info(g:job).cmd[0])
+  endif
+
   " ascii + composing
   let txt = "a\u0308bc"
   call term_sendkeys(buf, "echo " . txt . "\r")
@@ -833,25 +875,22 @@ func Test_terminal_response_to_control_sequence()
   endif
 
   let buf = Run_shell_in_terminal({})
-  call WaitFor({-> term_getline(buf, 1) != ""})
+  call WaitFor({-> term_getline(buf, 1) != ''})
 
-  call writefile(["\x1b[6n"], 'Xescape')
-  call term_sendkeys(buf, "cat Xescape\<cr>")
+  call term_sendkeys(buf, "cat\<CR>")
+  call WaitFor({-> term_getline(buf, 1) =~ 'cat'})
 
-  " wait for the response of control sequence from libvterm (and send it to tty)
-  sleep 200m
-  call term_wait(buf)
+  " Request the cursor position.
+  call term_sendkeys(buf, "\x1b[6n\<CR>")
 
   " Wait for output from tty to display, below an empty line.
-  " It should show \e3;1R, but only 1R may show up
-  call assert_match('\<\d\+R', term_getline(buf, 3))
+  call WaitFor({-> term_getline(buf, 4) =~ '3;1R'})
 
-  call term_sendkeys(buf, "\<c-c>")
-  call term_wait(buf)
+  " End "cat" gently.
+  call term_sendkeys(buf, "\<CR>\<C-D>")
+
   call Stop_shell_in_terminal(buf)
-
   exe buf . 'bwipe'
-  call delete('Xescape')
   unlet g:job
 endfunc
 
@@ -968,3 +1007,480 @@ func Test_terminal_open_autocmd()
   unlet s:called
   au! repro
 endfunction
+
+func Check_dump01(off)
+  call assert_equal('one two three four five', trim(getline(a:off + 1)))
+  call assert_equal('~           Select Word', trim(getline(a:off + 7)))
+  call assert_equal(':popup PopUp', trim(getline(a:off + 20)))
+endfunc
+
+func Test_terminal_dumpwrite_composing()
+  if !CanRunVimInTerminal()
+    return
+  endif
+  let save_enc = &encoding
+  set encoding=utf-8
+  call assert_equal(1, winnr('$'))
+
+  let text = " a\u0300 e\u0302 o\u0308"
+  call writefile([text], 'Xcomposing')
+  let buf = RunVimInTerminal('Xcomposing', {})
+  call WaitFor({-> term_getline(buf, 1) =~ text})
+  call term_dumpwrite(buf, 'Xdump')
+  let dumpline = readfile('Xdump')[0]
+  call assert_match('|à| |ê| |ö', dumpline)
+
+  call StopVimInTerminal(buf)
+  call delete('Xcomposing')
+  call delete('Xdump')
+  let &encoding = save_enc
+endfunc
+
+" just testing basic functionality.
+func Test_terminal_dumpload()
+  call assert_equal(1, winnr('$'))
+  call term_dumpload('dumps/Test_popup_command_01.dump')
+  call assert_equal(2, winnr('$'))
+  call assert_equal(20, line('$'))
+  call Check_dump01(0)
+  quit
+endfunc
+
+func Test_terminal_dumpdiff()
+  call assert_equal(1, winnr('$'))
+  call term_dumpdiff('dumps/Test_popup_command_01.dump', 'dumps/Test_popup_command_02.dump')
+  call assert_equal(2, winnr('$'))
+  call assert_equal(62, line('$'))
+  call Check_dump01(0)
+  call Check_dump01(42)
+  call assert_equal('           bbbbbbbbbbbbbbbbbb ', getline(26)[0:29])
+  quit
+endfunc
+
+func Test_terminal_dumpdiff_options()
+  set laststatus=0
+  call assert_equal(1, winnr('$'))
+  let height = winheight(0)
+  call term_dumpdiff('dumps/Test_popup_command_01.dump', 'dumps/Test_popup_command_02.dump', {'vertical': 1, 'term_cols': 33})
+  call assert_equal(2, winnr('$'))
+  call assert_equal(height, winheight(winnr()))
+  call assert_equal(33, winwidth(winnr()))
+  call assert_equal('dump diff dumps/Test_popup_command_01.dump', bufname('%'))
+  quit
+
+  call assert_equal(1, winnr('$'))
+  let width = winwidth(0)
+  call term_dumpdiff('dumps/Test_popup_command_01.dump', 'dumps/Test_popup_command_02.dump', {'vertical': 0, 'term_rows': 13, 'term_name': 'something else'})
+  call assert_equal(2, winnr('$'))
+  call assert_equal(width, winwidth(winnr()))
+  call assert_equal(13, winheight(winnr()))
+  call assert_equal('something else', bufname('%'))
+  quit
+
+  call assert_equal(1, winnr('$'))
+  call term_dumpdiff('dumps/Test_popup_command_01.dump', 'dumps/Test_popup_command_02.dump', {'curwin': 1})
+  call assert_equal(1, winnr('$'))
+  bwipe
+
+  set laststatus&
+endfunc
+
+func Api_drop_common(options)
+  call assert_equal(1, winnr('$'))
+
+  " Use the title termcap entries to output the escape sequence.
+  call writefile([
+	\ 'set title',
+	\ 'exe "set t_ts=\<Esc>]51; t_fs=\x07"',
+	\ 'let &titlestring = ''["drop","Xtextfile"' . a:options . ']''',
+	\ 'redraw',
+	\ "set t_ts=",
+	\ ], 'Xscript')
+  let buf = RunVimInTerminal('-S Xscript', {})
+  call WaitFor({-> bufnr('Xtextfile') > 0})
+  call assert_equal('Xtextfile', expand('%:t'))
+  call assert_true(winnr('$') >= 3)
+  return buf
+endfunc
+
+func Test_terminal_api_drop_newwin()
+  if !CanRunVimInTerminal()
+    return
+  endif
+  let buf = Api_drop_common('')
+  call assert_equal(0, &bin)
+  call assert_equal('', &fenc)
+
+  call StopVimInTerminal(buf)
+  call delete('Xscript')
+  bwipe Xtextfile
+endfunc
+
+func Test_terminal_api_drop_newwin_bin()
+  if !CanRunVimInTerminal()
+    return
+  endif
+  let buf = Api_drop_common(',{"bin":1}')
+  call assert_equal(1, &bin)
+
+  call StopVimInTerminal(buf)
+  call delete('Xscript')
+  bwipe Xtextfile
+endfunc
+
+func Test_terminal_api_drop_newwin_binary()
+  if !CanRunVimInTerminal()
+    return
+  endif
+  let buf = Api_drop_common(',{"binary":1}')
+  call assert_equal(1, &bin)
+
+  call StopVimInTerminal(buf)
+  call delete('Xscript')
+  bwipe Xtextfile
+endfunc
+
+func Test_terminal_api_drop_newwin_nobin()
+  if !CanRunVimInTerminal()
+    return
+  endif
+  set binary
+  let buf = Api_drop_common(',{"nobin":1}')
+  call assert_equal(0, &bin)
+
+  call StopVimInTerminal(buf)
+  call delete('Xscript')
+  bwipe Xtextfile
+  set nobinary
+endfunc
+
+func Test_terminal_api_drop_newwin_nobinary()
+  if !CanRunVimInTerminal()
+    return
+  endif
+  set binary
+  let buf = Api_drop_common(',{"nobinary":1}')
+  call assert_equal(0, &bin)
+
+  call StopVimInTerminal(buf)
+  call delete('Xscript')
+  bwipe Xtextfile
+  set nobinary
+endfunc
+
+func Test_terminal_api_drop_newwin_ff()
+  if !CanRunVimInTerminal()
+    return
+  endif
+  let buf = Api_drop_common(',{"ff":"dos"}')
+  call assert_equal("dos", &ff)
+
+  call StopVimInTerminal(buf)
+  call delete('Xscript')
+  bwipe Xtextfile
+endfunc
+
+func Test_terminal_api_drop_newwin_fileformat()
+  if !CanRunVimInTerminal()
+    return
+  endif
+  let buf = Api_drop_common(',{"fileformat":"dos"}')
+  call assert_equal("dos", &ff)
+
+  call StopVimInTerminal(buf)
+  call delete('Xscript')
+  bwipe Xtextfile
+endfunc
+
+func Test_terminal_api_drop_newwin_enc()
+  if !CanRunVimInTerminal()
+    return
+  endif
+  let buf = Api_drop_common(',{"enc":"utf-16"}')
+  call assert_equal("utf-16", &fenc)
+
+  call StopVimInTerminal(buf)
+  call delete('Xscript')
+  bwipe Xtextfile
+endfunc
+
+func Test_terminal_api_drop_newwin_encoding()
+  if !CanRunVimInTerminal()
+    return
+  endif
+  let buf = Api_drop_common(',{"encoding":"utf-16"}')
+  call assert_equal("utf-16", &fenc)
+
+  call StopVimInTerminal(buf)
+  call delete('Xscript')
+  bwipe Xtextfile
+endfunc
+
+func Test_terminal_api_drop_oldwin()
+  if !CanRunVimInTerminal()
+    return
+  endif
+  let firstwinid = win_getid()
+  split Xtextfile
+  let textfile_winid = win_getid()
+  call assert_equal(2, winnr('$'))
+  call win_gotoid(firstwinid)
+
+  " Use the title termcap entries to output the escape sequence.
+  call writefile([
+	\ 'set title',
+	\ 'exe "set t_ts=\<Esc>]51; t_fs=\x07"',
+	\ 'let &titlestring = ''["drop","Xtextfile"]''',
+	\ 'redraw',
+	\ "set t_ts=",
+	\ ], 'Xscript')
+  let buf = RunVimInTerminal('-S Xscript', {'rows': 10})
+  call WaitFor({-> expand('%:t') =='Xtextfile'})
+  call assert_equal(textfile_winid, win_getid())
+
+  call StopVimInTerminal(buf)
+  call delete('Xscript')
+  bwipe Xtextfile
+endfunc
+
+func Tapi_TryThis(bufnum, arg)
+  let g:called_bufnum = a:bufnum
+  let g:called_arg = a:arg
+endfunc
+
+func WriteApiCall(funcname)
+  " Use the title termcap entries to output the escape sequence.
+  call writefile([
+	\ 'set title',
+	\ 'exe "set t_ts=\<Esc>]51; t_fs=\x07"',
+	\ 'let &titlestring = ''["call","' . a:funcname . '",["hello",123]]''',
+	\ 'redraw',
+	\ "set t_ts=",
+	\ ], 'Xscript')
+endfunc
+
+func Test_terminal_api_call()
+  if !CanRunVimInTerminal()
+    return
+  endif
+
+  call WriteApiCall('Tapi_TryThis')
+  let buf = RunVimInTerminal('-S Xscript', {})
+  call WaitFor({-> exists('g:called_bufnum')})
+  call assert_equal(buf, g:called_bufnum)
+  call assert_equal(['hello', 123], g:called_arg)
+
+  call StopVimInTerminal(buf)
+  call delete('Xscript')
+  unlet g:called_bufnum
+  unlet g:called_arg
+endfunc
+
+func Test_terminal_api_call_fails()
+  if !CanRunVimInTerminal()
+    return
+  endif
+
+  call WriteApiCall('TryThis')
+  call ch_logfile('Xlog', 'w')
+  let buf = RunVimInTerminal('-S Xscript', {})
+  call WaitFor({-> string(readfile('Xlog')) =~ 'Invalid function name: TryThis'})
+
+  call StopVimInTerminal(buf)
+  call delete('Xscript')
+  call ch_logfile('', '')
+  call delete('Xlog')
+endfunc
+
+let s:caught_e937 = 0
+
+func Tapi_Delete(bufnum, arg)
+  try
+    execute 'bdelete!' a:bufnum
+  catch /E937:/
+    let s:caught_e937 = 1
+  endtry
+endfunc
+
+func Test_terminal_api_call_fail_delete()
+  if !CanRunVimInTerminal()
+    return
+  endif
+
+  call WriteApiCall('Tapi_Delete')
+  let buf = RunVimInTerminal('-S Xscript', {})
+  call WaitFor({-> s:caught_e937 == 1})
+
+  call StopVimInTerminal(buf)
+  call delete('Xscript')
+  call ch_logfile('', '')
+endfunc
+
+func Test_terminal_ansicolors_default()
+  let colors = [
+	\ '#000000', '#e00000',
+	\ '#00e000', '#e0e000',
+	\ '#0000e0', '#e000e0',
+	\ '#00e0e0', '#e0e0e0',
+	\ '#808080', '#ff4040',
+	\ '#40ff40', '#ffff40',
+	\ '#4040ff', '#ff40ff',
+	\ '#40ffff', '#ffffff',
+	\]
+
+  let buf = Run_shell_in_terminal({})
+  call assert_equal(colors, term_getansicolors(buf))
+  call Stop_shell_in_terminal(buf)
+  call term_wait(buf)
+
+  exe buf . 'bwipe'
+endfunc
+
+let s:test_colors = [
+	\ '#616e64', '#0d0a79',
+	\ '#6d610d', '#0a7373',
+	\ '#690d0a', '#6d696e',
+	\ '#0d0a6f', '#616e0d',
+	\ '#0a6479', '#6d0d0a',
+	\ '#617373', '#0d0a69',
+	\ '#6d690d', '#0a6e6f',
+	\ '#610d0a', '#6e6479',
+	\]
+
+func Test_terminal_ansicolors_global()
+  let g:terminal_ansi_colors = reverse(copy(s:test_colors))
+  let buf = Run_shell_in_terminal({})
+  call assert_equal(g:terminal_ansi_colors, term_getansicolors(buf))
+  call Stop_shell_in_terminal(buf)
+  call term_wait(buf)
+
+  exe buf . 'bwipe'
+  unlet g:terminal_ansi_colors
+endfunc
+
+func Test_terminal_ansicolors_func()
+  let g:terminal_ansi_colors = reverse(copy(s:test_colors))
+  let buf = Run_shell_in_terminal({'ansi_colors': s:test_colors})
+  call assert_equal(s:test_colors, term_getansicolors(buf))
+
+  call term_setansicolors(buf, g:terminal_ansi_colors)
+  call assert_equal(g:terminal_ansi_colors, term_getansicolors(buf))
+
+  let colors = [
+	\ 'ivory', 'AliceBlue',
+	\ 'grey67', 'dark goldenrod',
+	\ 'SteelBlue3', 'PaleVioletRed4',
+	\ 'MediumPurple2', 'yellow2',
+	\ 'RosyBrown3', 'OrangeRed2',
+	\ 'white smoke', 'navy blue',
+	\ 'grey47', 'gray97',
+	\ 'MistyRose2', 'DodgerBlue4',
+	\]
+  call term_setansicolors(buf, colors)
+
+  let colors[4] = 'Invalid'
+  call assert_fails('call term_setansicolors(buf, colors)', 'E474:')
+
+  call Stop_shell_in_terminal(buf)
+  call term_wait(buf)
+  exe buf . 'bwipe'
+endfunc
+
+func Test_terminal_termwinsize_option_fixed()
+  if !CanRunVimInTerminal()
+    return
+  endif
+  set termwinsize=6x40
+  let text = []
+  for n in range(10)
+    call add(text, repeat(n, 50))
+  endfor
+  call writefile(text, 'Xwinsize')
+  let buf = RunVimInTerminal('Xwinsize', {})
+  let win = bufwinid(buf)
+  call assert_equal([6, 40], term_getsize(buf))
+  call assert_equal(6, winheight(win))
+  call assert_equal(40, winwidth(win))
+
+  " resizing the window doesn't resize the terminal.
+  resize 10
+  vertical resize 60
+  call assert_equal([6, 40], term_getsize(buf))
+  call assert_equal(10, winheight(win))
+  call assert_equal(60, winwidth(win))
+
+  call StopVimInTerminal(buf)
+  call delete('Xwinsize')
+
+  call assert_fails('set termwinsize=40', 'E474')
+  call assert_fails('set termwinsize=10+40', 'E474')
+  call assert_fails('set termwinsize=abc', 'E474')
+
+  set termwinsize=
+endfunc
+
+func Test_terminal_termwinsize_option_zero()
+  set termwinsize=0x0
+  let buf = Run_shell_in_terminal({})
+  let win = bufwinid(buf)
+  call assert_equal([winheight(win), winwidth(win)], term_getsize(buf))
+  call Stop_shell_in_terminal(buf)
+  call term_wait(buf)
+  exe buf . 'bwipe'
+
+  set termwinsize=7x0
+  let buf = Run_shell_in_terminal({})
+  let win = bufwinid(buf)
+  call assert_equal([7, winwidth(win)], term_getsize(buf))
+  call Stop_shell_in_terminal(buf)
+  call term_wait(buf)
+  exe buf . 'bwipe'
+
+  set termwinsize=0x33
+  let buf = Run_shell_in_terminal({})
+  let win = bufwinid(buf)
+  call assert_equal([winheight(win), 33], term_getsize(buf))
+  call Stop_shell_in_terminal(buf)
+  call term_wait(buf)
+  exe buf . 'bwipe'
+
+  set termwinsize=
+endfunc
+
+func Test_terminal_termwinsize_mininmum()
+  set termwinsize=10*50
+  vsplit
+  let buf = Run_shell_in_terminal({})
+  let win = bufwinid(buf)
+  call assert_inrange(10, 1000, winheight(win))
+  call assert_inrange(50, 1000, winwidth(win))
+  call assert_equal([winheight(win), winwidth(win)], term_getsize(buf))
+
+  resize 15
+  vertical resize 60
+  redraw
+  call assert_equal([15, 60], term_getsize(buf))
+  call assert_equal(15, winheight(win))
+  call assert_equal(60, winwidth(win))
+
+  resize 7
+  vertical resize 30
+  redraw
+  call assert_equal([10, 50], term_getsize(buf))
+  call assert_equal(7, winheight(win))
+  call assert_equal(30, winwidth(win))
+
+  call Stop_shell_in_terminal(buf)
+  call term_wait(buf)
+  exe buf . 'bwipe'
+
+  set termwinsize=0*0
+  let buf = Run_shell_in_terminal({})
+  let win = bufwinid(buf)
+  call assert_equal([winheight(win), winwidth(win)], term_getsize(buf))
+  call Stop_shell_in_terminal(buf)
+  call term_wait(buf)
+  exe buf . 'bwipe'
+
+  set termwinsize=
+endfunc

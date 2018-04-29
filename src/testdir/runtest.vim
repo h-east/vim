@@ -199,7 +199,11 @@ func FinishTesting()
     write
   endif
 
-  let message = 'Executed ' . s:done . (s:done > 1 ? ' tests' : ' test')
+  if s:done == 0
+    let message = 'NO tests executed'
+  else
+    let message = 'Executed ' . s:done . (s:done > 1 ? ' tests' : ' test')
+  endif
   echo message
   call add(s:messages, message)
   if s:fail > 0
@@ -248,6 +252,7 @@ let s:flaky = [
       \ 'Test_close_and_exit_cb()',
       \ 'Test_collapse_buffers()',
       \ 'Test_communicate()',
+      \ 'Test_cwd()',
       \ 'Test_exit_callback_interval()',
       \ 'Test_nb_basic()',
       \ 'Test_oneshot()',
