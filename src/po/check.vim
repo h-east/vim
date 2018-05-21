@@ -121,6 +121,7 @@ endfunc
 
 " Check that the \n at the end of the msgid line is also present in the msgstr
 " line.  Skip over the header.
+1
 /^"MIME-Version:
 while 1
   let lnum = search('^msgid\>')
@@ -155,6 +156,23 @@ if executable("msgfmt")
     for line in split(a, '\n') | echomsg line | endfor
   endif
 endif
+
+" Check that the plural form is properly initialized
+1
+let plural = search('^msgid_plural ', 'n')
+if (plural && search('^"Plural-Forms: ', 'n') == 0) || (plural && search('^msgstr\[0\] ".\+"', 'n') != plural + 1)
+  if search('^"Plural-Forms: ', 'n') == 0
+    echomsg "Missing Plural header"
+    if error == 0
+      let error = search('\(^"[A-Za-z-_]\+: .*\\n"\n\)\+\zs', 'n') - 1
+    endif
+  elseif error == 0
+    let error = plural
+  endif
+elseif !plural && search('^"Plural-Forms: ', 'n')
+  " We allow for a stray plural header, msginit adds one.
+endif
+
 
 if error == 0
   " If all was OK restore the view.

@@ -10323,14 +10323,14 @@ exec_normal_cmd(char_u *cmd, int remap, int silent)
 {
     /* Stuff the argument into the typeahead buffer. */
     ins_typebuf(cmd, remap, 0, TRUE, silent);
-    exec_normal(FALSE);
+    exec_normal(FALSE, FALSE);
 }
 
 /*
  * Execute normal_cmd() until there is no typeahead left.
  */
     void
-exec_normal(int was_typed)
+exec_normal(int was_typed, int may_use_terminal_loop UNUSED)
 {
     oparg_T	oa;
 
@@ -10340,7 +10340,21 @@ exec_normal(int was_typed)
 		    && typebuf.tb_len > 0)) && !got_int)
     {
 	update_topline_cursor();
-	normal_cmd(&oa, TRUE);	/* execute a Normal mode cmd */
+#ifdef FEAT_TERMINAL
+	if (may_use_terminal_loop && term_use_loop()
+		&& oa.op_type == OP_NOP && oa.regname == NUL
+		&& !VIsual_active)
+	{
+	    /* If terminal_loop() returns OK we got a key that is handled
+	     * in Normal model.  With FAIL we first need to position the
+	     * cursor and the screen needs to be redrawn. */
+	    if (terminal_loop(TRUE) == OK)
+		normal_cmd(&oa, TRUE);
+	}
+	else
+#endif
+	    /* execute a Normal mode cmd */
+	    normal_cmd(&oa, TRUE);
     }
 }
 

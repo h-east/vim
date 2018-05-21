@@ -214,7 +214,7 @@ static guicolor_T save_console_bg_rgb;
 static guicolor_T save_console_fg_rgb;
 
 # ifdef FEAT_TERMGUICOLORS
-#  define USE_VTP		(vtp_working && p_tgc)
+#  define USE_VTP		(vtp_working && is_term_win32() && (p_tgc || (!p_tgc && t_colors >= 256)))
 # else
 #  define USE_VTP		0
 # endif
@@ -2630,7 +2630,6 @@ mch_init(void)
 
     /* set termcap codes to current text attributes */
     update_tcap(g_attrCurrent);
-    swap_tcap();
 
     GetConsoleCursorInfo(g_hConOut, &g_cci);
     GetConsoleMode(g_hConIn,  &g_cmodein);
@@ -5763,7 +5762,11 @@ clear_chars(
     if (!USE_VTP)
 	FillConsoleOutputAttribute(g_hConOut, g_attrCurrent, n, coord, &dwDummy);
     else
-	FillConsoleOutputAttribute(g_hConOut, 0, n, coord, &dwDummy);
+    {
+	set_console_color_rgb();
+	gotoxy(coord.X + 1, coord.Y + 1);
+	vtp_printf("\033[%dX", n);
+    }
 }
 
 
@@ -6844,7 +6847,6 @@ default_shell(void)
 mch_access(char *n, int p)
 {
     HANDLE	hFile;
-    DWORD	am;
     int		retval = -1;	    /* default: fail */
 #ifdef FEAT_MBYTE
     WCHAR	*wn = NULL;
@@ -6928,16 +6930,22 @@ mch_access(char *n, int p)
     }
     else
     {
+	// Don't consider a file read-only if another process has opened it.
+	DWORD share_mode = FILE_SHARE_READ | FILE_SHARE_WRITE;
+
 	/* Trying to open the file for the required access does ACL, read-only
 	 * network share, and file attribute checks.  */
-	am = ((p & W_OK) ? GENERIC_WRITE : 0)
-		| ((p & R_OK) ? GENERIC_READ : 0);
+	DWORD access_mode = ((p & W_OK) ? GENERIC_WRITE : 0)
+					     | ((p & R_OK) ? GENERIC_READ : 0);
+
 #ifdef FEAT_MBYTE
 	if (wn != NULL)
-	    hFile = CreateFileW(wn, am, 0, NULL, OPEN_EXISTING, 0, NULL);
+	    hFile = CreateFileW(wn, access_mode, share_mode,
+						 NULL, OPEN_EXISTING, 0, NULL);
 	else
 #endif
-	    hFile = CreateFile(n, am, 0, NULL, OPEN_EXISTING, 0, NULL);
+	    hFile = CreateFile(n, access_mode, share_mode,
+						 NULL, OPEN_EXISTING, 0, NULL);
 	if (hFile == INVALID_HANDLE_VALUE)
 	    goto getout;
 	CloseHandle(hFile);
@@ -7653,6 +7661,18 @@ vtp_sgr_bulks(
     vtp_printf((char *)buf);
 }
 
+# ifdef FEAT_TERMGUICOLORS
+    static int
+ctermtoxterm(
+    int cterm)
+{
+    char_u r, g, b, idx;
+
+    cterm_color2rgb(cterm, &r, &g, &b, &idx);
+    return (((int)r << 16) | ((int)g << 8) | (int)b);
+}
+# endif
+
     static void
 set_console_color_rgb(void)
 {
@@ -7661,6 +7681,8 @@ set_console_color_rgb(void)
     int id;
     guicolor_T fg = INVALCOLOR;
     guicolor_T bg = INVALCOLOR;
+    int ctermfg;
+    int ctermbg;
 
     if (!USE_VTP)
 	return;
@@ -7669,9 +7691,19 @@ set_console_color_rgb(void)
     if (id > 0)
 	syn_id2colors(id, &fg, &bg);
     if (fg == INVALCOLOR)
-	fg = 0xc0c0c0;	    /* white text */
+    {
+	ctermfg = -1;
+	if (id > 0)
+	    syn_id2cterm_bg(id, &ctermfg, &ctermbg);
+	fg = ctermfg != -1 ? ctermtoxterm(ctermfg) : 0xc0c0c0; /* white */
+    }
     if (bg == INVALCOLOR)
-	bg = 0x000000;	    /* black background */
+    {
+	ctermbg = -1;
+	if (id > 0)
+	    syn_id2cterm_bg(id, &ctermfg, &ctermbg);
+	bg = ctermbg != -1 ? ctermtoxterm(ctermbg) : 0x000000; /* black */
+    }
     fg = (GetRValue(fg) << 16) | (GetGValue(fg) << 8) | GetBValue(fg);
     bg = (GetRValue(bg) << 16) | (GetGValue(bg) << 8) | GetBValue(bg);
 
@@ -7728,6 +7760,12 @@ has_vtp_working(void)
 use_vtp(void)
 {
     return USE_VTP;
+}
+
+    int
+is_term_win32(void)
+{
+    return T_NAME != NULL && STRCMP(T_NAME, "win32") == 0;
 }
 
 #endif

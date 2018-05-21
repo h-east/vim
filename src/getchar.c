@@ -2059,7 +2059,7 @@ vgetorpeek(int advance)
 		    c = inchar(typebuf.tb_buf, typebuf.tb_buflen - 1, 0L);
 		    /*
 		     * If inchar() returns TRUE (script file was active) or we
-		     * are inside a mapping, get out of insert mode.
+		     * are inside a mapping, get out of Insert mode.
 		     * Otherwise we behave like having gotten a CTRL-C.
 		     * As a result typing CTRL-C in insert mode will
 		     * really insert a CTRL-C.
@@ -2755,6 +2755,10 @@ vgetorpeek(int advance)
 		     * cmdline window. */
 		    if (p_im && (State & INSERT))
 			c = Ctrl_L;
+#ifdef FEAT_TERMINAL
+		    else if (terminal_is_active())
+			c = K_CANCEL;
+#endif
 		    else if ((State & CMDLINE)
 #ifdef FEAT_CMDWIN
 			    || (cmdwin_type > 0 && tc == ESC)
@@ -2898,8 +2902,8 @@ vgetorpeek(int advance)
 	    }	    /* for (;;) */
 	}	/* if (!character from stuffbuf) */
 
-			/* if advance is FALSE don't loop on NULs */
-    } while (c < 0 || (advance && c == NUL));
+	/* if advance is FALSE don't loop on NULs */
+    } while ((c < 0 && c != K_CANCEL) || (advance && c == NUL));
 
     /*
      * The "INSERT" message is taken care of here:
@@ -4395,7 +4399,9 @@ ExpandMappings(
 
 /*
  * Check for an abbreviation.
- * Cursor is at ptr[col]. When inserting, mincol is where insert started.
+ * Cursor is at ptr[col].
+ * When inserting, mincol is where insert started.
+ * For the command line, mincol is what is to be skipped over.
  * "c" is the character typed before check_abbr was called.  It may have
  * ABBR_OFF added to avoid prepending a CTRL-V to it.
  *
@@ -4519,10 +4525,12 @@ check_abbr(
 
 	    if (vim_strbyte(mp->m_keys, K_SPECIAL) != NULL)
 	    {
+		char_u *qe = vim_strsave(mp->m_keys);
+
 		/* might have CSI escaped mp->m_keys */
-		q = vim_strsave(mp->m_keys);
-		if (q != NULL)
+		if (qe != NULL)
 		{
+		    q = qe;
 		    vim_unescape_csi(q);
 		    qlen = (int)STRLEN(q);
 		}

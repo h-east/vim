@@ -3331,18 +3331,12 @@ f_feedkeys(typval_T *argvars, typval_T *rettv UNUSED)
 		/* Avoid a 1 second delay when the keys start Insert mode. */
 		msg_scroll = FALSE;
 
-#ifdef FEAT_TERMINAL
-		if (term_use_loop())
-		    terminal_loop(FALSE);
-		else
-#endif
-		{
-		    if (!dangerous)
-			++ex_normal_busy;
-		    exec_normal(TRUE);
-		    if (!dangerous)
-			--ex_normal_busy;
-		}
+		if (!dangerous)
+		    ++ex_normal_busy;
+		exec_normal(TRUE, TRUE);
+		if (!dangerous)
+		    --ex_normal_busy;
+
 		msg_scroll |= save_msg_scroll;
 	    }
 	}
@@ -7412,7 +7406,12 @@ get_maparg(typval_T *argvars, typval_T *rettv, int exact)
     {
 	/* Return a string. */
 	if (rhs != NULL)
-	    rettv->vval.v_string = str2special_save(rhs, FALSE);
+	{
+	    if (*rhs == NUL)
+		rettv->vval.v_string = vim_strsave((char_u *)"<Nop>");
+	    else
+		rettv->vval.v_string = str2special_save(rhs, FALSE);
+	}
 
     }
     else if (rettv_dict_alloc(rettv) != FAIL && rhs != NULL)
@@ -10502,7 +10501,7 @@ set_qf_ll_list(
 	}
 
 	if (l != NULL && action && valid_dict && set_errorlist(wp, l, action,
-	    (char_u *)(wp == NULL ? "setqflist()" : "setloclist()"), d) == OK)
+	  (char_u *)(wp == NULL ? ":setqflist()" : ":setloclist()"), d) == OK)
 	    rettv->vval.v_number = 0;
     }
 #endif

@@ -3723,7 +3723,7 @@ vim_beep(
 		    /* No restore color information, refresh the screen. */
 		    if (has_vtp_working() != 0
 # ifdef FEAT_TERMGUICOLORS
-			    && p_tgc
+			    && (p_tgc || (!p_tgc && t_colors >= 256))
 # endif
 			)
 		    {
@@ -4478,6 +4478,17 @@ remove_tail(char_u *p, char_u *pend, char_u *name)
 	return newend;
     return pend;
 }
+
+    void
+vim_unsetenv(char_u *var)
+{
+#ifdef HAVE_UNSETENV
+    unsetenv((char *)var);
+#else
+    vim_setenv(var, (char_u *)"");
+#endif
+}
+
 
 /*
  * Our portable version of setenv.

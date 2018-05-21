@@ -514,6 +514,19 @@ redrawWinline(
 #endif
 }
 
+    void
+reset_updating_screen(int may_resize_shell UNUSED)
+{
+    updating_screen = FALSE;
+#ifdef FEAT_GUI
+    if (may_resize_shell)
+	gui_may_resize_shell();
+#endif
+#ifdef FEAT_TERMINAL
+    term_check_channel_closed_recently();
+#endif
+}
+
 /*
  * Update all windows that are editing the current buffer.
  */
@@ -567,8 +580,12 @@ update_screen(int type_arg)
 	must_redraw = 0;
     }
 
-    /* Need to update w_lines[]. */
-    if (curwin->w_lines_valid == 0 && type < NOT_VALID)
+    /* May need to update w_lines[]. */
+    if (curwin->w_lines_valid == 0 && type < NOT_VALID
+#ifdef FEAT_TERMINAL
+	    && !term_do_update_window(curwin)
+#endif
+		)
 	type = NOT_VALID;
 
     /* Postpone the redrawing when it's not needed and when being called
@@ -779,10 +796,7 @@ update_screen(int type_arg)
     FOR_ALL_WINDOWS(wp)
 	wp->w_buffer->b_mod_set = FALSE;
 
-    updating_screen = FALSE;
-#ifdef FEAT_GUI
-    gui_may_resize_shell();
-#endif
+    reset_updating_screen(TRUE);
 
     /* Clear or redraw the command line.  Done last, because scrolling may
      * mess up the command line. */
@@ -862,11 +876,9 @@ update_finish(void)
     end_search_hl();
 # endif
 
-    updating_screen = FALSE;
+    reset_updating_screen(TRUE);
 
 # ifdef FEAT_GUI
-    gui_may_resize_shell();
-
     /* Redraw the cursor and update the scrollbars when all screen updating is
      * done. */
     if (gui.in_use)
@@ -907,7 +919,7 @@ conceal_cursor_line(win_T *wp)
  * Check if the cursor line needs to be redrawn because of 'concealcursor'.
  */
     void
-conceal_check_cursur_line(void)
+conceal_check_cursor_line(void)
 {
     if (curwin->w_p_cole > 0 && conceal_cursor_line(curwin))
     {
@@ -1177,10 +1189,10 @@ win_update(win_T *wp)
     }
 
 #ifdef FEAT_TERMINAL
-    /* If this window contains a terminal, redraw works completely differently.
-     */
-    if (term_update_window(wp) == OK)
+    // If this window contains a terminal, redraw works completely differently.
+    if (term_do_update_window(wp))
     {
+	term_update_window(wp);
 # ifdef FEAT_MENU
 	/* Draw the window toolbar, if there is one. */
 	if (winbar_height(wp) > 0)
@@ -10488,10 +10500,16 @@ unshowmode(int force)
     void
 clearmode(void)
 {
+    int save_msg_row = msg_row;
+    int save_msg_col = msg_col;
+
     msg_pos_mode();
     if (Recording)
 	recording_mode(HL_ATTR(HLF_CM));
     msg_clr_eos();
+
+    msg_col = save_msg_col;
+    msg_row = save_msg_row;
 }
 
     static void

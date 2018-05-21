@@ -1,4 +1,4 @@
-*options.txt*	For Vim version 8.0.  Last change: 2018 Apr 21
+*options.txt*	For Vim version 8.1.  Last change: 2018 May 15
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -2155,7 +2155,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 								*cpo-E*
 		E	It is an error when using "y", "d", "c", "g~", "gu" or
 			"gU" on an Empty region.  The operators only work when
-			at least one character is to be operate on.  Example:
+			at least one character is to be operated on.  Example:
 			This makes "y0" fail in the first column.
 								*cpo-f*
 		f	When included, a ":read" command with a file name
@@ -2599,8 +2599,11 @@ A jump table for the options with a short description can be found at |Q_op|.
 	contain a list of words.  This can be one word per line, or several
 	words per line, separated by non-keyword characters (white space is
 	preferred).  Maximum line length is 510 bytes.
-	When this option is empty, or an entry "spell" is present, spell
-	checking is enabled the currently active spelling is used. |spell|
+
+	When this option is empty or an entry "spell" is present, and spell
+	checking is enabled, words in the word lists for the currently active
+	'spelllang' are used. See |spell|.
+
 	To include a comma in a file name precede it with a backslash.  Spaces
 	after a comma are ignored, otherwise spaces are included in the file
 	name.  See |option-backslash| about using backslashes.
@@ -6122,7 +6125,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 			{only available when compiled with the |+reltime|
 			feature}
 	The time in milliseconds for redrawing the display.  This applies to
-	searching for patterns for 'hlsearch', |:match| highlighting an syntax
+	searching for patterns for 'hlsearch', |:match| highlighting and syntax
 	highlighting.
 	When redrawing takes more than this many milliseconds no further
 	matches will be highlighted.

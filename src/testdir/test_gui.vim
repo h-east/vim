@@ -33,13 +33,25 @@ endfunc
 
 func Test_colorscheme()
   let colorscheme_saved = exists('g:colors_name') ? g:colors_name : 'default'
+  let g:color_count = 0
+  augroup TestColors
+    au!
+    au ColorScheme * let g:color_count += 1| let g:after_colors = g:color_count
+    au ColorSchemePre * let g:color_count += 1 |let g:before_colors = g:color_count
+  augroup END
 
   colorscheme torte
   redraw!
   sleep 200m
   call assert_equal('dark', &background)
+  call assert_equal(1, g:before_colors)
+  call assert_equal(2, g:after_colors)
 
   exec 'colorscheme' colorscheme_saved
+  augroup TestColors
+    au!
+  augroup END
+  unlet g:color_count g:after_colors g:before_colors
   redraw!
 endfunc
 
@@ -98,6 +110,7 @@ func Test_getwinpos()
   call assert_match('Window position: X \d\+, Y \d\+', execute('winpos'))
   call assert_true(getwinposx() >= 0)
   call assert_true(getwinposy() >= 0)
+  call assert_equal([getwinposx(), getwinposy()], getwinpos())
 endfunc
 
 func Test_quoteplus()
@@ -126,7 +139,7 @@ func Test_quoteplus()
 
     " Set the quoteplus register to test_call, and another gvim will launched.
     " Then, it first tries to paste the content of its own quotedplus register
-    " onto it.  Second, it tries to substitute test_responce for the pasted
+    " onto it.  Second, it tries to substitute test_response for the pasted
     " sentence.  If the sentence is identical to test_call, the substitution
     " should succeed.  Third, it tries to yank the result of the substitution
     " to its own quoteplus register, and last it quits.  When system()
@@ -237,7 +250,7 @@ func Test_set_balloonexpr()
   setl ballooneval
   call assert_equal('MyBalloonExpr()', &balloonexpr)
   " TODO Read non-empty text, place the pointer at a character of a word,
-  " and check if the content of the balloon is the smae as what is expected.
+  " and check if the content of the balloon is the same as what is expected.
   " Also, check if textlock works as expected.
   setl balloonexpr&
   call assert_equal('', &balloonexpr)
@@ -255,7 +268,7 @@ func Test_set_balloonexpr()
     setl ballooneval
     call assert_equal('MyBalloonFuncForMultilineUsingNL()', &balloonexpr)
     " TODO Read non-empty text, place the pointer at a character of a word,
-    " and check if the content of the balloon is the smae as what is
+    " and check if the content of the balloon is the same as what is
     " expected.  Also, check if textlock works as expected.
     setl balloonexpr&
     delfunc MyBalloonFuncForMultilineUsingNL
@@ -270,7 +283,7 @@ func Test_set_balloonexpr()
     setl ballooneval
     call assert_equal('MyBalloonFuncForMultilineUsingList()', &balloonexpr)
     " TODO Read non-empty text, place the pointer at a character of a word,
-    " and check if the content of the balloon is the smae as what is
+    " and check if the content of the balloon is the same as what is
     " expected.  Also, check if textlock works as expected.
     setl balloonexpr&
     delfunc MyBalloonFuncForMultilineUsingList
@@ -693,4 +706,34 @@ func Test_windowid_variable()
   else
     call assert_equal(0, v:windowid)
   endif
+endfunc
+
+" Test "vim -g" and also the GUIEnter autocommand.
+func Test_gui_dash_g()
+  let cmd = GetVimCommand('Xscriptgui')
+  call writefile([""], "Xtestgui")
+  call writefile([
+	\ 'au GUIEnter * call writefile(["insertmode: " . &insertmode], "Xtestgui")',
+	\ 'au GUIEnter * qall',
+	\ ], 'Xscriptgui')
+  call system(cmd . ' -g')
+  call WaitForAssert({-> assert_equal(['insertmode: 0'], readfile('Xtestgui'))})
+
+  call delete('Xscriptgui')
+  call delete('Xtestgui')
+endfunc
+
+" Test "vim -7" and also the GUIEnter autocommand.
+func Test_gui_dash_y()
+  let cmd = GetVimCommand('Xscriptgui')
+  call writefile([""], "Xtestgui")
+  call writefile([
+	\ 'au GUIEnter * call writefile(["insertmode: " . &insertmode], "Xtestgui")',
+	\ 'au GUIEnter * qall',
+	\ ], 'Xscriptgui')
+  call system(cmd . ' -y')
+  call WaitForAssert({-> assert_equal(['insertmode: 1'], readfile('Xtestgui'))})
+
+  call delete('Xscriptgui')
+  call delete('Xtestgui')
 endfunc

@@ -5,6 +5,7 @@ if !has('timers')
 endif
 
 source shared.vim
+source screendump.vim
 
 func MyHandler(timer)
   let g:val += 1
@@ -143,7 +144,7 @@ endfunc
 func Test_delete_myself()
   let g:called = 0
   let t = timer_start(10, 'StopMyself', {'repeat': -1})
-  call WaitFor('g:called == 2')
+  call WaitForAssert({-> assert_equal(2, g:called)})
   call assert_equal(2, g:called)
   call assert_equal([], timer_info(t))
 endfunc
@@ -206,7 +207,7 @@ func Test_timer_errors()
   let g:call_count = 0
   let timer = timer_start(10, 'FuncWithError', {'repeat': -1})
   " Timer will be stopped after failing 3 out of 3 times.
-  call WaitFor('g:call_count == 3')
+  call WaitForAssert({-> assert_equal(3, g:call_count)})
   sleep 50m
   call assert_equal(3, g:call_count)
 endfunc
@@ -224,7 +225,7 @@ func Test_timer_catch_error()
   let g:call_count = 0
   let timer = timer_start(10, 'FuncWithCaughtError', {'repeat': 4})
   " Timer will not be stopped.
-  call WaitFor('g:call_count == 4')
+  call WaitForAssert({-> assert_equal(4, g:call_count)})
   sleep 50m
   call assert_equal(4, g:call_count)
 endfunc
@@ -258,6 +259,37 @@ func Test_ex_mode()
   " This used to throw error E749.
   exe "normal Qsleep 100m\rvi\r"
   call timer_stop(timer)
+endfunc
+
+func Test_restore_count()
+  if !CanRunVimInTerminal()
+    return
+  endif
+  " Check that v:count is saved and restored, not changed by a timer.
+  call writefile([
+        \ 'nnoremap <expr><silent> L v:count ? v:count . "l" : "l"',
+        \ 'func Doit(id)',
+        \ '  normal 3j',
+        \ 'endfunc',
+        \ 'call timer_start(100, "Doit")',
+	\ ], 'Xtrcscript')
+  call writefile([
+        \ '1-1234',
+        \ '2-1234',
+        \ '3-1234',
+	\ ], 'Xtrctext')
+  let buf = RunVimInTerminal('-S Xtrcscript Xtrctext', {})
+
+  " Wait for the timer to move the cursor to the third line.
+  call WaitForAssert({-> assert_equal(3, term_getcursor(buf)[0])})
+  call assert_equal(1, term_getcursor(buf)[1])
+  " Now check that v:count has not been set to 3
+  call term_sendkeys(buf, 'L')
+  call WaitForAssert({-> assert_equal(2, term_getcursor(buf)[1])})
+
+  call StopVimInTerminal(buf)
+  call delete('Xtrcscript')
+  call delete('Xtrctext')
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

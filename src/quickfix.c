@@ -33,6 +33,7 @@ struct qfline_S
     int		qf_fnum;	/* file number for the line */
     int		qf_col;		/* column where the error occurred */
     int		qf_nr;		/* error number */
+    char_u	*qf_module;	/* module name for this error */
     char_u	*qf_pattern;	/* search pattern for the error */
     char_u	*qf_text;	/* description of the error */
     char_u	qf_viscol;	/* set to TRUE if qf_col is screen column */
@@ -101,7 +102,7 @@ struct qf_info_S
 static qf_info_T ql_info;	/* global quickfix list */
 static int_u last_qf_id = 0;	/* Last used quickfix list id */
 
-#define FMT_PATTERNS 10		/* maximum number of % recognized */
+#define FMT_PATTERNS 11		/* maximum number of % recognized */
 
 /*
  * Structure used to hold the info of one part of 'errorformat'
@@ -135,7 +136,8 @@ static efm_T	*fmt_start = NULL; /* cached across qf_parse_line() calls */
 
 static int	qf_init_ext(qf_info_T *qi, int qf_idx, char_u *efile, buf_T *buf, typval_T *tv, char_u *errorformat, int newlist, linenr_T lnumfirst, linenr_T lnumlast, char_u *qf_title, char_u *enc);
 static void	qf_new_list(qf_info_T *qi, char_u *qf_title);
-static int	qf_add_entry(qf_info_T *qi, int qf_idx, char_u *dir, char_u *fname, int bufnum, char_u *mesg, long lnum, int col, int vis_col, char_u *pattern, int nr, int type, int valid);
+static int	qf_add_entry(qf_info_T *qi, int qf_idx, char_u *dir, char_u *fname, char_u *module, int bufnum, char_u *mesg, long lnum, int col, int vis_col, char_u *pattern, int nr, int type, int valid);
+static qf_info_T *ll_new_list(void);
 static void	qf_free(qf_info_T *qi, int idx);
 static char_u	*qf_types(int, int);
 static int	qf_get_fnum(qf_info_T *qi, int qf_idx, char_u *, char_u *);
@@ -211,18 +213,173 @@ static struct fmtpattern
     char_u	convchar;
     char	*pattern;
 } fmt_pat[FMT_PATTERNS] =
+    {
+	{'f', ".\\+"},	    /* only used when at end */
+	{'n', "\\d\\+"},
+	{'l', "\\d\\+"},
+	{'c', "\\d\\+"},
+	{'t', "."},
+	{'m', ".\\+"},
+	{'r', ".*"},
+	{'p', "[- 	.]*"},
+	{'v', "\\d\\+"},
+	{'s', ".\\+"},
+	{'o', ".\\+"}
+    };
+
+/*
+ * Convert an errorformat pattern to a regular expression pattern.
+ * See fmt_pat definition above for the list of supported patterns.
+ */
+    static char_u *
+fmtpat_to_regpat(
+	char_u	*efmp,
+	efm_T	*fmt_ptr,
+	int	idx,
+	int	round,
+	char_u	*ptr,
+	char_u	*errmsg)
+{
+    char_u	*srcptr;
+
+    if (fmt_ptr->addr[idx])
+    {
+	/* Each errorformat pattern can occur only once */
+	sprintf((char *)errmsg,
+		_("E372: Too many %%%c in format string"), *efmp);
+	EMSG(errmsg);
+	return NULL;
+    }
+    if ((idx && idx < 6
+		&& vim_strchr((char_u *)"DXOPQ", fmt_ptr->prefix) != NULL)
+	    || (idx == 6
+		&& vim_strchr((char_u *)"OPQ", fmt_ptr->prefix) == NULL))
+    {
+	sprintf((char *)errmsg,
+		_("E373: Unexpected %%%c in format string"), *efmp);
+	EMSG(errmsg);
+	return NULL;
+    }
+    fmt_ptr->addr[idx] = (char_u)++round;
+    *ptr++ = '\\';
+    *ptr++ = '(';
+#ifdef BACKSLASH_IN_FILENAME
+    if (*efmp == 'f')
+    {
+	/* Also match "c:" in the file name, even when
+	 * checking for a colon next: "%f:".
+	 * "\%(\a:\)\=" */
+	STRCPY(ptr, "\\%(\\a:\\)\\=");
+	ptr += 10;
+    }
+#endif
+    if (*efmp == 'f' && efmp[1] != NUL)
+    {
+	if (efmp[1] != '\\' && efmp[1] != '%')
+	{
+	    /* A file name may contain spaces, but this isn't
+	     * in "\f".  For "%f:%l:%m" there may be a ":" in
+	     * the file name.  Use ".\{-1,}x" instead (x is
+	     * the next character), the requirement that :999:
+	     * follows should work. */
+	    STRCPY(ptr, ".\\{-1,}");
+	    ptr += 7;
+	}
+	else
+	{
+	    /* File name followed by '\\' or '%': include as
+	     * many file name chars as possible. */
+	    STRCPY(ptr, "\\f\\+");
+	    ptr += 4;
+	}
+    }
+    else
+    {
+	srcptr = (char_u *)fmt_pat[idx].pattern;
+	while ((*ptr = *srcptr++) != NUL)
+	    ++ptr;
+    }
+    *ptr++ = '\\';
+    *ptr++ = ')';
+
+    return ptr;
+}
+
+/*
+ * Convert a scanf like format in 'errorformat' to a regular expression.
+ */
+    static char_u *
+scanf_fmt_to_regpat(
+	char_u	*efm,
+	int	len,
+	char_u	**pefmp,
+	char_u	*ptr,
+	char_u	*errmsg)
+{
+    char_u	*efmp = *pefmp;
+
+    if (*++efmp == '[' || *efmp == '\\')
+    {
+	if ((*ptr++ = *efmp) == '[')	/* %*[^a-z0-9] etc. */
+	{
+	    if (efmp[1] == '^')
+		*ptr++ = *++efmp;
+	    if (efmp < efm + len)
+	    {
+		*ptr++ = *++efmp;	    /* could be ']' */
+		while (efmp < efm + len
+			&& (*ptr++ = *++efmp) != ']')
+		    /* skip */;
+		if (efmp == efm + len)
 		{
-		    {'f', ".\\+"},	    /* only used when at end */
-		    {'n', "\\d\\+"},
-		    {'l', "\\d\\+"},
-		    {'c', "\\d\\+"},
-		    {'t', "."},
-		    {'m', ".\\+"},
-		    {'r', ".*"},
-		    {'p', "[- 	.]*"},
-		    {'v', "\\d\\+"},
-		    {'s', ".\\+"}
-		};
+		    EMSG(_("E374: Missing ] in format string"));
+		    return NULL;
+		}
+	    }
+	}
+	else if (efmp < efm + len)	/* %*\D, %*\s etc. */
+	    *ptr++ = *++efmp;
+	*ptr++ = '\\';
+	*ptr++ = '+';
+    }
+    else
+    {
+	/* TODO: scanf()-like: %*ud, %*3c, %*f, ... ? */
+	sprintf((char *)errmsg,
+		_("E375: Unsupported %%%c in format string"), *efmp);
+	EMSG(errmsg);
+	return NULL;
+    }
+
+    *pefmp = efmp;
+
+    return ptr;
+}
+
+/*
+ * Analyze/parse an errorformat prefix.
+ */
+    static int
+efm_analyze_prefix(char_u **pefmp, efm_T *fmt_ptr, char_u *errmsg)
+{
+    char_u	*efmp = *pefmp;
+
+    if (vim_strchr((char_u *)"+-", *efmp) != NULL)
+	fmt_ptr->flags = *efmp++;
+    if (vim_strchr((char_u *)"DXAEWICZGOPQ", *efmp) != NULL)
+	fmt_ptr->prefix = *efmp;
+    else
+    {
+	sprintf((char *)errmsg,
+		_("E376: Invalid %%%c in format string prefix"), *efmp);
+	EMSG(errmsg);
+	return FAIL;
+    }
+
+    *pefmp = efmp;
+
+    return OK;
+}
 
 /*
  * Converts a 'errorformat' string to regular expression pattern
@@ -230,14 +387,13 @@ static struct fmtpattern
     static int
 efm_to_regpat(
 	char_u	*efm,
-	int		len,
+	int	len,
 	efm_T	*fmt_ptr,
 	char_u	*regpat,
 	char_u	*errmsg)
 {
     char_u	*ptr;
     char_u	*efmp;
-    char_u	*srcptr;
     int		round;
     int		idx = 0;
 
@@ -257,102 +413,17 @@ efm_to_regpat(
 		    break;
 	    if (idx < FMT_PATTERNS)
 	    {
-		if (fmt_ptr->addr[idx])
-		{
-		    sprintf((char *)errmsg,
-			    _("E372: Too many %%%c in format string"), *efmp);
-		    EMSG(errmsg);
+		ptr = fmtpat_to_regpat(efmp, fmt_ptr, idx, round, ptr,
+								errmsg);
+		if (ptr == NULL)
 		    return -1;
-		}
-		if ((idx
-			    && idx < 6
-			    && vim_strchr((char_u *)"DXOPQ",
-				fmt_ptr->prefix) != NULL)
-			|| (idx == 6
-			    && vim_strchr((char_u *)"OPQ",
-				fmt_ptr->prefix) == NULL))
-		{
-		    sprintf((char *)errmsg,
-			    _("E373: Unexpected %%%c in format string"), *efmp);
-		    EMSG(errmsg);
-		    return -1;
-		}
-		fmt_ptr->addr[idx] = (char_u)++round;
-		*ptr++ = '\\';
-		*ptr++ = '(';
-#ifdef BACKSLASH_IN_FILENAME
-		if (*efmp == 'f')
-		{
-		    /* Also match "c:" in the file name, even when
-		     * checking for a colon next: "%f:".
-		     * "\%(\a:\)\=" */
-		    STRCPY(ptr, "\\%(\\a:\\)\\=");
-		    ptr += 10;
-		}
-#endif
-		if (*efmp == 'f' && efmp[1] != NUL)
-		{
-		    if (efmp[1] != '\\' && efmp[1] != '%')
-		    {
-			/* A file name may contain spaces, but this isn't
-			 * in "\f".  For "%f:%l:%m" there may be a ":" in
-			 * the file name.  Use ".\{-1,}x" instead (x is
-			 * the next character), the requirement that :999:
-			 * follows should work. */
-			STRCPY(ptr, ".\\{-1,}");
-			ptr += 7;
-		    }
-		    else
-		    {
-			/* File name followed by '\\' or '%': include as
-			 * many file name chars as possible. */
-			STRCPY(ptr, "\\f\\+");
-			ptr += 4;
-		    }
-		}
-		else
-		{
-		    srcptr = (char_u *)fmt_pat[idx].pattern;
-		    while ((*ptr = *srcptr++) != NUL)
-			++ptr;
-		}
-		*ptr++ = '\\';
-		*ptr++ = ')';
+		round++;
 	    }
 	    else if (*efmp == '*')
 	    {
-		if (*++efmp == '[' || *efmp == '\\')
-		{
-		    if ((*ptr++ = *efmp) == '[')	/* %*[^a-z0-9] etc. */
-		    {
-			if (efmp[1] == '^')
-			    *ptr++ = *++efmp;
-			if (efmp < efm + len)
-			{
-			    *ptr++ = *++efmp;	    /* could be ']' */
-			    while (efmp < efm + len
-				    && (*ptr++ = *++efmp) != ']')
-				/* skip */;
-			    if (efmp == efm + len)
-			    {
-				EMSG(_("E374: Missing ] in format string"));
-				return -1;
-			    }
-			}
-		    }
-		    else if (efmp < efm + len)	/* %*\D, %*\s etc. */
-			*ptr++ = *++efmp;
-		    *ptr++ = '\\';
-		    *ptr++ = '+';
-		}
-		else
-		{
-		    /* TODO: scanf()-like: %*ud, %*3c, %*f, ... ? */
-		    sprintf((char *)errmsg,
-			    _("E375: Unsupported %%%c in format string"), *efmp);
-		    EMSG(errmsg);
+		ptr = scanf_fmt_to_regpat(efm, len, &efmp, ptr, errmsg);
+		if (ptr == NULL)
 		    return -1;
-		}
 	    }
 	    else if (vim_strchr((char_u *)"%\\.^$~[", *efmp) != NULL)
 		*ptr++ = *efmp;		/* regexp magic characters */
@@ -362,17 +433,8 @@ efm_to_regpat(
 		fmt_ptr->conthere = TRUE;
 	    else if (efmp == efm + 1)		/* analyse prefix */
 	    {
-		if (vim_strchr((char_u *)"+-", *efmp) != NULL)
-		    fmt_ptr->flags = *efmp++;
-		if (vim_strchr((char_u *)"DXAEWICZGOPQ", *efmp) != NULL)
-		    fmt_ptr->prefix = *efmp;
-		else
-		{
-		    sprintf((char *)errmsg,
-			    _("E376: Invalid %%%c in format string prefix"), *efmp);
-		    EMSG(errmsg);
+		if (efm_analyze_prefix(&efmp, fmt_ptr, errmsg) == FAIL)
 		    return -1;
-		}
 	    }
 	    else
 	    {
@@ -501,7 +563,8 @@ enum {
     QF_OK = 1,
     QF_END_OF_INPUT = 2,
     QF_NOMEM = 3,
-    QF_IGNORE_LINE = 4
+    QF_IGNORE_LINE = 4,
+    QF_MULTISCAN = 5,
 };
 
 typedef struct {
@@ -522,6 +585,8 @@ typedef struct {
     static char_u *
 qf_grow_linebuf(qfstate_T *state, int newsz)
 {
+    char_u	*p;
+
     /*
      * If the line exceeds LINE_MAXLEN exclude the last
      * byte since it's not a NL character.
@@ -536,9 +601,9 @@ qf_grow_linebuf(qfstate_T *state, int newsz)
     }
     else if (state->linelen > state->growbufsiz)
     {
-	state->growbuf = vim_realloc(state->growbuf, state->linelen + 1);
-	if (state->growbuf == NULL)
+	if ((p = vim_realloc(state->growbuf, state->linelen + 1)) == NULL)
 	    return NULL;
+	state->growbuf = p;
 	state->growbufsiz = state->linelen;
     }
     return state->growbuf;
@@ -693,6 +758,8 @@ qf_get_next_file_line(qfstate_T *state)
 
 	for (;;)
 	{
+	    char_u	*p;
+
 	    if (fgets((char *)state->growbuf + growbuflen,
 			state->growbufsiz - growbuflen, state->fd) == NULL)
 		break;
@@ -708,9 +775,9 @@ qf_get_next_file_line(qfstate_T *state)
 
 	    state->growbufsiz = 2 * state->growbufsiz < LINE_MAXLEN
 		? 2 * state->growbufsiz : LINE_MAXLEN;
-	    state->growbuf = vim_realloc(state->growbuf, state->growbufsiz);
-	    if (state->growbuf == NULL)
+	    if ((p = vim_realloc(state->growbuf, state->growbufsiz)) == NULL)
 		return QF_NOMEM;
+	    state->growbuf = p;
 	}
 
 	while (discard)
@@ -809,6 +876,7 @@ qf_get_nextline(qfstate_T *state)
 
 typedef struct {
     char_u	*namebuf;
+    char_u	*module;
     char_u	*errmsg;
     int		errmsglen;
     long	lnum;
@@ -819,6 +887,354 @@ typedef struct {
     int		type;
     int		valid;
 } qffields_T;
+
+/*
+ * Parse the error format matches in 'regmatch' and set the values in 'fields'.
+ * fmt_ptr contains the 'efm' format specifiers/prefixes that have a match.
+ * Returns QF_OK if all the matches are successfully parsed. On failure,
+ * returns QF_FAIL or QF_NOMEM.
+ */
+    static int
+qf_parse_match(
+	char_u		*linebuf,
+	int		linelen,
+	efm_T		*fmt_ptr,
+	regmatch_T	*regmatch,
+	qffields_T	*fields,
+	int		qf_multiline,
+	int		qf_multiscan,
+	char_u		**tail)
+{
+    char_u	*p;
+    int		idx = fmt_ptr->prefix;
+    int		i;
+    int		len;
+
+    if ((idx == 'C' || idx == 'Z') && !qf_multiline)
+	return QF_FAIL;
+    if (vim_strchr((char_u *)"EWI", idx) != NULL)
+	fields->type = idx;
+    else
+	fields->type = 0;
+    /*
+     * Extract error message data from matched line.
+     * We check for an actual submatch, because "\[" and "\]" in
+     * the 'errorformat' may cause the wrong submatch to be used.
+     */
+    if ((i = (int)fmt_ptr->addr[0]) > 0)		/* %f */
+    {
+	int c;
+
+	if (regmatch->startp[i] == NULL || regmatch->endp[i] == NULL)
+	    return QF_FAIL;
+
+	/* Expand ~/file and $HOME/file to full path. */
+	c = *regmatch->endp[i];
+	*regmatch->endp[i] = NUL;
+	expand_env(regmatch->startp[i], fields->namebuf, CMDBUFFSIZE);
+	*regmatch->endp[i] = c;
+
+	if (vim_strchr((char_u *)"OPQ", idx) != NULL
+		&& mch_getperm(fields->namebuf) == -1)
+	    return QF_FAIL;
+    }
+    if ((i = (int)fmt_ptr->addr[1]) > 0)		/* %n */
+    {
+	if (regmatch->startp[i] == NULL)
+	    return QF_FAIL;
+	fields->enr = (int)atol((char *)regmatch->startp[i]);
+    }
+    if ((i = (int)fmt_ptr->addr[2]) > 0)		/* %l */
+    {
+	if (regmatch->startp[i] == NULL)
+	    return QF_FAIL;
+	fields->lnum = atol((char *)regmatch->startp[i]);
+    }
+    if ((i = (int)fmt_ptr->addr[3]) > 0)		/* %c */
+    {
+	if (regmatch->startp[i] == NULL)
+	    return QF_FAIL;
+	fields->col = (int)atol((char *)regmatch->startp[i]);
+    }
+    if ((i = (int)fmt_ptr->addr[4]) > 0)		/* %t */
+    {
+	if (regmatch->startp[i] == NULL)
+	    return QF_FAIL;
+	fields->type = *regmatch->startp[i];
+    }
+    if (fmt_ptr->flags == '+' && !qf_multiscan)	/* %+ */
+    {
+	if (linelen >= fields->errmsglen)
+	{
+	    /* linelen + null terminator */
+	    if ((p = vim_realloc(fields->errmsg, linelen + 1)) == NULL)
+		return QF_NOMEM;
+	    fields->errmsg = p;
+	    fields->errmsglen = linelen + 1;
+	}
+	vim_strncpy(fields->errmsg, linebuf, linelen);
+    }
+    else if ((i = (int)fmt_ptr->addr[5]) > 0)	/* %m */
+    {
+	if (regmatch->startp[i] == NULL || regmatch->endp[i] == NULL)
+	    return QF_FAIL;
+	len = (int)(regmatch->endp[i] - regmatch->startp[i]);
+	if (len >= fields->errmsglen)
+	{
+	    /* len + null terminator */
+	    if ((p = vim_realloc(fields->errmsg, len + 1)) == NULL)
+		return QF_NOMEM;
+	    fields->errmsg = p;
+	    fields->errmsglen = len + 1;
+	}
+	vim_strncpy(fields->errmsg, regmatch->startp[i], len);
+    }
+    if ((i = (int)fmt_ptr->addr[6]) > 0)		/* %r */
+    {
+	if (regmatch->startp[i] == NULL)
+	    return QF_FAIL;
+	*tail = regmatch->startp[i];
+    }
+    if ((i = (int)fmt_ptr->addr[7]) > 0)		/* %p */
+    {
+	char_u	*match_ptr;
+
+	if (regmatch->startp[i] == NULL || regmatch->endp[i] == NULL)
+	    return QF_FAIL;
+	fields->col = 0;
+	for (match_ptr = regmatch->startp[i];
+		match_ptr != regmatch->endp[i]; ++match_ptr)
+	{
+	    ++fields->col;
+	    if (*match_ptr == TAB)
+	    {
+		fields->col += 7;
+		fields->col -= fields->col % 8;
+	    }
+	}
+	++fields->col;
+	fields->use_viscol = TRUE;
+    }
+    if ((i = (int)fmt_ptr->addr[8]) > 0)		/* %v */
+    {
+	if (regmatch->startp[i] == NULL)
+	    return QF_FAIL;
+	fields->col = (int)atol((char *)regmatch->startp[i]);
+	fields->use_viscol = TRUE;
+    }
+    if ((i = (int)fmt_ptr->addr[9]) > 0)		/* %s */
+    {
+	if (regmatch->startp[i] == NULL || regmatch->endp[i] == NULL)
+	    return QF_FAIL;
+	len = (int)(regmatch->endp[i] - regmatch->startp[i]);
+	if (len > CMDBUFFSIZE - 5)
+	    len = CMDBUFFSIZE - 5;
+	STRCPY(fields->pattern, "^\\V");
+	STRNCAT(fields->pattern, regmatch->startp[i], len);
+	fields->pattern[len + 3] = '\\';
+	fields->pattern[len + 4] = '$';
+	fields->pattern[len + 5] = NUL;
+    }
+    if ((i = (int)fmt_ptr->addr[10]) > 0)		/* %o */
+    {
+	if (regmatch->startp[i] == NULL || regmatch->endp[i] == NULL)
+	    return QF_FAIL;
+	len = (int)(regmatch->endp[i] - regmatch->startp[i]);
+	if (len > CMDBUFFSIZE)
+	    len = CMDBUFFSIZE;
+	STRNCAT(fields->module, regmatch->startp[i], len);
+    }
+
+    return QF_OK;
+}
+
+/*
+ * Parse an error line in 'linebuf' using a single error format string in
+ * 'fmt_ptr->prog' and return the matching values in 'fields'.
+ * Returns QF_OK if the efm format matches completely and the fields are
+ * successfully copied. Otherwise returns QF_FAIL or QF_NOMEM.
+ */
+    static int
+qf_parse_get_fields(
+	char_u		*linebuf,
+	int		linelen,
+	efm_T		*fmt_ptr,
+	qffields_T	*fields,
+	int		qf_multiline,
+	int		qf_multiscan,
+	char_u		**tail)
+{
+    regmatch_T	regmatch;
+    int		status = QF_FAIL;
+    int		r;
+
+    if (qf_multiscan &&
+		vim_strchr((char_u *)"OPQ", fmt_ptr->prefix) == NULL)
+	return QF_FAIL;
+
+    fields->namebuf[0] = NUL;
+    fields->module[0] = NUL;
+    fields->pattern[0] = NUL;
+    if (!qf_multiscan)
+	fields->errmsg[0] = NUL;
+    fields->lnum = 0;
+    fields->col = 0;
+    fields->use_viscol = FALSE;
+    fields->enr = -1;
+    fields->type = 0;
+    *tail = NULL;
+
+    /* Always ignore case when looking for a matching error. */
+    regmatch.rm_ic = TRUE;
+    regmatch.regprog = fmt_ptr->prog;
+    r = vim_regexec(&regmatch, linebuf, (colnr_T)0);
+    fmt_ptr->prog = regmatch.regprog;
+    if (r)
+	status = qf_parse_match(linebuf, linelen, fmt_ptr, &regmatch,
+		fields, qf_multiline, qf_multiscan, tail);
+
+    return status;
+}
+
+/*
+ * Parse directory error format prefixes (%D and %X).
+ * Push and pop directories from the directory stack when scanning directory
+ * names.
+ */
+    static int
+qf_parse_dir_pfx(int idx, qffields_T *fields, qf_list_T *qfl)
+{
+    if (idx == 'D')				/* enter directory */
+    {
+	if (*fields->namebuf == NUL)
+	{
+	    EMSG(_("E379: Missing or empty directory name"));
+	    return QF_FAIL;
+	}
+	qfl->qf_directory =
+	    qf_push_dir(fields->namebuf, &qfl->qf_dir_stack, FALSE);
+	if (qfl->qf_directory == NULL)
+	    return QF_FAIL;
+    }
+    else if (idx == 'X')			/* leave directory */
+	qfl->qf_directory = qf_pop_dir(&qfl->qf_dir_stack);
+
+    return QF_OK;
+}
+
+/*
+ * Parse global file name error format prefixes (%O, %P and %Q).
+ */
+    static int
+qf_parse_file_pfx(
+	int idx,
+	qffields_T *fields,
+	qf_list_T *qfl,
+	char_u *tail)
+{
+    fields->valid = FALSE;
+    if (*fields->namebuf == NUL || mch_getperm(fields->namebuf) >= 0)
+    {
+	if (*fields->namebuf && idx == 'P')
+	    qfl->qf_currfile =
+		qf_push_dir(fields->namebuf, &qfl->qf_file_stack, TRUE);
+	else if (idx == 'Q')
+	    qfl->qf_currfile = qf_pop_dir(&qfl->qf_file_stack);
+	*fields->namebuf = NUL;
+	if (tail && *tail)
+	{
+	    STRMOVE(IObuff, skipwhite(tail));
+	    qfl->qf_multiscan = TRUE;
+	    return QF_MULTISCAN;
+	}
+    }
+
+    return QF_OK;
+}
+
+/*
+ * Parse a non-error line (a line which doesn't match any of the error
+ * format in 'efm').
+ */
+    static int
+qf_parse_line_nomatch(char_u *linebuf, int linelen, qffields_T *fields)
+{
+    char_u	*p;
+
+    fields->namebuf[0] = NUL;	/* no match found, remove file name */
+    fields->lnum = 0;			/* don't jump to this line */
+    fields->valid = FALSE;
+    if (linelen >= fields->errmsglen)
+    {
+	/* linelen + null terminator */
+	if ((p = vim_realloc(fields->errmsg, linelen + 1)) == NULL)
+	    return QF_NOMEM;
+	fields->errmsg = p;
+	fields->errmsglen = linelen + 1;
+    }
+    /* copy whole line to error message */
+    vim_strncpy(fields->errmsg, linebuf, linelen);
+
+    return QF_OK;
+}
+
+/*
+ * Parse multi-line error format prefixes (%C and %Z)
+ */
+    static int
+qf_parse_multiline_pfx(
+	qf_info_T *qi,
+	int qf_idx,
+	int idx,
+	qf_list_T *qfl,
+	qffields_T *fields)
+{
+    char_u		*ptr;
+    int			len;
+
+    if (!qfl->qf_multiignore)
+    {
+	qfline_T *qfprev = qfl->qf_last;
+
+	if (qfprev == NULL)
+	    return QF_FAIL;
+	if (*fields->errmsg && !qfl->qf_multiignore)
+	{
+	    len = (int)STRLEN(qfprev->qf_text);
+	    if ((ptr = alloc((unsigned)(len + STRLEN(fields->errmsg) + 2)))
+		    == NULL)
+		return QF_FAIL;
+	    STRCPY(ptr, qfprev->qf_text);
+	    vim_free(qfprev->qf_text);
+	    qfprev->qf_text = ptr;
+	    *(ptr += len) = '\n';
+	    STRCPY(++ptr, fields->errmsg);
+	}
+	if (qfprev->qf_nr == -1)
+	    qfprev->qf_nr = fields->enr;
+	if (vim_isprintc(fields->type) && !qfprev->qf_type)
+	    /* only printable chars allowed */
+	    qfprev->qf_type = fields->type;
+
+	if (!qfprev->qf_lnum)
+	    qfprev->qf_lnum = fields->lnum;
+	if (!qfprev->qf_col)
+	    qfprev->qf_col = fields->col;
+	qfprev->qf_viscol = fields->use_viscol;
+	if (!qfprev->qf_fnum)
+	    qfprev->qf_fnum = qf_get_fnum(qi, qf_idx,
+		    qfl->qf_directory,
+		    *fields->namebuf || qfl->qf_directory != NULL
+		    ? fields->namebuf
+		    : qfl->qf_currfile != NULL && fields->valid
+		    ? qfl->qf_currfile : 0);
+    }
+    if (idx == 'Z')
+	qfl->qf_multiline = qfl->qf_multiignore = FALSE;
+    line_breakcheck();
+
+    return QF_IGNORE_LINE;
+}
 
 /*
  * Parse a line and get the quickfix fields.
@@ -834,16 +1250,10 @@ qf_parse_line(
 	qffields_T	*fields)
 {
     efm_T		*fmt_ptr;
-    char_u		*ptr;
-    int			len;
-    int			i;
     int			idx = 0;
     char_u		*tail = NULL;
-    regmatch_T		regmatch;
     qf_list_T		*qfl = &qi->qf_lists[qf_idx];
-
-    /* Always ignore case when looking for a matching error. */
-    regmatch.rm_ic = TRUE;
+    int			status;
 
 restofline:
     /* If there was no %> item start at the first pattern */
@@ -851,6 +1261,7 @@ restofline:
 	fmt_ptr = fmt_first;
     else
     {
+	/* Otherwise start from the last used pattern */
 	fmt_ptr = fmt_start;
 	fmt_start = NULL;
     }
@@ -862,154 +1273,13 @@ restofline:
     fields->valid = TRUE;
     for ( ; fmt_ptr != NULL; fmt_ptr = fmt_ptr->next)
     {
-	int r;
-
 	idx = fmt_ptr->prefix;
-	if (qfl->qf_multiscan && vim_strchr((char_u *)"OPQ", idx) == NULL)
-	    continue;
-	fields->namebuf[0] = NUL;
-	fields->pattern[0] = NUL;
-	if (!qfl->qf_multiscan)
-	    fields->errmsg[0] = NUL;
-	fields->lnum = 0;
-	fields->col = 0;
-	fields->use_viscol = FALSE;
-	fields->enr = -1;
-	fields->type = 0;
-	tail = NULL;
-
-	regmatch.regprog = fmt_ptr->prog;
-	r = vim_regexec(&regmatch, linebuf, (colnr_T)0);
-	fmt_ptr->prog = regmatch.regprog;
-	if (r)
-	{
-	    if ((idx == 'C' || idx == 'Z') && !qfl->qf_multiline)
-		continue;
-	    if (vim_strchr((char_u *)"EWI", idx) != NULL)
-		fields->type = idx;
-	    else
-		fields->type = 0;
-	    /*
-	     * Extract error message data from matched line.
-	     * We check for an actual submatch, because "\[" and "\]" in
-	     * the 'errorformat' may cause the wrong submatch to be used.
-	     */
-	    if ((i = (int)fmt_ptr->addr[0]) > 0)		/* %f */
-	    {
-		int c;
-
-		if (regmatch.startp[i] == NULL || regmatch.endp[i] == NULL)
-		    continue;
-
-		/* Expand ~/file and $HOME/file to full path. */
-		c = *regmatch.endp[i];
-		*regmatch.endp[i] = NUL;
-		expand_env(regmatch.startp[i], fields->namebuf, CMDBUFFSIZE);
-		*regmatch.endp[i] = c;
-
-		if (vim_strchr((char_u *)"OPQ", idx) != NULL
-			&& mch_getperm(fields->namebuf) == -1)
-		    continue;
-	    }
-	    if ((i = (int)fmt_ptr->addr[1]) > 0)		/* %n */
-	    {
-		if (regmatch.startp[i] == NULL)
-		    continue;
-		fields->enr = (int)atol((char *)regmatch.startp[i]);
-	    }
-	    if ((i = (int)fmt_ptr->addr[2]) > 0)		/* %l */
-	    {
-		if (regmatch.startp[i] == NULL)
-		    continue;
-		fields->lnum = atol((char *)regmatch.startp[i]);
-	    }
-	    if ((i = (int)fmt_ptr->addr[3]) > 0)		/* %c */
-	    {
-		if (regmatch.startp[i] == NULL)
-		    continue;
-		fields->col = (int)atol((char *)regmatch.startp[i]);
-	    }
-	    if ((i = (int)fmt_ptr->addr[4]) > 0)		/* %t */
-	    {
-		if (regmatch.startp[i] == NULL)
-		    continue;
-		fields->type = *regmatch.startp[i];
-	    }
-	    if (fmt_ptr->flags == '+' && !qfl->qf_multiscan)	/* %+ */
-	    {
-		if (linelen >= fields->errmsglen)
-		{
-		    /* linelen + null terminator */
-		    if ((fields->errmsg = vim_realloc(fields->errmsg,
-				    linelen + 1)) == NULL)
-			return QF_NOMEM;
-		    fields->errmsglen = linelen + 1;
-		}
-		vim_strncpy(fields->errmsg, linebuf, linelen);
-	    }
-	    else if ((i = (int)fmt_ptr->addr[5]) > 0)	/* %m */
-	    {
-		if (regmatch.startp[i] == NULL || regmatch.endp[i] == NULL)
-		    continue;
-		len = (int)(regmatch.endp[i] - regmatch.startp[i]);
-		if (len >= fields->errmsglen)
-		{
-		    /* len + null terminator */
-		    if ((fields->errmsg = vim_realloc(fields->errmsg, len + 1))
-			    == NULL)
-			return QF_NOMEM;
-		    fields->errmsglen = len + 1;
-		}
-		vim_strncpy(fields->errmsg, regmatch.startp[i], len);
-	    }
-	    if ((i = (int)fmt_ptr->addr[6]) > 0)		/* %r */
-	    {
-		if (regmatch.startp[i] == NULL)
-		    continue;
-		tail = regmatch.startp[i];
-	    }
-	    if ((i = (int)fmt_ptr->addr[7]) > 0)		/* %p */
-	    {
-		char_u	*match_ptr;
-
-		if (regmatch.startp[i] == NULL || regmatch.endp[i] == NULL)
-		    continue;
-		fields->col = 0;
-		for (match_ptr = regmatch.startp[i];
-			match_ptr != regmatch.endp[i]; ++match_ptr)
-		{
-		    ++fields->col;
-		    if (*match_ptr == TAB)
-		    {
-			fields->col += 7;
-			fields->col -= fields->col % 8;
-		    }
-		}
-		++fields->col;
-		fields->use_viscol = TRUE;
-	    }
-	    if ((i = (int)fmt_ptr->addr[8]) > 0)		/* %v */
-	    {
-		if (regmatch.startp[i] == NULL)
-		    continue;
-		fields->col = (int)atol((char *)regmatch.startp[i]);
-		fields->use_viscol = TRUE;
-	    }
-	    if ((i = (int)fmt_ptr->addr[9]) > 0)		/* %s */
-	    {
-		if (regmatch.startp[i] == NULL || regmatch.endp[i] == NULL)
-		    continue;
-		len = (int)(regmatch.endp[i] - regmatch.startp[i]);
-		if (len > CMDBUFFSIZE - 5)
-		    len = CMDBUFFSIZE - 5;
-		STRCPY(fields->pattern, "^\\V");
-		STRNCAT(fields->pattern, regmatch.startp[i], len);
-		fields->pattern[len + 3] = '\\';
-		fields->pattern[len + 4] = '$';
-		fields->pattern[len + 5] = NUL;
-	    }
+	status = qf_parse_get_fields(linebuf, linelen, fmt_ptr, fields,
+				qfl->qf_multiline, qfl->qf_multiscan, &tail);
+	if (status == QF_NOMEM)
+	    return status;
+	if (status == QF_OK)
 	    break;
-	}
     }
     qfl->qf_multiscan = FALSE;
 
@@ -1017,34 +1287,16 @@ restofline:
     {
 	if (fmt_ptr != NULL)
 	{
-	    if (idx == 'D')				/* enter directory */
-	    {
-		if (*fields->namebuf == NUL)
-		{
-		    EMSG(_("E379: Missing or empty directory name"));
-		    return QF_FAIL;
-		}
-		qfl->qf_directory =
-		    qf_push_dir(fields->namebuf, &qfl->qf_dir_stack, FALSE);
-		if (qfl->qf_directory == NULL)
-		    return QF_FAIL;
-	    }
-	    else if (idx == 'X')			/* leave directory */
-		qfl->qf_directory = qf_pop_dir(&qfl->qf_dir_stack);
+	    /* 'D' and 'X' directory specifiers */
+	    status = qf_parse_dir_pfx(idx, fields, qfl);
+	    if (status != QF_OK)
+		return status;
 	}
-	fields->namebuf[0] = NUL;	/* no match found, remove file name */
-	fields->lnum = 0;			/* don't jump to this line */
-	fields->valid = FALSE;
-	if (linelen >= fields->errmsglen)
-	{
-	    /* linelen + null terminator */
-	    if ((fields->errmsg = vim_realloc(fields->errmsg,
-			    linelen + 1)) == NULL)
-		return QF_NOMEM;
-	    fields->errmsglen = linelen + 1;
-	}
-	/* copy whole line to error message */
-	vim_strncpy(fields->errmsg, linebuf, linelen);
+
+	status = qf_parse_line_nomatch(linebuf, linelen, fields);
+	if (status != QF_OK)
+	    return status;
+
 	if (fmt_ptr == NULL)
 	    qfl->qf_multiline = qfl->qf_multiignore = FALSE;
     }
@@ -1061,67 +1313,15 @@ restofline:
 	}
 	else if (vim_strchr((char_u *)"CZ", idx) != NULL)
 	{				/* continuation of multi-line msg */
-	    if (!qfl->qf_multiignore)
-	    {
-		qfline_T *qfprev = qfl->qf_last;
-
-		if (qfprev == NULL)
-		    return QF_FAIL;
-		if (*fields->errmsg && !qfl->qf_multiignore)
-		{
-		    len = (int)STRLEN(qfprev->qf_text);
-		    if ((ptr = alloc((unsigned)(len + STRLEN(fields->errmsg) + 2)))
-			    == NULL)
-			return QF_FAIL;
-		    STRCPY(ptr, qfprev->qf_text);
-		    vim_free(qfprev->qf_text);
-		    qfprev->qf_text = ptr;
-		    *(ptr += len) = '\n';
-		    STRCPY(++ptr, fields->errmsg);
-		}
-		if (qfprev->qf_nr == -1)
-		    qfprev->qf_nr = fields->enr;
-		if (vim_isprintc(fields->type) && !qfprev->qf_type)
-		    /* only printable chars allowed */
-		    qfprev->qf_type = fields->type;
-
-		if (!qfprev->qf_lnum)
-		    qfprev->qf_lnum = fields->lnum;
-		if (!qfprev->qf_col)
-		    qfprev->qf_col = fields->col;
-		qfprev->qf_viscol = fields->use_viscol;
-		if (!qfprev->qf_fnum)
-		    qfprev->qf_fnum = qf_get_fnum(qi, qf_idx,
-			    qfl->qf_directory,
-			    *fields->namebuf || qfl->qf_directory != NULL
-			    ? fields->namebuf
-			    : qfl->qf_currfile != NULL && fields->valid
-			    ? qfl->qf_currfile : 0);
-	    }
-	    if (idx == 'Z')
-		qfl->qf_multiline = qfl->qf_multiignore = FALSE;
-	    line_breakcheck();
-	    return QF_IGNORE_LINE;
+	    status = qf_parse_multiline_pfx(qi, qf_idx, idx, qfl, fields);
+	    if (status != QF_OK)
+		return status;
 	}
 	else if (vim_strchr((char_u *)"OPQ", idx) != NULL)
-	{
-	    /* global file names */
-	    fields->valid = FALSE;
-	    if (*fields->namebuf == NUL || mch_getperm(fields->namebuf) >= 0)
-	    {
-		if (*fields->namebuf && idx == 'P')
-		    qfl->qf_currfile =
-			qf_push_dir(fields->namebuf, &qfl->qf_file_stack, TRUE);
-		else if (idx == 'Q')
-		    qfl->qf_currfile = qf_pop_dir(&qfl->qf_file_stack);
-		*fields->namebuf = NUL;
-		if (tail && *tail)
-		{
-		    STRMOVE(IObuff, skipwhite(tail));
-		    qfl->qf_multiscan = TRUE;
-		    goto restofline;
-		}
-	    }
+	{				/* global file names */
+	    status = qf_parse_file_pfx(idx, fields, qfl, tail);
+	    if (status == QF_MULTISCAN)
+		goto restofline;
 	}
 	if (fmt_ptr->flags == '-')	/* generally exclude this line */
 	{
@@ -1181,11 +1381,12 @@ qf_init_ext(
 	convert_setup(&state.vc, enc, p_enc);
 #endif
     fields.namebuf = alloc_id(CMDBUFFSIZE + 1, aid_qf_namebuf);
+    fields.module = alloc_id(CMDBUFFSIZE + 1, aid_qf_module);
     fields.errmsglen = CMDBUFFSIZE + 1;
     fields.errmsg = alloc_id(fields.errmsglen, aid_qf_errmsg);
     fields.pattern = alloc_id(CMDBUFFSIZE + 1, aid_qf_pattern);
     if (fields.namebuf == NULL || fields.errmsg == NULL
-		|| fields.pattern == NULL)
+		|| fields.pattern == NULL || fields.module == NULL)
 	goto qf_init_end;
 
     if (efile != NULL && (state.fd = mch_fopen((char *)efile, "r")) == NULL)
@@ -1282,6 +1483,7 @@ qf_init_ext(
 			    ? fields.namebuf
 			    : ((qfl->qf_currfile != NULL && fields.valid)
 				? qfl->qf_currfile : (char_u *)NULL),
+			fields.module,
 			0,
 			fields.errmsg,
 			fields.lnum,
@@ -1327,6 +1529,7 @@ qf_init_end:
     if (state.fd != NULL)
 	fclose(state.fd);
     vim_free(fields.namebuf);
+    vim_free(fields.module);
     vim_free(fields.errmsg);
     vim_free(fields.pattern);
     vim_free(state.growbuf);
@@ -1341,6 +1544,10 @@ qf_init_end:
     return retval;
 }
 
+/*
+ * Set the title of the specified quickfix list. Frees the previous title.
+ * Prepends ':' to the title.
+ */
     static void
 qf_store_title(qf_info_T *qi, int qf_idx, char_u *title)
 {
@@ -1352,8 +1559,23 @@ qf_store_title(qf_info_T *qi, int qf_idx, char_u *title)
 
 	qi->qf_lists[qf_idx].qf_title = p;
 	if (p != NULL)
-	    sprintf((char *)p, ":%s", (char *)title);
+	    STRCPY(p, title);
     }
+}
+
+/*
+ * The title of a quickfix/location list is set, by default, to the command
+ * that created the quickfix list with the ":" prefix.
+ * Create a quickfix list title string by prepending ":" to a user command.
+ * Returns a pointer to a static buffer with the title.
+ */
+    static char_u *
+qf_cmdtitle(char_u *cmd)
+{
+    static char_u qftitle_str[IOSIZE];
+
+    vim_snprintf((char *)qftitle_str, IOSIZE, ":%s", (char *)cmd);
+    return qftitle_str;
 }
 
 /*
@@ -1416,6 +1638,9 @@ ll_free_all(qf_info_T **pqi)
     }
 }
 
+/*
+ * Free all the quickfix/location lists in the stack.
+ */
     void
 qf_free_all(win_T *wp)
 {
@@ -1444,6 +1669,7 @@ qf_add_entry(
     int		qf_idx,		/* list index */
     char_u	*dir,		/* optional directory name */
     char_u	*fname,		/* file name or NULL */
+    char_u	*module,	/* module name or NULL */
     int		bufnum,		/* buffer number or zero */
     char_u	*mesg,		/* message */
     long	lnum,		/* line number */
@@ -1483,6 +1709,15 @@ qf_add_entry(
     else if ((qfp->qf_pattern = vim_strsave(pattern)) == NULL)
     {
 	vim_free(qfp->qf_text);
+	vim_free(qfp);
+	return FAIL;
+    }
+    if (module == NULL || *module == NUL)
+	qfp->qf_module = NULL;
+    else if ((qfp->qf_module = vim_strsave(module)) == NULL)
+    {
+	vim_free(qfp->qf_text);
+	vim_free(qfp->qf_pattern);
 	vim_free(qfp);
 	return FAIL;
     }
@@ -1635,6 +1870,7 @@ copy_loclist(win_T *from, win_T *to)
 				 to->w_llist->qf_curlist,
 				 NULL,
 				 NULL,
+				 from_qfp->qf_module,
 				 0,
 				 from_qfp->qf_text,
 				 from_qfp->qf_lnum,
@@ -1867,7 +2103,7 @@ qf_clean_dir_stack(struct dir_stack_T **stackptr)
  * Cleans up intermediate directory entries.
  *
  * TODO: How to solve the following problem?
- * If we have the this directory tree:
+ * If we have this directory tree:
  *     ./
  *     ./aa
  *     ./aa/bb
@@ -1919,7 +2155,7 @@ qf_guess_filepath(qf_info_T *qi, int qf_idx, char_u *filename)
 	vim_free(ds_tmp);
     }
 
-    return ds_ptr==NULL? NULL: ds_ptr->dirname;
+    return ds_ptr == NULL ? NULL : ds_ptr->dirname;
 }
 
 /*
@@ -1948,7 +2184,7 @@ qflist_valid (win_T *wp, int_u qf_id)
 /*
  * When loading a file from the quickfix, the auto commands may modify it.
  * This may invalidate the current quickfix entry.  This function checks
- * whether a entry is still present in the quickfix.
+ * whether an entry is still present in the quickfix list.
  * Similar to location list.
  */
     static int
@@ -2113,6 +2349,21 @@ get_nth_entry(
 }
 
 /*
+ * Find a window displaying a Vim help file.
+ */
+    static win_T *
+qf_find_help_win(void)
+{
+    win_T *wp;
+
+    FOR_ALL_WINDOWS(wp)
+	if (bt_help(wp->w_buffer))
+	    return wp;
+
+    return NULL;
+}
+
+/*
  * Find a help window or open one.
  */
     static int
@@ -2124,9 +2375,7 @@ jump_to_help_window(qf_info_T *qi, int *opened_window)
     if (cmdmod.tab != 0)
 	wp = NULL;
     else
-	FOR_ALL_WINDOWS(wp)
-	    if (bt_help(wp->w_buffer))
-		break;
+	wp = qf_find_help_win();
     if (wp != NULL && wp->w_buffer->b_nwindows > 0)
 	win_enter(wp, TRUE);
     else
@@ -2165,8 +2414,175 @@ jump_to_help_window(qf_info_T *qi, int *opened_window)
 }
 
 /*
- * Find a suitable window for opening a file (qf_fnum) and jump to it.
- * If the file is already opened in a window, jump to it.
+ * Find a non-quickfix window using the given location list.
+ * Returns NULL if a matching window is not found.
+ */
+    static win_T *
+qf_find_win_with_loclist(qf_info_T *ll)
+{
+    win_T	*wp;
+
+    FOR_ALL_WINDOWS(wp)
+	if (wp->w_llist == ll && !bt_quickfix(wp->w_buffer))
+	    return wp;
+
+    return NULL;
+}
+
+/*
+ * Find a window containing a normal buffer
+ */
+    static win_T *
+qf_find_win_with_normal_buf(void)
+{
+    win_T	*wp;
+
+    FOR_ALL_WINDOWS(wp)
+	if (wp->w_buffer->b_p_bt[0] == NUL)
+	    return wp;
+
+    return NULL;
+}
+
+/*
+ * Go to a window in any tabpage containing the specified file.  Returns TRUE
+ * if successfully jumped to the window. Otherwise returns FALSE.
+ */
+    static int
+qf_goto_tabwin_with_file(int fnum)
+{
+    tabpage_T	*tp;
+    win_T	*wp;
+
+    FOR_ALL_TAB_WINDOWS(tp, wp)
+	if (wp->w_buffer->b_fnum == fnum)
+	{
+	    goto_tabpage_win(tp, wp);
+	    return TRUE;
+	}
+
+    return FALSE;
+}
+
+/*
+ * Create a new window to show a file above the quickfix window. Called when
+ * only the quickfix window is present.
+ */
+    static int
+qf_open_new_file_win(qf_info_T *ll_ref)
+{
+    int		flags;
+
+    flags = WSP_ABOVE;
+    if (ll_ref != NULL)
+	flags |= WSP_NEWLOC;
+    if (win_split(0, flags) == FAIL)
+	return FAIL;		/* not enough room for window */
+    p_swb = empty_option;	/* don't split again */
+    swb_flags = 0;
+    RESET_BINDING(curwin);
+    if (ll_ref != NULL)
+    {
+	/* The new window should use the location list from the
+	 * location list window */
+	curwin->w_llist = ll_ref;
+	ll_ref->qf_refcount++;
+    }
+    return OK;
+}
+
+/*
+ * Go to a window that shows the right buffer. If the window is not found, go
+ * to the window just above the location list window. This is used for opening
+ * a file from a location window and not from a quickfix window. If some usable
+ * window is previously found, then it is supplied in 'use_win'.
+ */
+    static void
+qf_goto_win_with_ll_file(win_T *use_win, int qf_fnum, qf_info_T *ll_ref)
+{
+    win_T	*win = use_win;
+
+    if (win == NULL)
+    {
+	/* Find the window showing the selected file */
+	FOR_ALL_WINDOWS(win)
+	    if (win->w_buffer->b_fnum == qf_fnum)
+		break;
+	if (win == NULL)
+	{
+	    /* Find a previous usable window */
+	    win = curwin;
+	    do
+	    {
+		if (win->w_buffer->b_p_bt[0] == NUL)
+		    break;
+		if (win->w_prev == NULL)
+		    win = lastwin;	/* wrap around the top */
+		else
+		    win = win->w_prev; /* go to previous window */
+	    } while (win != curwin);
+	}
+    }
+    win_goto(win);
+
+    /* If the location list for the window is not set, then set it
+     * to the location list from the location window */
+    if (win->w_llist == NULL)
+    {
+	win->w_llist = ll_ref;
+	ll_ref->qf_refcount++;
+    }
+}
+
+/*
+ * Go to a window that shows the specified file. If a window is not found, go
+ * to the window just above the quickfix window. This is used for opening a
+ * file from a quickfix window and not from a location window.
+ */
+    static void
+qf_goto_win_with_qfl_file(int qf_fnum)
+{
+    win_T	*win;
+    win_T	*altwin;
+
+    win = curwin;
+    altwin = NULL;
+    for (;;)
+    {
+	if (win->w_buffer->b_fnum == qf_fnum)
+	    break;
+	if (win->w_prev == NULL)
+	    win = lastwin;	/* wrap around the top */
+	else
+	    win = win->w_prev;	/* go to previous window */
+
+	if (IS_QF_WINDOW(win))
+	{
+	    /* Didn't find it, go to the window before the quickfix
+	     * window. */
+	    if (altwin != NULL)
+		win = altwin;
+	    else if (curwin->w_prev != NULL)
+		win = curwin->w_prev;
+	    else
+		win = curwin->w_next;
+	    break;
+	}
+
+	/* Remember a usable window. */
+	if (altwin == NULL && !win->w_p_pvw
+		&& win->w_buffer->b_p_bt[0] == NUL)
+	    altwin = win;
+    }
+
+    win_goto(win);
+}
+
+/*
+ * Find a suitable window for opening a file (qf_fnum) from the
+ * quickfix/location list and jump to it.  If the file is already opened in a
+ * window, jump to it. Otherwise open a new window to display the file. This is
+ * called from either a quickfix or a location list window.
  */
     static int
 qf_jump_to_usable_window(int qf_fnum, int *opened_window)
@@ -2174,35 +2590,25 @@ qf_jump_to_usable_window(int qf_fnum, int *opened_window)
     win_T	*usable_win_ptr = NULL;
     int		usable_win;
     qf_info_T	*ll_ref;
-    int		flags;
     win_T	*win;
-    win_T	*altwin;
 
     usable_win = 0;
 
     ll_ref = curwin->w_llist_ref;
     if (ll_ref != NULL)
     {
-	/* Find a window using the same location list that is not a
-	 * quickfix window. */
-	FOR_ALL_WINDOWS(usable_win_ptr)
-	    if (usable_win_ptr->w_llist == ll_ref
-		    && !bt_quickfix(usable_win_ptr->w_buffer))
-	    {
-		usable_win = 1;
-		break;
-	    }
+	/* Find a non-quickfix window with this location list */
+	usable_win_ptr = qf_find_win_with_loclist(ll_ref);
+	if (usable_win_ptr != NULL)
+	    usable_win = 1;
     }
 
     if (!usable_win)
     {
 	/* Locate a window showing a normal buffer */
-	FOR_ALL_WINDOWS(win)
-	    if (win->w_buffer->b_p_bt[0] == NUL)
-	    {
-		usable_win = 1;
-		break;
-	    }
+	win = qf_find_win_with_normal_buf();
+	if (win != NULL)
+	    usable_win = 1;
     }
 
     /*
@@ -2210,21 +2616,7 @@ qf_jump_to_usable_window(int qf_fnum, int *opened_window)
      * then search in other tabs.
      */
     if (!usable_win && (swb_flags & SWB_USETAB))
-    {
-	tabpage_T	*tp;
-	win_T	*wp;
-
-	FOR_ALL_TAB_WINDOWS(tp, wp)
-	{
-	    if (wp->w_buffer->b_fnum == qf_fnum)
-	    {
-		goto_tabpage_win(tp, wp);
-		usable_win = 1;
-		goto win_found;
-	    }
-	}
-    }
-win_found:
+	usable_win = qf_goto_tabwin_with_file(qf_fnum);
 
     /*
      * If there is only one window and it is the quickfix window, create a
@@ -2232,99 +2624,16 @@ win_found:
      */
     if ((ONE_WINDOW && bt_quickfix(curbuf)) || !usable_win)
     {
-	flags = WSP_ABOVE;
-	if (ll_ref != NULL)
-	    flags |= WSP_NEWLOC;
-	if (win_split(0, flags) == FAIL)
-	    return FAIL;		/* not enough room for window */
+	if (qf_open_new_file_win(ll_ref) != OK)
+	    return FAIL;
 	*opened_window = TRUE;	/* close it when fail */
-	p_swb = empty_option;	/* don't split again */
-	swb_flags = 0;
-	RESET_BINDING(curwin);
-	if (ll_ref != NULL)
-	{
-	    /* The new window should use the location list from the
-	     * location list window */
-	    curwin->w_llist = ll_ref;
-	    ll_ref->qf_refcount++;
-	}
     }
     else
     {
-	if (curwin->w_llist_ref != NULL)
-	{
-	    /* In a location window */
-	    win = usable_win_ptr;
-	    if (win == NULL)
-	    {
-		/* Find the window showing the selected file */
-		FOR_ALL_WINDOWS(win)
-		    if (win->w_buffer->b_fnum == qf_fnum)
-			break;
-		if (win == NULL)
-		{
-		    /* Find a previous usable window */
-		    win = curwin;
-		    do
-		    {
-			if (win->w_buffer->b_p_bt[0] == NUL)
-			    break;
-			if (win->w_prev == NULL)
-			    win = lastwin;	/* wrap around the top */
-			else
-			    win = win->w_prev; /* go to previous window */
-		    } while (win != curwin);
-		}
-	    }
-	    win_goto(win);
-
-	    /* If the location list for the window is not set, then set it
-	     * to the location list from the location window */
-	    if (win->w_llist == NULL)
-	    {
-		win->w_llist = ll_ref;
-		ll_ref->qf_refcount++;
-	    }
-	}
-	else
-	{
-
-	    /*
-	     * Try to find a window that shows the right buffer.
-	     * Default to the window just above the quickfix buffer.
-	     */
-	    win = curwin;
-	    altwin = NULL;
-	    for (;;)
-	    {
-		if (win->w_buffer->b_fnum == qf_fnum)
-		    break;
-		if (win->w_prev == NULL)
-		    win = lastwin;	/* wrap around the top */
-		else
-		    win = win->w_prev;	/* go to previous window */
-
-		if (IS_QF_WINDOW(win))
-		{
-		    /* Didn't find it, go to the window before the quickfix
-		     * window. */
-		    if (altwin != NULL)
-			win = altwin;
-		    else if (curwin->w_prev != NULL)
-			win = curwin->w_prev;
-		    else
-			win = curwin->w_next;
-		    break;
-		}
-
-		/* Remember a usable window. */
-		if (altwin == NULL && !win->w_p_pvw
-			&& win->w_buffer->b_p_bt[0] == NUL)
-		    altwin = win;
-	    }
-
-	    win_goto(win);
-	}
+	if (curwin->w_llist_ref != NULL)	/* In a location window */
+	    qf_goto_win_with_ll_file(usable_win_ptr, qf_fnum, ll_ref);
+	else					/* In a quickfix window */
+	    qf_goto_win_with_qfl_file(qf_fnum);
     }
 
     return OK;
@@ -2402,8 +2711,8 @@ qf_jump_edit_buffer(
 }
 
 /*
- * Goto the error line in the current file using either line/column number or a
- * search pattern.
+ * Go to the error line in the current file using either line/column number or
+ * a search pattern.
  */
     static void
 qf_jump_goto_line(
@@ -2736,6 +3045,9 @@ qf_list(exarg_T *eap)
 	    idx2 = (-idx2 > i) ? 0 : idx2 + i + 1;
     }
 
+    /* Shorten all the file names, so that it is easy to read */
+    shorten_fnames(FALSE);
+
     /*
      * Get the attributes for the different quickfix highlight items.  Note
      * that this depends on syntax items defined in the qf.vim syntax file
@@ -2762,18 +3074,22 @@ qf_list(exarg_T *eap)
 		break;
 
 	    fname = NULL;
-	    if (qfp->qf_fnum != 0
-			      && (buf = buflist_findnr(qfp->qf_fnum)) != NULL)
-	    {
-		fname = buf->b_fname;
-		if (qfp->qf_type == 1)	/* :helpgrep */
-		    fname = gettail(fname);
+	    if (qfp->qf_module != NULL && *qfp->qf_module != NUL)
+		vim_snprintf((char *)IObuff, IOSIZE, "%2d %s", i, (char *)qfp->qf_module);
+	    else {
+		if (qfp->qf_fnum != 0
+				&& (buf = buflist_findnr(qfp->qf_fnum)) != NULL)
+		{
+		    fname = buf->b_fname;
+		    if (qfp->qf_type == 1)	/* :helpgrep */
+			fname = gettail(fname);
+		}
+		if (fname == NULL)
+		    sprintf((char *)IObuff, "%2d", i);
+		else
+		    vim_snprintf((char *)IObuff, IOSIZE, "%2d %s",
+								i, (char *)fname);
 	    }
-	    if (fname == NULL)
-		sprintf((char *)IObuff, "%2d", i);
-	    else
-		vim_snprintf((char *)IObuff, IOSIZE, "%2d %s",
-							    i, (char *)fname);
 	    msg_outtrans_attr(IObuff, i == qi->qf_lists[qi->qf_curlist].qf_index
 					   ? HL_ATTR(HLF_QFL) : qfFileAttr);
 
@@ -2841,6 +3157,10 @@ qf_fmt_text(char_u *text, char_u *buf, int bufsize)
     buf[i] = NUL;
 }
 
+/*
+ * Display information (list number, list size and the title) about a
+ * quickfix/location list.
+ */
     static void
 qf_msg(qf_info_T *qi, int which, char *lead)
 {
@@ -2920,6 +3240,9 @@ qf_age(exarg_T *eap)
     qf_update_buffer(qi, NULL);
 }
 
+/*
+ * Display the information about all the quickfix/location lists in the stack
+ */
     void
 qf_history(exarg_T *eap)
 {
@@ -2954,9 +3277,10 @@ qf_free_items(qf_info_T *qi, int idx)
 	qfpnext = qfp->qf_next;
 	if (!stop)
 	{
+	    vim_free(qfp->qf_module);
 	    vim_free(qfp->qf_text);
-	    stop = (qfp == qfpnext);
 	    vim_free(qfp->qf_pattern);
+	    stop = (qfp == qfpnext);
 	    vim_free(qfp);
 	    if (stop)
 		/* Somehow qf_count may have an incorrect value, set it to 1
@@ -3542,6 +3866,10 @@ qf_fill_buffer(qf_info_T *qi, buf_T *buf, qfline_T *old_last)
     /* Check if there is anything to display */
     if (qi->qf_curlist < qi->qf_listcount)
     {
+	char_u	dirname[MAXPATHL];
+
+	*dirname = NUL;
+
 	/* Add one line for each error */
 	if (old_last == NULL)
 	{
@@ -3555,14 +3883,29 @@ qf_fill_buffer(qf_info_T *qi, buf_T *buf, qfline_T *old_last)
 	}
 	while (lnum < qi->qf_lists[qi->qf_curlist].qf_count)
 	{
-	    if (qfp->qf_fnum != 0
+	    if (qfp->qf_module != NULL)
+	    {
+		STRCPY(IObuff, qfp->qf_module);
+		len = (int)STRLEN(IObuff);
+	    }
+	    else if (qfp->qf_fnum != 0
 		    && (errbuf = buflist_findnr(qfp->qf_fnum)) != NULL
 		    && errbuf->b_fname != NULL)
 	    {
 		if (qfp->qf_type == 1)	/* :helpgrep */
 		    STRCPY(IObuff, gettail(errbuf->b_fname));
 		else
+		{
+		    /* shorten the file name if not done already */
+		    if (errbuf->b_sfname == NULL
+					   || mch_isFullName(errbuf->b_sfname))
+		    {
+			if (*dirname == NUL)
+			    mch_dirname(dirname, MAXPATHL);
+			shorten_buf_fname(errbuf, dirname, FALSE);
+		    }
 		    STRCPY(IObuff, errbuf->b_fname);
+		}
 		len = (int)STRLEN(IObuff);
 	    }
 	    else
@@ -3640,6 +3983,9 @@ qf_fill_buffer(qf_info_T *qi, buf_T *buf, qfline_T *old_last)
     KeyTyped = old_KeyTyped;
 }
 
+/*
+ * For every change made to the quickfix list, update the changed tick.
+ */
     static void
 qf_list_changed(qf_info_T *qi, int qf_idx)
 {
@@ -3750,7 +4096,7 @@ ex_make(exarg_T *eap)
 			    && eap->cmdidx != CMD_lmake) ? p_gefm : p_efm,
 					   (eap->cmdidx != CMD_grepadd
 					    && eap->cmdidx != CMD_lgrepadd),
-					   *eap->cmdlinep, enc);
+					   qf_cmdtitle(*eap->cmdlinep), enc);
     if (wp != NULL)
 	qi = GET_LOC_LIST(wp);
     if (res >= 0 && qi != NULL)
@@ -4143,7 +4489,8 @@ ex_cfile(exarg_T *eap)
      * quickfix list then a new list is created.
      */
     res = qf_init(wp, p_ef, p_efm, (eap->cmdidx != CMD_caddfile
-			&& eap->cmdidx != CMD_laddfile), *eap->cmdlinep, enc);
+			&& eap->cmdidx != CMD_laddfile),
+			qf_cmdtitle(*eap->cmdlinep), enc);
     if (wp != NULL)
 	qi = GET_LOC_LIST(wp);
     if (res >= 0 && qi != NULL)
@@ -4350,6 +4697,7 @@ vgr_match_buflines(
 			qi->qf_curlist,
 			NULL,       /* dir */
 			fname,
+			NULL,
 			duplicate_name ? 0 : buf->b_fnum,
 			ml_get_buf(buf,
 			    regmatch->startpos[0].lnum + lnum, FALSE),
@@ -4478,7 +4826,7 @@ ex_vimgrep(exarg_T *eap)
 
     /* Get the search pattern: either white-separated or enclosed in // */
     regmatch.regprog = NULL;
-    title = vim_strsave(*eap->cmdlinep);
+    title = vim_strsave(qf_cmdtitle(*eap->cmdlinep));
     p = skip_vimgrep_pat(eap->arg, &s, &flags);
     if (p == NULL)
     {
@@ -4502,7 +4850,7 @@ ex_vimgrep(exarg_T *eap)
 		&& eap->cmdidx != CMD_lvimgrepadd)
 					|| qi->qf_curlist == qi->qf_listcount)
 	/* make place for a new list */
-	qf_new_list(qi, title != NULL ? title : *eap->cmdlinep);
+	qf_new_list(qi, title != NULL ? title : qf_cmdtitle(*eap->cmdlinep));
 
     /* parse the list of arguments */
     if (get_arglist_exp(p, &fcount, &fnames, TRUE) == FAIL)
@@ -4557,7 +4905,7 @@ ex_vimgrep(exarg_T *eap)
 
 	/* Check whether the quickfix list is still valid. When loading a
 	 * buffer above, autocommands might have changed the quickfix list. */
-	if (!vgr_qflist_valid(wp, qi, save_qfid, *eap->cmdlinep))
+	if (!vgr_qflist_valid(wp, qi, save_qfid, qf_cmdtitle(*eap->cmdlinep)))
 	{
 	    FreeWild(fcount, fnames);
 	    goto theend;
@@ -4917,6 +5265,8 @@ get_errorlist(qf_info_T *qi_arg, win_T *wp, int qf_idx, list_T *list)
 	  || dict_add_nr_str(dict, "col",   (long)qfp->qf_col, NULL) == FAIL
 	  || dict_add_nr_str(dict, "vcol",  (long)qfp->qf_viscol, NULL) == FAIL
 	  || dict_add_nr_str(dict, "nr",    (long)qfp->qf_nr, NULL) == FAIL
+	  || dict_add_nr_str(dict, "module",  0L,
+		   qfp->qf_module == NULL ? (char_u *)"" : qfp->qf_module) == FAIL
 	  || dict_add_nr_str(dict, "pattern",  0L,
 	     qfp->qf_pattern == NULL ? (char_u *)"" : qfp->qf_pattern) == FAIL
 	  || dict_add_nr_str(dict, "text",  0L,
@@ -4946,7 +5296,7 @@ enum {
     QF_GETLIST_IDX	= 0x40,
     QF_GETLIST_SIZE	= 0x80,
     QF_GETLIST_TICK	= 0x100,
-    QF_GETLIST_ALL	= 0x1FF
+    QF_GETLIST_ALL	= 0x1FF,
 };
 
 /*
@@ -5295,7 +5645,7 @@ qf_add_entries(
 {
     listitem_T	*li;
     dict_T	*d;
-    char_u	*filename, *pattern, *text, *type;
+    char_u	*filename, *module, *pattern, *text, *type;
     int		bufnum;
     long	lnum;
     int		col, nr;
@@ -5330,6 +5680,7 @@ qf_add_entries(
 	    continue;
 
 	filename = get_dict_string(d, (char_u *)"filename", TRUE);
+	module = get_dict_string(d, (char_u *)"module", TRUE);
 	bufnum = (int)get_dict_number(d, (char_u *)"bufnr");
 	lnum = (int)get_dict_number(d, (char_u *)"lnum");
 	col = (int)get_dict_number(d, (char_u *)"col");
@@ -5366,6 +5717,7 @@ qf_add_entries(
 			       qf_idx,
 			       NULL,	    /* dir */
 			       filename,
+			       module,
 			       bufnum,
 			       text,
 			       lnum,
@@ -5377,6 +5729,7 @@ qf_add_entries(
 			       valid);
 
 	vim_free(filename);
+	vim_free(module);
 	vim_free(pattern);
 	vim_free(text);
 	vim_free(type);
@@ -5504,16 +5857,6 @@ qf_setprop_items(qf_info_T *qi, int qf_idx, dictitem_T *di, int action)
     title_save = vim_strsave(qi->qf_lists[qf_idx].qf_title);
     retval = qf_add_entries(qi, qf_idx, di->di_tv.vval.v_list,
 	    title_save, action == ' ' ? 'a' : action);
-    if (action == 'r')
-    {
-	/*
-	 * When replacing the quickfix list entries using
-	 * qf_add_entries(), the title is set with a ':' prefix.
-	 * Restore the title with the saved title.
-	 */
-	vim_free(qi->qf_lists[qf_idx].qf_title);
-	qi->qf_lists[qf_idx].qf_title = vim_strsave(title_save);
-    }
     vim_free(title_save);
 
     return retval;
@@ -5576,7 +5919,7 @@ qf_setprop_context(qf_info_T *qi, int qf_idx, dictitem_T *di)
 /*
  * Set quickfix/location list properties (title, items, context).
  * Also used to add items from parsing a list of lines.
- * Used by the setqflist() and setloclist() VimL functions.
+ * Used by the setqflist() and setloclist() Vim script functions.
  */
     static int
 qf_set_properties(qf_info_T *qi, dict_T *what, int action, char_u *title)
@@ -5724,6 +6067,9 @@ set_errorlist(
     return retval;
 }
 
+/*
+ * Mark the context as in use for all the lists in a quickfix stack.
+ */
     static int
 mark_quickfix_ctx(qf_info_T *qi, int copyID)
 {
@@ -5846,7 +6192,7 @@ ex_cbuffer(exarg_T *eap)
 	    EMSG(_(e_invrange));
 	else
 	{
-	    char_u *qf_title = *eap->cmdlinep;
+	    char_u *qf_title = qf_cmdtitle(*eap->cmdlinep);
 
 	    if (buf->b_sfname)
 	    {
@@ -5924,8 +6270,8 @@ ex_cexpr(exarg_T *eap)
 	    res = qf_init_ext(qi, qi->qf_curlist, NULL, NULL, tv, p_efm,
 			    (eap->cmdidx != CMD_caddexpr
 			     && eap->cmdidx != CMD_laddexpr),
-				 (linenr_T)0, (linenr_T)0, *eap->cmdlinep,
-				 NULL);
+				 (linenr_T)0, (linenr_T)0,
+				 qf_cmdtitle(*eap->cmdlinep), NULL);
 	    if (res >= 0)
 		qf_list_changed(qi, qi->qf_curlist);
 	    if (au_name != NULL)
@@ -5956,9 +6302,7 @@ hgr_get_ll(int *new_ll)
 	wp = curwin;
     else
 	/* Find an existing help window */
-	FOR_ALL_WINDOWS(wp)
-	    if (bt_help(wp->w_buffer))
-		break;
+	wp = qf_find_help_win();
 
     if (wp == NULL)	    /* Help window not found */
 	qi = NULL;
@@ -6023,6 +6367,7 @@ hgr_search_file(
 			qi->qf_curlist,
 			NULL,	/* dir */
 			fname,
+			NULL,
 			0,
 			line,
 			lnum,
@@ -6087,7 +6432,7 @@ hgr_search_files_in_dir(
 	    /* Skip files for a different language. */
 	    if (lang != NULL
 		    && STRNICMP(lang, fnames[fi]
-			+ STRLEN(fnames[fi]) - 3, 2) != 0
+				    + STRLEN(fnames[fi]) - 3, 2) != 0
 		    && !(STRNICMP(lang, "en", 2) == 0
 			&& STRNICMP("txt", fnames[fi]
 			    + STRLEN(fnames[fi]) - 3, 3) == 0))
@@ -6105,7 +6450,10 @@ hgr_search_files_in_dir(
 }
 
 /*
- * Search for a pattern in all the help files in the 'runtimepath'.
+ * Search for a pattern in all the help files in the 'runtimepath'
+ * and add the matches to a quickfix list.
+ * 'arg' is the language specifier.  If supplied, then only matches in the
+ * specified language are found.
  */
     static void
 hgr_search_in_rtp(qf_info_T *qi, regmatch_T *p_regmatch, char_u *arg)
@@ -6130,7 +6478,7 @@ hgr_search_in_rtp(qf_info_T *qi, regmatch_T *p_regmatch, char_u *arg)
     lang = check_help_lang(arg);
 #endif
 
-    /* Go through all directories in 'runtimepath' */
+    /* Go through all the directories in 'runtimepath' */
     p = p_rtp;
     while (*p != NUL && !got_int)
     {
@@ -6195,7 +6543,7 @@ ex_helpgrep(exarg_T *eap)
     if (regmatch.regprog != NULL)
     {
 	/* create a new quickfix list */
-	qf_new_list(qi, *eap->cmdlinep);
+	qf_new_list(qi, qf_cmdtitle(*eap->cmdlinep));
 
 	hgr_search_in_rtp(qi, &regmatch, eap->arg);
 
