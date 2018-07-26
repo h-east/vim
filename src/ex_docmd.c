@@ -3764,7 +3764,7 @@ set_one_cmd_context(
 	     * A full match ~user<Tab> will be replaced by user's home
 	     * directory i.e. something like ~user<Tab> -> /home/user/ */
 	    if (*p == NUL && p > xp->xp_pattern + 1
-				       && match_user(xp->xp_pattern + 1) == 1)
+				       && match_user(xp->xp_pattern + 1) >= 1)
 	    {
 		xp->xp_context = EXPAND_USER;
 		++xp->xp_pattern;
@@ -4056,8 +4056,16 @@ set_one_cmd_context(
 	case CMD_unlet:
 	    while ((xp->xp_pattern = vim_strchr(arg, ' ')) != NULL)
 		arg = xp->xp_pattern + 1;
+
 	    xp->xp_context = EXPAND_USER_VARS;
 	    xp->xp_pattern = arg;
+
+	    if (*xp->xp_pattern == '$')
+	    {
+		xp->xp_context = EXPAND_ENV_VARS;
+		++xp->xp_pattern;
+	    }
+
 	    break;
 
 	case CMD_function:
@@ -5318,7 +5326,9 @@ get_bad_opt(char_u *p, exarg_T *eap)
 	eap->bad_char = BAD_DROP;
     else if (MB_BYTE2LEN(*p) == 1 && p[1] == NUL)
 	eap->bad_char = *p;
-    return FAIL;
+    else
+	return FAIL;
+    return OK;
 }
 #endif
 
@@ -5481,7 +5491,7 @@ ex_abclear(exarg_T *eap)
 ex_autocmd(exarg_T *eap)
 {
     /*
-     * Disallow auto commands from .exrc and .vimrc in current
+     * Disallow autocommands from .exrc and .vimrc in current
      * directory for security reasons.
      */
     if (secure)
@@ -7341,7 +7351,8 @@ ex_close(exarg_T *eap)
 	{
 	    if (eap->addr_count == 0)
 		ex_win_close(eap->forceit, curwin, NULL);
-	    else {
+	    else
+	    {
 		FOR_ALL_WINDOWS(win)
 		{
 		    winnr++;
@@ -8189,6 +8200,9 @@ ex_splitview(exarg_T *eap)
 #ifdef FEAT_BROWSE
     int		browse_flag = cmdmod.browse;
 #endif
+    int		use_tab = eap->cmdidx == CMD_tabedit
+		       || eap->cmdidx == CMD_tabfind
+		       || eap->cmdidx == CMD_tabnew;
 
 #ifdef FEAT_GUI
     need_mouse_correct = TRUE;
@@ -8237,7 +8251,9 @@ ex_splitview(exarg_T *eap)
 	}
 	else
 	{
-	    fname = do_browse(0, (char_u *)_("Edit File in new window"),
+	    fname = do_browse(0, (char_u *)(use_tab
+			? _("Edit File in new tab page")
+			: _("Edit File in new window")),
 					  eap->arg, NULL, NULL, NULL, curbuf);
 	    if (fname == NULL)
 		goto theend;
@@ -8250,9 +8266,7 @@ ex_splitview(exarg_T *eap)
     /*
      * Either open new tab page or split the window.
      */
-    if (eap->cmdidx == CMD_tabedit
-	    || eap->cmdidx == CMD_tabfind
-	    || eap->cmdidx == CMD_tabnew)
+    if (use_tab)
     {
 	if (win_new_tabpage(cmdmod.tab != 0 ? cmdmod.tab
 			 : eap->addr_count == 0 ? 0
@@ -9143,6 +9157,11 @@ do_sleep(long msec)
 	parse_queued_messages();
 #endif
     }
+
+    // If CTRL-C was typed to interrupt the sleep, drop the CTRL-C from the
+    // input buffer, otherwise a following call to input() fails.
+    if (got_int)
+	(void)vpeekc();
 }
 
     static void
@@ -10635,6 +10654,7 @@ eval_vars(
     int		resultlen;
     buf_T	*buf;
     int		valid = VALID_HEAD + VALID_PATH;    /* assume valid result */
+    int		tilde_file = FALSE;
     int		spec_idx;
 #ifdef FEAT_MODIFY_FNAME
     int		skip_mod = FALSE;
@@ -10701,7 +10721,10 @@ eval_vars(
 		    valid = 0;	    /* Must have ":p:h" to be valid */
 		}
 		else
+		{
 		    result = curbuf->b_fname;
+		    tilde_file = STRCMP(result, "~") == 0;
+		}
 		break;
 
 	case SPEC_HASH:		/* '#' or "#99": alternate file */
@@ -10765,7 +10788,10 @@ eval_vars(
 			valid = 0;	    /* Must have ":p:h" to be valid */
 		    }
 		    else
+		    {
 			result = buf->b_fname;
+			tilde_file = STRCMP(result, "~") == 0;
+		    }
 		}
 		break;
 
@@ -10858,7 +10884,7 @@ eval_vars(
 #ifdef FEAT_MODIFY_FNAME
 	else if (!skip_mod)
 	{
-	    valid |= modify_fname(src, usedlen, &result, &resultbuf,
+	    valid |= modify_fname(src, tilde_file, usedlen, &result, &resultbuf,
 								  &resultlen);
 	    if (result == NULL)
 	    {
@@ -11066,9 +11092,12 @@ makeopens(
 #endif
 
     /*
-     * Close all windows but one.
+     * Close all windows and tabs but one.
      */
     if (put_line(fd, "silent only") == FAIL)
+	return FAIL;
+    if ((ssop_flags & SSOP_TABPAGES)
+	    && put_line(fd, "silent tabonly") == FAIL)
 	return FAIL;
 
     /*
@@ -11179,9 +11208,33 @@ makeopens(
      */
     tab_firstwin = firstwin;	/* first window in tab page "tabnr" */
     tab_topframe = topframe;
+    if ((ssop_flags & SSOP_TABPAGES))
+    {
+	int	num_tabs;
+
+	/*
+	 * Similar to ses_win_rec() below, populate the tab pages first so
+	 * later local options won't be copied to the new tabs.
+	 */
+	for (tabnr = 1; ; ++tabnr)
+	{
+	    tabpage_T *tp = find_tabpage(tabnr);
+
+	    if (tp == NULL)	/* done all tab pages */
+		break;
+
+	    if (tabnr > 1 && put_line(fd, "tabnew") == FAIL)
+		return FAIL;
+	}
+
+	num_tabs = tabnr - 1;
+	if (num_tabs > 1 && (fprintf(fd, "tabnext -%d", num_tabs - 1) < 0
+						       || put_eol(fd) == FAIL))
+	    return FAIL;
+    }
     for (tabnr = 1; ; ++tabnr)
     {
-	int	need_tabnew = FALSE;
+	int	need_tabnext = FALSE;
 	int	cnr = 1;
 
 	if ((ssop_flags & SSOP_TABPAGES))
@@ -11201,7 +11254,7 @@ makeopens(
 		tab_topframe = tp->tp_topframe;
 	    }
 	    if (tabnr > 1)
-		need_tabnew = TRUE;
+		need_tabnext = TRUE;
 	}
 
 	/*
@@ -11219,11 +11272,14 @@ makeopens(
 #endif
 		    )
 	    {
-		if (fputs(need_tabnew ? "tabedit " : "edit ", fd) < 0
+		if (need_tabnext && put_line(fd, "tabnext") == FAIL)
+		    return FAIL;
+		need_tabnext = FALSE;
+
+		if (fputs("edit ", fd) < 0
 			      || ses_fname(fd, wp->w_buffer, &ssop_flags, TRUE)
 								       == FAIL)
 		    return FAIL;
-		need_tabnew = FALSE;
 		if (!wp->w_arg_idx_invalid)
 		    edited_win = wp;
 		break;
@@ -11231,7 +11287,7 @@ makeopens(
 	}
 
 	/* If no file got edited create an empty tab page. */
-	if (need_tabnew && put_line(fd, "tabnew") == FAIL)
+	if (need_tabnext && put_line(fd, "tabnext") == FAIL)
 	    return FAIL;
 
 	/*
@@ -11274,7 +11330,10 @@ makeopens(
 	 * winminheight and winminwidth need to be set to avoid an error if the
 	 * user has set winheight or winwidth.
 	 */
-	if (put_line(fd, "set winminheight=1 winheight=1 winminwidth=1 winwidth=1") == FAIL)
+	if (put_line(fd, "set winminheight=0") == FAIL
+		|| put_line(fd, "set winheight=1") == FAIL
+		|| put_line(fd, "set winminwidth=0") == FAIL
+		|| put_line(fd, "set winwidth=1") == FAIL)
 	    return FAIL;
 	if (nr > 1 && ses_winsizes(fd, restore_size, tab_firstwin) == FAIL)
 	    return FAIL;
@@ -11331,7 +11390,7 @@ makeopens(
     /*
      * Wipe out an empty unnamed buffer we started in.
      */
-    if (put_line(fd, "if exists('s:wipebuf') && s:wipebuf != bufnr('%')")
+    if (put_line(fd, "if exists('s:wipebuf') && len(win_findbuf(s:wipebuf)) == 0")
 								       == FAIL)
 	return FAIL;
     if (put_line(fd, "  silent exe 'bwipe ' . s:wipebuf") == FAIL)

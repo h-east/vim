@@ -56,6 +56,13 @@ if exists("v:lang") || &langmenu != ""
       let s:lang = substitute(s:lang, '\.[^.]*', "", "")
       exe "runtime! lang/menu_" . s:lang . "[^a-z]*vim"
 
+      if !exists("did_menu_trans") && s:lang =~ '_'
+	" If the language includes a region try matching without that region.
+	" (e.g. find menu_de.vim if s:lang == de_DE).
+	let langonly = substitute(s:lang, '_.*', "", "")
+	exe "runtime! lang/menu_" . langonly . "[^a-z]*vim"
+      endif
+
       if !exists("did_menu_trans") && strlen($LANG) > 1 && s:lang !~ '^en_us'
 	" On windows locale names are complicated, try using $LANG, it might
 	" have been set by set_init_1().  But don't do this for "en" or "en_us".
@@ -809,7 +816,7 @@ func! s:BMMunge(fname, bnum)
   let name = a:fname
   if name == ''
     if !exists("g:menutrans_no_file")
-      let g:menutrans_no_file = "[No file]"
+      let g:menutrans_no_file = "[No Name]"
     endif
     let name = g:menutrans_no_file
   else

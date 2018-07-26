@@ -126,43 +126,47 @@ static int	fmt_check_par(linenr_T, int *, char_u **, int do_comments);
 static int	fmt_check_par(linenr_T);
 #endif
 
+// Flags for third item in "opchars".
+#define OPF_LINES  1	// operator always works on lines
+#define OPF_CHANGE 2	// operator changes text
+
 /*
  * The names of operators.
  * IMPORTANT: Index must correspond with defines in vim.h!!!
- * The third field indicates whether the operator always works on lines.
+ * The third field holds OPF_ flags.
  */
 static char opchars[][3] =
 {
-    {NUL, NUL, FALSE},	/* OP_NOP */
-    {'d', NUL, FALSE},	/* OP_DELETE */
-    {'y', NUL, FALSE},	/* OP_YANK */
-    {'c', NUL, FALSE},	/* OP_CHANGE */
-    {'<', NUL, TRUE},	/* OP_LSHIFT */
-    {'>', NUL, TRUE},	/* OP_RSHIFT */
-    {'!', NUL, TRUE},	/* OP_FILTER */
-    {'g', '~', FALSE},	/* OP_TILDE */
-    {'=', NUL, TRUE},	/* OP_INDENT */
-    {'g', 'q', TRUE},	/* OP_FORMAT */
-    {':', NUL, TRUE},	/* OP_COLON */
-    {'g', 'U', FALSE},	/* OP_UPPER */
-    {'g', 'u', FALSE},	/* OP_LOWER */
-    {'J', NUL, TRUE},	/* DO_JOIN */
-    {'g', 'J', TRUE},	/* DO_JOIN_NS */
-    {'g', '?', FALSE},	/* OP_ROT13 */
-    {'r', NUL, FALSE},	/* OP_REPLACE */
-    {'I', NUL, FALSE},	/* OP_INSERT */
-    {'A', NUL, FALSE},	/* OP_APPEND */
-    {'z', 'f', TRUE},	/* OP_FOLD */
-    {'z', 'o', TRUE},	/* OP_FOLDOPEN */
-    {'z', 'O', TRUE},	/* OP_FOLDOPENREC */
-    {'z', 'c', TRUE},	/* OP_FOLDCLOSE */
-    {'z', 'C', TRUE},	/* OP_FOLDCLOSEREC */
-    {'z', 'd', TRUE},	/* OP_FOLDDEL */
-    {'z', 'D', TRUE},	/* OP_FOLDDELREC */
-    {'g', 'w', TRUE},	/* OP_FORMAT2 */
-    {'g', '@', FALSE},	/* OP_FUNCTION */
-    {Ctrl_A, NUL, FALSE},	/* OP_NR_ADD */
-    {Ctrl_X, NUL, FALSE},	/* OP_NR_SUB */
+    {NUL, NUL, 0},			// OP_NOP
+    {'d', NUL, OPF_CHANGE},		// OP_DELETE
+    {'y', NUL, 0},			// OP_YANK
+    {'c', NUL, OPF_CHANGE},		// OP_CHANGE
+    {'<', NUL, OPF_LINES | OPF_CHANGE},	// OP_LSHIFT
+    {'>', NUL, OPF_LINES | OPF_CHANGE},	// OP_RSHIFT
+    {'!', NUL, OPF_LINES | OPF_CHANGE},	// OP_FILTER
+    {'g', '~', OPF_CHANGE},		// OP_TILDE
+    {'=', NUL, OPF_LINES | OPF_CHANGE},	// OP_INDENT
+    {'g', 'q', OPF_LINES | OPF_CHANGE},	// OP_FORMAT
+    {':', NUL, OPF_LINES},		// OP_COLON
+    {'g', 'U', OPF_CHANGE},		// OP_UPPER
+    {'g', 'u', OPF_CHANGE},		// OP_LOWER
+    {'J', NUL, OPF_LINES | OPF_CHANGE},	// DO_JOIN
+    {'g', 'J', OPF_LINES | OPF_CHANGE},	// DO_JOIN_NS
+    {'g', '?', OPF_CHANGE},		// OP_ROT13
+    {'r', NUL, OPF_CHANGE},		// OP_REPLACE
+    {'I', NUL, OPF_CHANGE},		// OP_INSERT
+    {'A', NUL, OPF_CHANGE},		// OP_APPEND
+    {'z', 'f', OPF_LINES},		// OP_FOLD
+    {'z', 'o', OPF_LINES},		// OP_FOLDOPEN
+    {'z', 'O', OPF_LINES},		// OP_FOLDOPENREC
+    {'z', 'c', OPF_LINES},		// OP_FOLDCLOSE
+    {'z', 'C', OPF_LINES},		// OP_FOLDCLOSEREC
+    {'z', 'd', OPF_LINES},		// OP_FOLDDEL
+    {'z', 'D', OPF_LINES},		// OP_FOLDDELREC
+    {'g', 'w', OPF_LINES | OPF_CHANGE},	// OP_FORMAT2
+    {'g', '@', OPF_CHANGE},		// OP_FUNCTION
+    {Ctrl_A, NUL, OPF_CHANGE},		// OP_NR_ADD
+    {Ctrl_X, NUL, OPF_CHANGE},		// OP_NR_SUB
 };
 
 /*
@@ -201,7 +205,16 @@ get_op_type(int char1, int char2)
     int
 op_on_lines(int op)
 {
-    return opchars[op][2];
+    return opchars[op][2] & OPF_LINES;
+}
+
+/*
+ * Return TRUE if operator "op" changes text.
+ */
+    int
+op_is_change(int op)
+{
+    return opchars[op][2] & OPF_CHANGE;
 }
 
 /*
@@ -385,6 +398,9 @@ shift_block(oparg_T *oap, int amount)
     char_u		*newp, *oldp;
     int			oldcol = curwin->w_cursor.col;
     int			p_sw = (int)get_sw_value(curbuf);
+#ifdef FEAT_VARTABS
+    int			*p_vts = curbuf->b_p_vts_array;
+#endif
     int			p_ts = (int)curbuf->b_p_ts;
     struct block_def	bd;
     int			incr;
@@ -446,12 +462,19 @@ shift_block(oparg_T *oap, int amount)
 	}
 	/* OK, now total=all the VWS reqd, and textstart points at the 1st
 	 * non-ws char in the block. */
+#ifdef FEAT_VARTABS
+	if (!curbuf->b_p_et)
+	    tabstop_fromto(ws_vcol, ws_vcol + total, p_ts, p_vts, &i, &j);
+	else
+	    j = total;
+#else
 	if (!curbuf->b_p_et)
 	    i = ((ws_vcol % p_ts) + total) / p_ts; /* number of tabs */
 	if (i)
 	    j = ((ws_vcol % p_ts) + total) % p_ts; /* number of spp */
 	else
 	    j = total;
+#endif
 	/* if we're splitting a TAB, allow for it */
 	bd.textcol -= bd.pre_whitesp_c - (bd.startspaces != 0);
 	len = (int)STRLEN(bd.textstart) + 1;
@@ -1091,14 +1114,14 @@ do_record(int c)
     yankreg_T	    *old_y_previous, *old_y_current;
     int		    retval;
 
-    if (Recording == FALSE)	    /* start recording */
+    if (reg_recording == 0)	    /* start recording */
     {
 	/* registers 0-9, a-z and " are allowed */
 	if (c < 0 || (!ASCII_ISALNUM(c) && c != '"'))
 	    retval = FAIL;
 	else
 	{
-	    Recording = c;
+	    reg_recording = c;
 	    showmode();
 	    regname = c;
 	    retval = OK;
@@ -1111,7 +1134,7 @@ do_record(int c)
 	 * needs to be removed again to put it in a register.  exec_reg then
 	 * adds the escaping back later.
 	 */
-	Recording = FALSE;
+	reg_recording = 0;
 	MSG("");
 	p = get_recorded();
 	if (p == NULL)
@@ -1318,7 +1341,7 @@ do_execreg(
 								      == FAIL)
 		return FAIL;
 	}
-	Exec_reg = TRUE;	/* disable the 'q' command */
+	reg_executing = regname == 0 ? '"' : regname; // disable "q" command
     }
     return retval;
 }
@@ -1700,12 +1723,12 @@ yank_do_autocmd(oparg_T *oap, yankreg_T *reg)
 
     buf[0] = (char_u)oap->regname;
     buf[1] = NUL;
-    dict_add_nr_str(v_event, "regname", 0, buf);
+    dict_add_string(v_event, "regname", buf);
 
     buf[0] = get_op_char(oap->op_type);
     buf[1] = get_extra_op_char(oap->op_type);
     buf[2] = NUL;
-    dict_add_nr_str(v_event, "operator", 0, buf);
+    dict_add_string(v_event, "operator", buf);
 
     buf[0] = NUL;
     buf[1] = NUL;
@@ -1718,7 +1741,7 @@ yank_do_autocmd(oparg_T *oap, yankreg_T *reg)
 			     reglen + 1);
 		break;
     }
-    dict_add_nr_str(v_event, "regtype", 0, buf);
+    dict_add_string(v_event, "regtype", buf);
 
     /* Lock the dictionary and its keys */
     dict_set_items_ro(v_event);
@@ -2123,6 +2146,25 @@ mb_adjust_opend(oparg_T *oap)
 #endif
 
 #if defined(FEAT_VISUALEXTRA) || defined(PROTO)
+
+# ifdef FEAT_MBYTE
+/*
+ * Replace the character under the cursor with "c".
+ * This takes care of multi-byte characters.
+ */
+    static void
+replace_character(int c)
+{
+    int n = State;
+
+    State = REPLACE;
+    ins_char(c);
+    State = n;
+    /* Backup to the replaced character. */
+    dec_cursor();
+}
+
+# endif
 /*
  * Replace a whole area with one character.
  */
@@ -2308,12 +2350,7 @@ op_replace(oparg_T *oap, int c)
 		     * with a multi-byte and the other way around. */
 		    if (curwin->w_cursor.lnum == oap->end.lnum)
 			oap->end.col += (*mb_char2len)(c) - (*mb_char2len)(n);
-		    n = State;
-		    State = REPLACE;
-		    ins_char(c);
-		    State = n;
-		    /* Backup to the replaced character. */
-		    dec_cursor();
+		    replace_character(c);
 		}
 		else
 #endif
@@ -2335,7 +2372,7 @@ op_replace(oparg_T *oap, int c)
 			    getvpos(&oap->end, end_vcol);
 		    }
 #endif
-		    PCHAR(curwin->w_cursor, c);
+		    PBYTE(curwin->w_cursor, c);
 		}
 	    }
 #ifdef FEAT_VIRTUALEDIT
@@ -2354,9 +2391,14 @@ op_replace(oparg_T *oap, int c)
 		curwin->w_cursor.col -= (virtcols + 1);
 		for (; virtcols >= 0; virtcols--)
 		{
-		    PCHAR(curwin->w_cursor, c);
-		    if (inc(&curwin->w_cursor) == -1)
-			break;
+#ifdef FEAT_MBYTE
+                   if ((*mb_char2len)(c) > 1)
+		       replace_character(c);
+                   else
+ #endif
+			PBYTE(curwin->w_cursor, c);
+		   if (inc(&curwin->w_cursor) == -1)
+		       break;
 		}
 	    }
 #endif
@@ -2596,7 +2638,7 @@ swapchar(int op_type, pos_T *pos)
 	}
 	else
 #endif
-	    PCHAR(*pos, nc);
+	    PBYTE(*pos, nc);
 	return TRUE;
     }
     return FALSE;
@@ -3528,9 +3570,10 @@ do_put(
 	    return;
     }
 
-    /* Autocommands may be executed when saving lines for undo, which may make
-     * y_array invalid.  Start undo now to avoid that. */
-    u_save(curwin->w_cursor.lnum, curwin->w_cursor.lnum + 1);
+    /* Autocommands may be executed when saving lines for undo.  This might
+     * make "y_array" invalid, so we start undo now to avoid that. */
+    if (u_save(curwin->w_cursor.lnum, curwin->w_cursor.lnum + 1) == FAIL)
+	goto end;
 
     if (insert_string != NULL)
     {
@@ -3684,10 +3727,19 @@ do_put(
 	{
 	    /* Don't need to insert spaces when "p" on the last position of a
 	     * tab or "P" on the first position. */
+#ifdef FEAT_VARTABS
+	    int viscol = getviscol();
+	    if (dir == FORWARD
+		    ? tabstop_padding(viscol, curbuf->b_p_ts,
+						    curbuf->b_p_vts_array) != 1
+		    : curwin->w_cursor.coladd > 0)
+		coladvance_force(viscol);
+#else
 	    if (dir == FORWARD
 		    ? (int)curwin->w_cursor.coladd < curbuf->b_p_ts - 1
 						: curwin->w_cursor.coladd > 0)
 		coladvance_force(getviscol());
+#endif
 	    else
 		curwin->w_cursor.coladd = 0;
 	}
@@ -7589,19 +7641,19 @@ cursor_pos_info(dict_T *dict)
 #if defined(FEAT_EVAL)
     if (dict != NULL)
     {
-	dict_add_nr_str(dict, "words", word_count, NULL);
-	dict_add_nr_str(dict, "chars", char_count, NULL);
-	dict_add_nr_str(dict, "bytes", byte_count
+	dict_add_number(dict, "words", word_count);
+	dict_add_number(dict, "chars", char_count);
+	dict_add_number(dict, "bytes", byte_count
 # ifdef FEAT_MBYTE
 		+ bom_count
 # endif
-		, NULL);
-	dict_add_nr_str(dict, VIsual_active ? "visual_bytes" : "cursor_bytes",
-		byte_count_cursor, NULL);
-	dict_add_nr_str(dict, VIsual_active ? "visual_chars" : "cursor_chars",
-		char_count_cursor, NULL);
-	dict_add_nr_str(dict, VIsual_active ? "visual_words" : "cursor_words",
-		word_count_cursor, NULL);
+		);
+	dict_add_number(dict, VIsual_active ? "visual_bytes" : "cursor_bytes",
+		byte_count_cursor);
+	dict_add_number(dict, VIsual_active ? "visual_chars" : "cursor_chars",
+		char_count_cursor);
+	dict_add_number(dict, VIsual_active ? "visual_words" : "cursor_words",
+		word_count_cursor);
     }
 #endif
 }

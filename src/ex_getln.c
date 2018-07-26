@@ -5543,7 +5543,7 @@ expand_shellcmd(
 {
     char_u	*pat;
     int		i;
-    char_u	*path;
+    char_u	*path = NULL;
     int		mustfree = FALSE;
     garray_T    ga;
     char_u	*buf = alloc(MAXPATHL);
@@ -5552,6 +5552,9 @@ expand_shellcmd(
     int		flags = flagsarg;
     int		ret;
     int		did_curdir = FALSE;
+    hashtab_T	found_ht;
+    hashitem_T	*hi;
+    hash_T	hash;
 
     if (buf == NULL)
 	return FAIL;
@@ -5565,15 +5568,14 @@ expand_shellcmd(
 
     flags |= EW_FILE | EW_EXEC | EW_SHELLCMD;
 
-    /* For an absolute name we don't use $PATH. */
-    if (mch_isFullName(pat))
-	path = (char_u *)" ";
-    else if ((pat[0] == '.' && (vim_ispathsep(pat[1])
-			    || (pat[1] == '.' && vim_ispathsep(pat[2])))))
+    if (pat[0] == '.' && (vim_ispathsep(pat[1])
+			       || (pat[1] == '.' && vim_ispathsep(pat[2]))))
 	path = (char_u *)".";
     else
     {
-	path = vim_getenv((char_u *)"PATH", &mustfree);
+	/* For an absolute name we don't use $PATH. */
+	if (!mch_isFullName(pat))
+	    path = vim_getenv((char_u *)"PATH", &mustfree);
 	if (path == NULL)
 	    path = (char_u *)"";
     }
@@ -5584,6 +5586,7 @@ expand_shellcmd(
      * current directory, to find "subdir/cmd".
      */
     ga_init2(&ga, (int)sizeof(char *), 10);
+    hash_init(&found_ht);
     for (s = path; ; s = e)
     {
 	if (*s == NUL)
@@ -5595,9 +5598,6 @@ expand_shellcmd(
 	}
 	else if (*s == '.')
 	    did_curdir = TRUE;
-
-	if (*s == ' ')
-	    ++s;	/* Skip space used for absolute path name. */
 
 #if defined(MSWIN)
 	e = vim_strchr(s, ';');
@@ -5625,15 +5625,23 @@ expand_shellcmd(
 	    {
 		for (i = 0; i < *num_file; ++i)
 		{
-		    s = (*file)[i];
-		    if (STRLEN(s) > l)
+		    char_u *name = (*file)[i];
+
+		    if (STRLEN(name) > l)
 		    {
-			/* Remove the path again. */
-			STRMOVE(s, s + l);
-			((char_u **)ga.ga_data)[ga.ga_len++] = s;
+			// Check if this name was already found.
+			hash = hash_hash(name + l);
+			hi = hash_lookup(&found_ht, name + l, hash);
+			if (HASHITEM_EMPTY(hi))
+			{
+			    // Remove the path that was prepended.
+			    STRMOVE(name, name + l);
+			    ((char_u **)ga.ga_data)[ga.ga_len++] = name;
+			    hash_add_item(&found_ht, hi, name, hash);
+			    name = NULL;
+			}
 		    }
-		    else
-			vim_free(s);
+		    vim_free(name);
 		}
 		vim_free(*file);
 	    }
@@ -5648,12 +5656,13 @@ expand_shellcmd(
     vim_free(pat);
     if (mustfree)
 	vim_free(path);
+    hash_clear(&found_ht);
     return OK;
 }
 
 
 # if defined(FEAT_USR_CMDS) && defined(FEAT_EVAL)
-static void * call_user_expand_func(void *(*user_expand_func)(char_u *, int, char_u **, int), expand_T	*xp, int *num_file, char_u ***file);
+static void * call_user_expand_func(void *(*user_expand_func)(char_u *, int, typval_T *, int), expand_T	*xp, int *num_file, char_u ***file);
 
 /*
  * Call "user_expand_func()" to invoke a user defined Vim script function and
@@ -5661,15 +5670,15 @@ static void * call_user_expand_func(void *(*user_expand_func)(char_u *, int, cha
  */
     static void *
 call_user_expand_func(
-    void	*(*user_expand_func)(char_u *, int, char_u **, int),
+    void	*(*user_expand_func)(char_u *, int, typval_T *, int),
     expand_T	*xp,
     int		*num_file,
     char_u	***file)
 {
     int		keep = 0;
-    char_u	num[50];
-    char_u	*args[3];
+    typval_T	args[4];
     int		save_current_SID = current_SID;
+    char_u	*pat = NULL;
     void	*ret;
     struct cmdline_info	    save_ccline;
 
@@ -5684,10 +5693,15 @@ call_user_expand_func(
 	ccline.cmdbuff[ccline.cmdlen] = 0;
     }
 
-    args[0] = vim_strnsave(xp->xp_pattern, xp->xp_pattern_len);
-    args[1] = xp->xp_line;
-    sprintf((char *)num, "%d", xp->xp_col);
-    args[2] = num;
+    pat = vim_strnsave(xp->xp_pattern, xp->xp_pattern_len);
+
+    args[0].v_type = VAR_STRING;
+    args[0].vval.v_string = pat;
+    args[1].v_type = VAR_STRING;
+    args[1].vval.v_string = xp->xp_line;
+    args[2].v_type = VAR_NUMBER;
+    args[2].vval.v_number = xp->xp_col;
+    args[3].v_type = VAR_UNKNOWN;
 
     /* Save the cmdline, we don't know what the function may do. */
     save_ccline = ccline;
@@ -5702,7 +5716,7 @@ call_user_expand_func(
     if (ccline.cmdbuff != NULL)
 	ccline.cmdbuff[ccline.cmdlen] = keep;
 
-    vim_free(args[0]);
+    vim_free(pat);
     return ret;
 }
 
@@ -8718,7 +8732,7 @@ expand_by_function(char_u *base)
 {
     list_T      *matchlist = NULL;
     dict_T	*matchdict = NULL;
-    char_u	*args[2];
+    typval_T	args[2];
     char_u	*funcname;
     pos_T	pos;
     win_T	*curwin_save;
@@ -8730,15 +8744,17 @@ expand_by_function(char_u *base)
 	return;
 
     /* Call 'clcompletefunc' to obtain the list of matches. */
-    args[0] = (char_u *)"0";
-    args[1] = base;
+    args[0].v_type = VAR_STRING;
+    args[0].vval.v_string = (char_u *)"0";
+    args[1].v_type = VAR_STRING;
+    args[1].vval.v_string = base != NULL ? base : (char_u *)"";
 
     pos = curwin->w_cursor;
     curwin_save = curwin;
     curbuf_save = curbuf;
 
     /* Call a function, which returns a list or dict. */
-    if (call_vim_function(funcname, 2, args, FALSE, FALSE, &rettv) == OK)
+    if (call_vim_function(funcname, 2, args, &rettv, FALSE) == OK)
     {
 	switch (rettv.v_type)
 	{
@@ -8978,16 +8994,17 @@ clpum_compl_insert(void)
     dict = dict_alloc();
     if (dict != NULL)
     {
-	dict_add_nr_str(dict, "word", 0L,
-		    EMPTY_IF_NULL(clpum_compl_shown_match->cp_str));
-	dict_add_nr_str(dict, "abbr", 0L,
-		    EMPTY_IF_NULL(clpum_compl_shown_match->cp_text[CPT_ABBR]));
-	dict_add_nr_str(dict, "menu", 0L,
-		    EMPTY_IF_NULL(clpum_compl_shown_match->cp_text[CPT_MENU]));
-	dict_add_nr_str(dict, "kind", 0L,
-		    EMPTY_IF_NULL(clpum_compl_shown_match->cp_text[CPT_KIND]));
-	dict_add_nr_str(dict, "info", 0L,
-		    EMPTY_IF_NULL(clpum_compl_shown_match->cp_text[CPT_INFO]));
+	dict_add_string(dict, "word", clpum_compl_shown_match->cp_str);
+	dict_add_string(dict, "abbr",
+			    clpum_compl_shown_match->cp_text[CPT_ABBR]);
+	dict_add_string(dict, "menu",
+			    clpum_compl_shown_match->cp_text[CPT_MENU]);
+	dict_add_string(dict, "kind",
+			    clpum_compl_shown_match->cp_text[CPT_KIND]);
+	dict_add_string(dict, "info",
+			    clpum_compl_shown_match->cp_text[CPT_INFO]);
+	dict_add_string(dict, "user_data",
+			    clpum_compl_shown_match->cp_text[CPT_USER_DATA]);
     }
     set_vim_var_dict(VV_CLCOMPLETED_ITEM, dict);
 }
@@ -9397,7 +9414,7 @@ clpum_complete(int c)
 	     * Call user defined function 'clcompletefunc' with "a:findstart"
 	     * set to 1 to obtain the length of text to use for completion.
 	     */
-	    char_u	*args[2];
+	    typval_T	args[2];
 	    int		col;
 	    pos_T	pos;
 	    win_T	*curwin_save;
@@ -9410,8 +9427,9 @@ clpum_complete(int c)
 		return FAIL;
 	    }
 
-	    args[0] = (char_u *)"1";
-	    args[1] = NULL;
+	    args[0].v_type = VAR_STRING;
+	    args[0].vval.v_string = (char_u *)"1";
+	    args[1].v_type = VAR_UNKNOWN;
 	    pos = curwin->w_cursor;
 	    curwin_save = curwin;
 	    curbuf_save = curbuf;

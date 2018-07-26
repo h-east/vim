@@ -19,10 +19,10 @@ varnumber_T eval_to_number(char_u *expr);
 list_T *eval_spell_expr(char_u *badword, char_u *expr);
 int get_spellword(list_T *list, char_u **pp);
 typval_T *eval_expr(char_u *arg, char_u **nextcmd);
-int call_vim_function(char_u *func, int argc, char_u **argv, int safe, int str_arg_only, typval_T *rettv);
-varnumber_T call_func_retnr(char_u *func, int argc, char_u **argv, int safe);
-void *call_func_retstr(char_u *func, int argc, char_u **argv, int safe);
-void *call_func_retlist(char_u *func, int argc, char_u **argv, int safe);
+int call_vim_function(char_u *func, int argc, typval_T *argv, typval_T *rettv, int safe);
+varnumber_T call_func_retnr(char_u *func, int argc, typval_T *argv, int safe);
+void *call_func_retstr(char_u *func, int argc, typval_T *argv, int safe);
+void *call_func_retlist(char_u *func, int argc, typval_T *argv, int safe);
 int eval_foldexpr(char_u *arg, int *cp);
 void ex_let(exarg_T *eap);
 void list_hashtable_vars(hashtab_T *ht, char_u *prefix, int empty, int *first);
@@ -136,7 +136,7 @@ void fill_assert_error(garray_T *gap, typval_T *opt_msg_tv, char_u *exp_str, typ
 int typval_compare(typval_T *typ1, typval_T *typ2, exptype_T type, int type_is, int ic);
 char_u *typval_tostring(typval_T *arg);
 int var_exists(char_u *var);
-int modify_fname(char_u *src, int *usedlen, char_u **fnamep, char_u **bufp, int *fnamelen);
+int modify_fname(char_u *src, int tilde_file, int *usedlen, char_u **fnamep, char_u **bufp, int *fnamelen);
 char_u *do_string_sub(char_u *str, char_u *pat, char_u *sub, typval_T *expr, char_u *flags);
 void filter_map(typval_T *argvars, typval_T *rettv, int map);
 /* vim: set ft=c : */

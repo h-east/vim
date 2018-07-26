@@ -520,23 +520,14 @@ wingotofile:
 		break;
 #endif
 
+/* Quickfix window only: view the result under the cursor in a new split. */
+#if defined(FEAT_QUICKFIX)
     case K_KENTER:
     case CAR:
-#if defined(FEAT_QUICKFIX)
-		/*
-		 * In a quickfix window a <CR> jumps to the error under the
-		 * cursor in a new window.
-		 */
 		if (bt_quickfix(curbuf))
-		{
-		    sprintf((char *)cbuf, "split +%ld%s",
-				(long)curwin->w_cursor.lnum,
-				(curwin->w_llist_ref == NULL) ? "cc" : "ll");
-		    do_cmdline_cmd(cbuf);
-		}
-#endif
+		    qf_view_result(TRUE);
 		break;
-
+#endif
 
 /* CTRL-W g  extended commands */
     case 'g':
@@ -2103,6 +2094,50 @@ win_equal_rec(
     }
 }
 
+#ifdef FEAT_JOB_CHANNEL
+    static void
+leaving_window(win_T *win)
+{
+    // Only matters for a prompt window.
+    if (!bt_prompt(win->w_buffer))
+	return;
+
+    // When leaving a prompt window stop Insert mode and perhaps restart
+    // it when entering that window again.
+    win->w_buffer->b_prompt_insert = restart_edit;
+    if (restart_edit != 0 && mode_displayed)
+	clear_cmdline = TRUE;		/* unshow mode later */
+    restart_edit = NUL;
+
+    // When leaving the window (or closing the window) was done from a
+    // callback we need to break out of the Insert mode loop and restart Insert
+    // mode when entering the window again.
+    if (State & INSERT)
+    {
+	stop_insert_mode = TRUE;
+	if (win->w_buffer->b_prompt_insert == NUL)
+	    win->w_buffer->b_prompt_insert = 'A';
+    }
+}
+
+    static void
+entering_window(win_T *win)
+{
+    // Only matters for a prompt window.
+    if (!bt_prompt(win->w_buffer))
+	return;
+
+    // When switching to a prompt buffer that was in Insert mode, don't stop
+    // Insert mode, it may have been set in leaving_window().
+    if (win->w_buffer->b_prompt_insert != NUL)
+	stop_insert_mode = FALSE;
+
+    // When entering the prompt window restart Insert mode if we were in Insert
+    // mode when we left it.
+    restart_edit = win->w_buffer->b_prompt_insert;
+}
+#endif
+
 /*
  * Close all windows for buffer "buf".
  */
@@ -2231,6 +2266,9 @@ close_last_window_tabpage(
 	    if (h != tabline_height())
 		shell_new_rows();
 	}
+#ifdef FEAT_JOB_CHANNEL
+	entering_window(curwin);
+#endif
 	/* Since goto_tabpage_tp above did not trigger *Enter autocommands, do
 	 * that now. */
 	apply_autocmds(EVENT_TABCLOSED, NULL, NULL, FALSE, curbuf);
@@ -2296,6 +2334,9 @@ win_close(win_T *win, int free_buf)
 
     if (win == curwin)
     {
+#ifdef FEAT_JOB_CHANNEL
+	leaving_window(curwin);
+#endif
 	/*
 	 * Guess which window is going to be the new current window.
 	 * This may change because of the autocommands (sigh).
@@ -3649,6 +3690,9 @@ win_new_tabpage(int after)
 	 * scrollbars.  Have to update them anyway. */
 	gui_may_update_scrollbars();
 #endif
+#ifdef FEAT_JOB_CHANNEL
+	entering_window(curwin);
+#endif
 
 	redraw_all_later(CLEAR);
 	apply_autocmds(EVENT_WINNEW, NULL, NULL, FALSE, curbuf);
@@ -3822,6 +3866,9 @@ leave_tabpage(
 {
     tabpage_T	*tp = curtab;
 
+#ifdef FEAT_JOB_CHANNEL
+    leaving_window(curwin);
+#endif
     reset_VIsual_and_resel();	/* stop Visual mode */
     if (trigger_leave_autocmds)
     {
@@ -4318,6 +4365,11 @@ win_enter_ext(
     if (wp == curwin && !curwin_invalid)	/* nothing to do */
 	return;
 
+#ifdef FEAT_JOB_CHANNEL
+    if (!curwin_invalid)
+	leaving_window(curwin);
+#endif
+
     if (!curwin_invalid && trigger_leave_autocmds)
     {
 	/*
@@ -4389,6 +4441,9 @@ win_enter_ext(
 	shorten_fnames(TRUE);
     }
 
+#ifdef FEAT_JOB_CHANNEL
+    entering_window(curwin);
+#endif
     if (trigger_new_autocmds)
 	apply_autocmds(EVENT_WINNEW, NULL, NULL, FALSE, curbuf);
     if (trigger_enter_autocmds)
@@ -5368,25 +5423,49 @@ frame_setwidth(frame_T *curfrp, int width)
 }
 
 /*
- * Check 'winminheight' for a valid value.
+ * Check 'winminheight' for a valid value and reduce it if needed.
  */
     void
 win_setminheight(void)
 {
     int		room;
+    int		needed;
     int		first = TRUE;
-    win_T	*wp;
 
-    /* loop until there is a 'winminheight' that is possible */
+    // loop until there is a 'winminheight' that is possible
     while (p_wmh > 0)
     {
-	/* TODO: handle vertical splits */
-	room = -p_wh;
-	FOR_ALL_WINDOWS(wp)
-	    room += VISIBLE_HEIGHT(wp) - p_wmh;
-	if (room >= 0)
+	room = Rows - p_ch;
+	needed = frame_minheight(topframe, NULL);
+	if (room >= needed)
 	    break;
 	--p_wmh;
+	if (first)
+	{
+	    EMSG(_(e_noroom));
+	    first = FALSE;
+	}
+    }
+}
+
+/*
+ * Check 'winminwidth' for a valid value and reduce it if needed.
+ */
+    void
+win_setminwidth(void)
+{
+    int		room;
+    int		needed;
+    int		first = TRUE;
+
+    // loop until there is a 'winminheight' that is possible
+    while (p_wmw > 0)
+    {
+	room = Columns;
+	needed = frame_minwidth(topframe, NULL);
+	if (room >= needed)
+	    break;
+	--p_wmw;
 	if (first)
 	{
 	    EMSG(_(e_noroom));

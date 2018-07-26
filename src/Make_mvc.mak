@@ -489,10 +489,11 @@ NETBEANS_LIB	= WSock32.lib
 
 # need advapi32.lib for GetUserName()
 # need shell32.lib for ExtractIcon()
+# need netapi32.lib for NetUserEnum()
 # gdi32.lib and comdlg32.lib for printing support
 # ole32.lib and uuid.lib are needed for FEAT_SHORTCUT
 CON_LIB = oldnames.lib kernel32.lib advapi32.lib shell32.lib gdi32.lib \
-          comdlg32.lib ole32.lib uuid.lib /machine:$(CPU)
+          comdlg32.lib ole32.lib netapi32.lib uuid.lib /machine:$(CPU)
 !if "$(DELAYLOAD)" == "yes"
 CON_LIB = $(CON_LIB) /DELAYLOAD:comdlg32.dll /DELAYLOAD:ole32.dll DelayImp.lib
 !endif
@@ -692,6 +693,8 @@ CFLAGS = $(CFLAGS) /Zl /MTd
 ! endif
 !endif # DEBUG
 
+!include Make_all.mak
+
 INCL =	vim.h alloc.h arabic.h ascii.h ex_cmds.h farsi.h feature.h globals.h \
 	keymap.h macros.h option.h os_dos.h os_win32.h proto.h regexp.h \
 	spell.h structs.h term.h beval.h $(NBDEBUG_INCL)
@@ -802,7 +805,7 @@ GUI_OBJ = \
 	$(OUTDIR)\os_w32exe.obj
 GUI_LIB = \
 	gdi32.lib version.lib $(IME_LIB) \
-	winspool.lib comctl32.lib advapi32.lib shell32.lib \
+	winspool.lib comctl32.lib advapi32.lib shell32.lib netapi32.lib \
 	/machine:$(CPU)
 !else
 SUBSYSTEM = console
@@ -1294,6 +1297,14 @@ testgvim:
 testclean:
 	cd testdir
 	$(MAKE) /NOLOGO -f Make_dos.mak clean
+	cd ..
+
+$(NEW_TESTS):
+	cd testdir
+	- if exist $@.res del $@.res
+	$(MAKE) /NOLOGO -f Make_dos.mak nolog
+	$(MAKE) /NOLOGO -f Make_dos.mak $@.res
+	$(MAKE) /NOLOGO -f Make_dos.mak report
 	cd ..
 
 ###########################################################################

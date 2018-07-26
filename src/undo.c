@@ -266,10 +266,8 @@ u_save(linenr_T top, linenr_T bot)
     if (undo_off)
 	return OK;
 
-    if (top > curbuf->b_ml.ml_line_count
-	    || top >= bot
-	    || bot > curbuf->b_ml.ml_line_count + 1)
-	return FALSE;	/* rely on caller to do error messages */
+    if (top >= bot || bot > curbuf->b_ml.ml_line_count + 1)
+	return FAIL;	// rely on caller to give an error message
 
     if (top + 2 == bot)
 	u_saveline((linenr_T)(top + 1));
@@ -2968,7 +2966,7 @@ u_undo_end(
     }
 #endif
 
-    smsg((char_u *)_("%ld %s; %s #%ld  %s"),
+    smsg_attr_keep(0, (char_u *)_("%ld %s; %s #%ld  %s"),
 	    u_oldcount < 0 ? -u_oldcount : u_oldcount,
 	    _(msgstr),
 	    did_undo ? _("before") : _("after"),
@@ -3539,7 +3537,9 @@ bufIsChanged(buf_T *buf)
     int
 bufIsChangedNotTerm(buf_T *buf)
 {
-    return !bt_dontwrite(buf)
+    // In a "prompt" buffer we do respect 'modified', so that we can control
+    // closing the window by setting or resetting that option.
+    return (!bt_dontwrite(buf) || bt_prompt(buf))
 	&& (buf->b_changed || file_ff_differs(buf, TRUE));
 }
 
@@ -3565,14 +3565,14 @@ u_eval_tree(u_header_T *first_uhp, list_T *list)
 	dict = dict_alloc();
 	if (dict == NULL)
 	    return;
-	dict_add_nr_str(dict, "seq", uhp->uh_seq, NULL);
-	dict_add_nr_str(dict, "time", (long)uhp->uh_time, NULL);
+	dict_add_number(dict, "seq", uhp->uh_seq);
+	dict_add_number(dict, "time", (long)uhp->uh_time);
 	if (uhp == curbuf->b_u_newhead)
-	    dict_add_nr_str(dict, "newhead", 1, NULL);
+	    dict_add_number(dict, "newhead", 1);
 	if (uhp == curbuf->b_u_curhead)
-	    dict_add_nr_str(dict, "curhead", 1, NULL);
+	    dict_add_number(dict, "curhead", 1);
 	if (uhp->uh_save_nr > 0)
-	    dict_add_nr_str(dict, "save", uhp->uh_save_nr, NULL);
+	    dict_add_number(dict, "save", uhp->uh_save_nr);
 
 	if (uhp->uh_alt_next.ptr != NULL)
 	{

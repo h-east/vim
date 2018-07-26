@@ -171,8 +171,8 @@ static int term_default_cterm_bg = -1;
 
 /* Store the last set and the desired cursor properties, so that we only update
  * them when needed.  Doing it unnecessary may result in flicker. */
-static char_u	*last_set_cursor_color = (char_u *)"";
-static char_u	*desired_cursor_color = (char_u *)"";
+static char_u	*last_set_cursor_color = NULL;
+static char_u	*desired_cursor_color = NULL;
 static int	last_set_cursor_shape = -1;
 static int	desired_cursor_shape = -1;
 static int	last_set_cursor_blink = -1;
@@ -182,6 +182,31 @@ static int	desired_cursor_blink = -1;
 /**************************************
  * 1. Generic code for all systems.
  */
+
+    static int
+cursor_color_equal(char_u *lhs_color, char_u *rhs_color)
+{
+    if (lhs_color != NULL && rhs_color != NULL)
+	return STRCMP(lhs_color, rhs_color) == 0;
+    return lhs_color == NULL && rhs_color == NULL;
+}
+
+    static void
+cursor_color_copy(char_u **to_color, char_u *from_color)
+{
+    // Avoid a free & alloc if the value is already right.
+    if (cursor_color_equal(*to_color, from_color))
+	return;
+    vim_free(*to_color);
+    *to_color = (from_color == NULL) ? NULL : vim_strsave(from_color);
+}
+
+    static char_u *
+cursor_color_get(char_u *color)
+{
+    return (color == NULL) ? (char_u *)"" : color;
+}
+
 
 /*
  * Parse 'termwinsize' and set "rows" and "cols" for the terminal size in the
@@ -823,8 +848,6 @@ free_terminal(buf_T *buf)
     if (term->tl_out_fd != NULL)
 	fclose(term->tl_out_fd);
 #endif
-    if (desired_cursor_color == term->tl_cursor_color)
-	desired_cursor_color = (char_u *)"";
     vim_free(term->tl_cursor_color);
     vim_free(term);
     buf->b_term = NULL;
@@ -950,11 +973,13 @@ write_to_term(buf_T *buffer, char_u *msg, channel_T *channel)
      * contents, thus no screen update is needed. */
     if (!term->tl_normal_mode)
     {
-	/* TODO: only update once in a while. */
+	// Don't use update_screen() when editing the command line, it gets
+	// cleared.
+	// TODO: only update once in a while.
 	ch_log(term->tl_job->jv_channel, "updating screen");
-	if (buffer == curbuf)
+	if (buffer == curbuf && (State & CMDLINE) == 0)
 	{
-	    update_screen(0);
+	    update_screen(VALID_NO_UPDATE);
 	    /* update_screen() can be slow, check the terminal wasn't closed
 	     * already */
 	    if (buffer == curbuf && curbuf->b_term != NULL)
@@ -1954,14 +1979,14 @@ term_get_cursor_shape(guicolor_T *fg, guicolor_T *bg)
     static void
 may_output_cursor_props(void)
 {
-    if (STRCMP(last_set_cursor_color, desired_cursor_color) != 0
+    if (!cursor_color_equal(last_set_cursor_color, desired_cursor_color)
 	    || last_set_cursor_shape != desired_cursor_shape
 	    || last_set_cursor_blink != desired_cursor_blink)
     {
-	last_set_cursor_color = desired_cursor_color;
+	cursor_color_copy(&last_set_cursor_color, desired_cursor_color);
 	last_set_cursor_shape = desired_cursor_shape;
 	last_set_cursor_blink = desired_cursor_blink;
-	term_cursor_color(desired_cursor_color);
+	term_cursor_color(cursor_color_get(desired_cursor_color));
 	if (desired_cursor_shape == -1 || desired_cursor_blink == -1)
 	    /* this will restore the initial cursor style, if possible */
 	    ui_cursor_shape_forced(TRUE);
@@ -1984,10 +2009,7 @@ may_set_cursor_props(term_T *term)
 #endif
     if (in_terminal_loop == term)
     {
-	if (term->tl_cursor_color != NULL)
-	    desired_cursor_color = term->tl_cursor_color;
-	else
-	    desired_cursor_color = (char_u *)"";
+	cursor_color_copy(&desired_cursor_color, term->tl_cursor_color);
 	desired_cursor_shape = term->tl_cursor_shape;
 	desired_cursor_blink = term->tl_cursor_blink;
 	may_output_cursor_props();
@@ -2004,7 +2026,7 @@ prepare_restore_cursor_props(void)
     if (gui.in_use)
 	return;
 #endif
-    desired_cursor_color = (char_u *)"";
+    cursor_color_copy(&desired_cursor_color, NULL);
     desired_cursor_shape = -1;
     desired_cursor_blink = -1;
     may_output_cursor_props();
@@ -2087,7 +2109,11 @@ terminal_loop(int blocking)
     in_terminal_loop = curbuf->b_term;
 
     if (*curwin->w_p_twk != NUL)
+    {
 	termwinkey = string_to_key(curwin->w_p_twk, TRUE);
+	if (termwinkey == Ctrl_W)
+	    termwinkey = 0;
+    }
     position_cursor(curwin, &curbuf->b_term->tl_cursor_pos);
     may_set_cursor_props(curbuf->b_term);
 
@@ -2102,7 +2128,7 @@ terminal_loop(int blocking)
 	    while (must_redraw != 0)
 		if (update_screen(0) == FAIL)
 		    break;
-	if (!term_use_loop_check(TRUE))
+	if (!term_use_loop_check(TRUE) || in_terminal_loop != curbuf->b_term)
 	    /* job finished while redrawing */
 	    break;
 
@@ -2110,7 +2136,7 @@ terminal_loop(int blocking)
 	restore_cursor = TRUE;
 
 	c = term_vgetc();
-	if (!term_use_loop_check(TRUE))
+	if (!term_use_loop_check(TRUE) || in_terminal_loop != curbuf->b_term)
 	{
 	    /* Job finished while waiting for a character.  Push back the
 	     * received character. */
@@ -2161,7 +2187,8 @@ terminal_loop(int blocking)
 #ifdef FEAT_CMDL_INFO
 	    clear_showcmd();
 #endif
-	    if (!term_use_loop_check(TRUE))
+	    if (!term_use_loop_check(TRUE)
+					 || in_terminal_loop != curbuf->b_term)
 		/* job finished while waiting for a character */
 		break;
 
@@ -2182,12 +2209,13 @@ terminal_loop(int blocking)
 		/* "CTRL-W CTRL-C" or 'termwinkey' CTRL-C: end the job */
 		mch_signal_job(curbuf->b_term->tl_job, (char_u *)"kill");
 	    }
-	    else if (termwinkey == 0 && c == '.')
+	    else if (c == '.')
 	    {
 		/* "CTRL-W .": send CTRL-W to the job */
-		c = Ctrl_W;
+		/* "'termwinkey' .": send 'termwinkey' to the job */
+		c = termwinkey == 0 ? Ctrl_W : termwinkey;
 	    }
-	    else if (termwinkey == 0 && c == Ctrl_BSL)
+	    else if (c == Ctrl_BSL)
 	    {
 		/* "CTRL-W CTRL-\": send CTRL-\ to the job */
 		c = Ctrl_BSL;
@@ -2624,13 +2652,7 @@ handle_settermprop(
 	    break;
 
 	case VTERM_PROP_CURSORCOLOR:
-	    if (desired_cursor_color == term->tl_cursor_color)
-		desired_cursor_color = (char_u *)"";
-	    vim_free(term->tl_cursor_color);
-	    if (*value->string == NUL)
-		term->tl_cursor_color = NULL;
-	    else
-		term->tl_cursor_color = vim_strsave((char_u *)value->string);
+	    cursor_color_copy(&term->tl_cursor_color, (char_u*)value->string);
 	    may_set_cursor_props(term);
 	    break;
 
@@ -3112,13 +3134,16 @@ term_update_window(win_T *wp)
 
     if (term->tl_rows != newrows || term->tl_cols != newcols)
     {
-
-
 	term->tl_vterm_size_changed = TRUE;
 	vterm_set_size(vterm, newrows, newcols);
 	ch_log(term->tl_job->jv_channel, "Resizing terminal to %d lines",
 								      newrows);
 	term_report_winsize(term, newrows, newcols);
+
+	// Updating the terminal size will cause the snapshot to be cleared.
+	// When not in terminal_loop() we need to restore it.
+	if (term != in_terminal_loop)
+	    may_move_terminal_to_buffer(term, FALSE);
     }
 
     /* The cursor may have been moved when resizing. */
@@ -4707,12 +4732,11 @@ f_term_getcursor(typval_T *argvars, typval_T *rettv)
     d = dict_alloc();
     if (d != NULL)
     {
-	dict_add_nr_str(d, "visible", term->tl_cursor_visible, NULL);
-	dict_add_nr_str(d, "blink", blink_state_is_inverted()
-		       ? !term->tl_cursor_blink : term->tl_cursor_blink, NULL);
-	dict_add_nr_str(d, "shape", term->tl_cursor_shape, NULL);
-	dict_add_nr_str(d, "color", 0L, term->tl_cursor_color == NULL
-				       ? (char_u *)"" : term->tl_cursor_color);
+	dict_add_number(d, "visible", term->tl_cursor_visible);
+	dict_add_number(d, "blink", blink_state_is_inverted()
+			    ? !term->tl_cursor_blink : term->tl_cursor_blink);
+	dict_add_number(d, "shape", term->tl_cursor_shape);
+	dict_add_string(d, "color", cursor_color_get(term->tl_cursor_color));
 	list_append_dict(l, d);
     }
 }
@@ -5038,18 +5062,17 @@ f_term_scrape(typval_T *argvars, typval_T *rettv)
 	    break;
 	list_append_dict(l, dcell);
 
-	dict_add_nr_str(dcell, "chars", 0, mbs);
+	dict_add_string(dcell, "chars", mbs);
 
 	vim_snprintf((char *)rgb, 8, "#%02x%02x%02x",
 				     fg.red, fg.green, fg.blue);
-	dict_add_nr_str(dcell, "fg", 0, rgb);
+	dict_add_string(dcell, "fg", rgb);
 	vim_snprintf((char *)rgb, 8, "#%02x%02x%02x",
 				     bg.red, bg.green, bg.blue);
-	dict_add_nr_str(dcell, "bg", 0, rgb);
+	dict_add_string(dcell, "bg", rgb);
 
-	dict_add_nr_str(dcell, "attr",
-				cell2attr(attrs, fg, bg), NULL);
-	dict_add_nr_str(dcell, "width", width, NULL);
+	dict_add_number(dcell, "attr", cell2attr(attrs, fg, bg));
+	dict_add_number(dcell, "width", width);
 
 	++pos.col;
 	if (width == 2)
@@ -5080,8 +5103,19 @@ f_term_sendkeys(typval_T *argvars, typval_T *rettv)
 
     while (*msg != NUL)
     {
-	send_keys_to_term(term, PTR2CHAR(msg), FALSE);
-	msg += MB_CPTR2LEN(msg);
+	int c;
+
+	if (*msg == K_SPECIAL && msg[1] != NUL && msg[2] != NUL)
+	{
+	    c = TO_SPECIAL(msg[1], msg[2]);
+	    msg += 3;
+	}
+	else
+	{
+	    c = PTR2CHAR(msg);
+	    msg += MB_CPTR2LEN(msg);
+	}
+	send_keys_to_term(term, c, FALSE);
     }
 }
 
@@ -5250,11 +5284,11 @@ f_term_wait(typval_T *argvars, typval_T *rettv UNUSED)
 	{
 	    mch_check_messages();
 	    parse_queued_messages();
+	    ui_delay(10L, FALSE);
 	    if (!buf_valid(buf))
 		/* If the terminal is closed when the channel is closed the
 		 * buffer disappears. */
 		break;
-	    ui_delay(10L, FALSE);
 	}
 	mch_check_messages();
 	parse_queued_messages();
@@ -5302,6 +5336,12 @@ term_send_eof(channel_T *ch)
 		channel_send(ch, PART_IN, (char_u *)"\004\r", 2, NULL);
 # endif
 	}
+}
+
+    job_T *
+term_getjob(term_T *term)
+{
+    return term != NULL ? term->tl_job : NULL;
 }
 
 # if defined(WIN3264) || defined(PROTO)
@@ -5744,7 +5784,7 @@ term_and_job_init(
 #endif
 
     /* This may change a string in "argvar". */
-    term->tl_job = job_start(argvar, argv, opt);
+    term->tl_job = job_start(argvar, argv, opt, TRUE);
     if (term->tl_job != NULL)
 	++term->tl_job->jv_refcount;
 

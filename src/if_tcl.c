@@ -1091,6 +1091,7 @@ winselfcmd(
 	    /* TODO: should check column */
 	    win->w_cursor.lnum = val1;
 	    win->w_cursor.col = col2vim(val2);
+	    win->w_set_curswant = TRUE;
 	    flags |= FL_UPDATE_SCREEN;
 	    break;
 
@@ -1385,7 +1386,10 @@ tclvimexpr(
     if (str == NULL)
 	Tcl_SetResult(interp, _("invalid expression"), TCL_STATIC);
     else
+    {
 	Tcl_SetResult(interp, str, TCL_VOLATILE);
+	vim_free(str);
+    }
     err = vimerror(interp);
 #else
     Tcl_SetResult(interp, _("expressions disabled at compile time"), TCL_STATIC);

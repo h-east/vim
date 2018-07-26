@@ -1144,6 +1144,8 @@ $VIM_POSIX	vi_diff.txt	/*$VIM_POSIX*
 'updatetime'	options.txt	/*'updatetime'*
 'ur'	options.txt	/*'ur'*
 'ut'	options.txt	/*'ut'*
+'varsofttabstop'	options.txt	/*'varsofttabstop'*
+'vartabstop'	options.txt	/*'vartabstop'*
 'vb'	options.txt	/*'vb'*
 'vbs'	options.txt	/*'vbs'*
 'vdir'	options.txt	/*'vdir'*
@@ -1160,6 +1162,8 @@ $VIM_POSIX	vi_diff.txt	/*$VIM_POSIX*
 'virtualedit'	options.txt	/*'virtualedit'*
 'visualbell'	options.txt	/*'visualbell'*
 'vop'	options.txt	/*'vop'*
+'vsts'	options.txt	/*'vsts'*
+'vts'	options.txt	/*'vts'*
 'w1200'	vi_diff.txt	/*'w1200'*
 'w300'	vi_diff.txt	/*'w300'*
 'w9600'	vi_diff.txt	/*'w9600'*
@@ -1354,6 +1358,7 @@ $VIM_POSIX	vi_diff.txt	/*$VIM_POSIX*
 +toolbar	various.txt	/*+toolbar*
 +unix	eval.txt	/*+unix*
 +user_commands	various.txt	/*+user_commands*
++vartabs	various.txt	/*+vartabs*
 +vertsplit	various.txt	/*+vertsplit*
 +viminfo	various.txt	/*+viminfo*
 +virtualedit	various.txt	/*+virtualedit*
@@ -4615,6 +4620,7 @@ E952	autocmd.txt	/*E952*
 E953	eval.txt	/*E953*
 E954	options.txt	/*E954*
 E955	eval.txt	/*E955*
+E956	pattern.txt	/*E956*
 E96	diff.txt	/*E96*
 E97	diff.txt	/*E97*
 E98	diff.txt	/*E98*
@@ -4749,6 +4755,7 @@ PEP8	filetype.txt	/*PEP8*
 PHP_BracesAtCodeLevel	indent.txt	/*PHP_BracesAtCodeLevel*
 PHP_autoformatcomment	indent.txt	/*PHP_autoformatcomment*
 PHP_default_indenting	indent.txt	/*PHP_default_indenting*
+PHP_noArrowMatching	indent.txt	/*PHP_noArrowMatching*
 PHP_outdentSLComments	indent.txt	/*PHP_outdentSLComments*
 PHP_outdentphpescape	indent.txt	/*PHP_outdentphpescape*
 PHP_removeCRwhenUnix	indent.txt	/*PHP_removeCRwhenUnix*
@@ -5106,6 +5113,7 @@ ant.vim	syntax.txt	/*ant.vim*
 ap	motion.txt	/*ap*
 apache.vim	syntax.txt	/*apache.vim*
 append()	eval.txt	/*append()*
+appendbufline()	eval.txt	/*appendbufline()*
 aquote	motion.txt	/*aquote*
 arabic.txt	arabic.txt	/*arabic.txt*
 arabicfonts	arabic.txt	/*arabicfonts*
@@ -5169,6 +5177,7 @@ autocmds-kept	version5.txt	/*autocmds-kept*
 autocommand	autocmd.txt	/*autocommand*
 autocommand-events	autocmd.txt	/*autocommand-events*
 autocommand-pattern	autocmd.txt	/*autocommand-pattern*
+autocommands	autocmd.txt	/*autocommands*
 autoformat	change.txt	/*autoformat*
 autoload	eval.txt	/*autoload*
 autoload-functions	eval.txt	/*autoload-functions*
@@ -5755,6 +5764,7 @@ debug-vs2005	debug.txt	/*debug-vs2005*
 debug-win32	debug.txt	/*debug-win32*
 debug-windbg	debug.txt	/*debug-windbg*
 debug.txt	debug.txt	/*debug.txt*
+debugbreak()	eval.txt	/*debugbreak()*
 debugger-compilation	debugger.txt	/*debugger-compilation*
 debugger-features	debugger.txt	/*debugger-features*
 debugger-integration	debugger.txt	/*debugger-integration*
@@ -5769,6 +5779,7 @@ definitions	intro.txt	/*definitions*
 delete()	eval.txt	/*delete()*
 delete-insert	change.txt	/*delete-insert*
 delete-menus	gui.txt	/*delete-menus*
+deletebufline()	eval.txt	/*deletebufline()*
 deleting	change.txt	/*deleting*
 demoserver.py	channel.txt	/*demoserver.py*
 design-assumptions	develop.txt	/*design-assumptions*
@@ -8058,6 +8069,10 @@ profiling-variable	eval.txt	/*profiling-variable*
 progname-variable	eval.txt	/*progname-variable*
 progpath-variable	eval.txt	/*progpath-variable*
 progress.vim	syntax.txt	/*progress.vim*
+prompt-buffer	channel.txt	/*prompt-buffer*
+prompt_setcallback()	eval.txt	/*prompt_setcallback()*
+prompt_setinterrupt()	eval.txt	/*prompt_setinterrupt()*
+prompt_setprompt()	eval.txt	/*prompt_setprompt()*
 pronounce	intro.txt	/*pronounce*
 psql	ft_sql.txt	/*psql*
 ptcap.vim	syntax.txt	/*ptcap.vim*
@@ -8198,6 +8213,8 @@ redo-register	undo.txt	/*redo-register*
 ref	intro.txt	/*ref*
 reference	intro.txt	/*reference*
 reference_toc	help.txt	/*reference_toc*
+reg_executing()	eval.txt	/*reg_executing()*
+reg_recording()	eval.txt	/*reg_recording()*
 regexp	pattern.txt	/*regexp*
 regexp-changes-5.4	version5.txt	/*regexp-changes-5.4*
 register	sponsor.txt	/*register*
@@ -8987,10 +9004,13 @@ termdebug-commands	terminal.txt	/*termdebug-commands*
 termdebug-communication	terminal.txt	/*termdebug-communication*
 termdebug-customizing	terminal.txt	/*termdebug-customizing*
 termdebug-example	terminal.txt	/*termdebug-example*
+termdebug-prompt	terminal.txt	/*termdebug-prompt*
 termdebug-starting	terminal.txt	/*termdebug-starting*
 termdebug-stepping	terminal.txt	/*termdebug-stepping*
 termdebug-variables	terminal.txt	/*termdebug-variables*
 termdebug_popup	terminal.txt	/*termdebug_popup*
+termdebug_shortcuts	terminal.txt	/*termdebug_shortcuts*
+termdebug_use_prompt	terminal.txt	/*termdebug_use_prompt*
 termdebug_wide	terminal.txt	/*termdebug_wide*
 terminal	terminal.txt	/*terminal*
 terminal-api	terminal.txt	/*terminal-api*
@@ -9543,6 +9563,7 @@ whitespace	pattern.txt	/*whitespace*
 wildcard	editing.txt	/*wildcard*
 wildcards	editing.txt	/*wildcards*
 wildmenumode()	eval.txt	/*wildmenumode()*
+win16	os_win32.txt	/*win16*
 win32	os_win32.txt	/*win32*
 win32-!start	gui_w32.txt	/*win32-!start*
 win32-PATH	os_win32.txt	/*win32-PATH*

@@ -7,6 +7,7 @@ SRC_ALL =	\
 		.lgtm.yml \
 		.travis.yml \
 		appveyor.yml \
+		src/Make_all.mak \
 		src/appveyor.bat \
 		src/README.txt \
 		src/alloc.h \
@@ -414,6 +415,8 @@ SRC_DOS =	\
 		src/msvc2008.bat \
 		src/msvc2010.bat \
 		src/msvc2015.bat \
+		src/msys32.bat \
+		src/msys64.bat \
 		src/dimm.idl \
 		src/dlldata.c \
 		src/dosinst.c \
@@ -709,6 +712,7 @@ RT_NO_UNIX =	\
 
 # runtime for Amiga (also in the extra archive)
 RT_AMI_DOS =	\
+		runtime/doc/evim.man \
 		runtime/doc/vim.man \
 		runtime/doc/vimdiff.man \
 		runtime/doc/vimtutor.man \
@@ -849,6 +853,8 @@ IN_README_DIR = \
 
 # generic language files
 LANG_GEN = \
+		runtime/doc/*-da.1 \
+		runtime/doc/*-da.UTF-8.1 \
 		runtime/doc/*-de.1 \
 		runtime/doc/*-de.UTF-8.1 \
 		runtime/doc/*-fr.1 \
@@ -909,6 +915,7 @@ LANG_SRC = \
 		src/po/check.vim \
 		src/po/cleanup.vim \
 		src/po/Makefile \
+		src/po/Make_all.mak \
 		src/po/Make_cyg.mak \
 		src/po/Make_ming.mak \
 		src/po/Make_mvc.mak \

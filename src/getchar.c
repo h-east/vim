@@ -844,6 +844,14 @@ start_redo(long count, int old_redo)
 	if (c >= '1' && c < '9')
 	    ++c;
 	add_char_buff(&readbuf2, c);
+
+	/* the expression register should be re-evaluated */
+	if (c == '=')
+	{
+	    add_char_buff(&readbuf2, CAR);
+	    cmd_silent = TRUE;
+	}
+
 	c = read_redo(FALSE, old_redo);
     }
 
@@ -1238,27 +1246,43 @@ del_typebuf(int len, int offset)
     static void
 gotchars(char_u *chars, int len)
 {
-    char_u	*s = chars;
-    int		c;
-    char_u	buf[2];
-    int		todo = len;
+    char_u		*s = chars;
+    int			i;
+    static char_u	buf[4];
+    static int		buflen = 0;
+    int			todo = len;
 
-    /* remember how many chars were last recorded */
-    if (Recording)
-	last_recorded_len += len;
-
-    buf[1] = NUL;
     while (todo--)
     {
-	/* Handle one byte at a time; no translation to be done. */
-	c = *s++;
-	updatescript(c);
+	buf[buflen++] = *s++;
 
-	if (Recording)
+	// When receiving a special key sequence, store it until we have all
+	// the bytes and we can decide what to do with it.
+	if (buflen == 1 && buf[0] == K_SPECIAL)
+	    continue;
+	if (buflen == 2)
+	    continue;
+	if (buflen == 3 && buf[1] == KS_EXTRA
+		       && (buf[2] == KE_FOCUSGAINED || buf[2] == KE_FOCUSLOST))
 	{
-	    buf[0] = c;
-	    add_buff(&recordbuff, buf, 1L);
+	    // Drop K_FOCUSGAINED and K_FOCUSLOST, they are not useful in a
+	    // recording.
+	    buflen = 0;
+	    continue;
 	}
+
+	/* Handle one byte at a time; no translation to be done. */
+	for (i = 0; i < buflen; ++i)
+	    updatescript(buf[i]);
+
+	if (reg_recording != 0)
+	{
+	    buf[buflen] = NUL;
+	    add_buff(&recordbuff, buf, (long)buflen);
+	    /* remember how many chars were last recorded */
+	    last_recorded_len += buflen;
+	}
+	buflen = 0;
     }
     may_sync_undo();
 
@@ -2007,7 +2031,7 @@ vgetorpeek(int advance)
     init_typebuf();
     start_stuff();
     if (advance && typebuf.tb_maplen == 0)
-	Exec_reg = FALSE;
+	reg_executing = 0;
     do
     {
 /*
@@ -2848,6 +2872,11 @@ vgetorpeek(int advance)
 /*
  * get a character: 3. from the user - get it
  */
+		if (typebuf.tb_len == 0)
+		    // timedout may have been set while waiting for a mapping
+		    // that has a <Nop> RHS.
+		    timedout = FALSE;
+
 		wait_tb_len = typebuf.tb_len;
 		c = inchar(typebuf.tb_buf + typebuf.tb_off + typebuf.tb_len,
 			typebuf.tb_buflen - typebuf.tb_off - typebuf.tb_len - 1,
