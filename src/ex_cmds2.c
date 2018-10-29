@@ -68,7 +68,6 @@ typedef struct sn_prl_S
 #if defined(FEAT_EVAL) || defined(PROTO)
 static int debug_greedy = FALSE;	/* batch mode debugging: don't save
 					   and restore typeahead. */
-static int get_maxbacktrace_level(void);
 static void do_setdebugtracelevel(char_u *arg);
 static void do_checkbacktracelevel(void);
 static void do_showbacktrace(char_u *cmd);
@@ -573,7 +572,6 @@ static garray_T prof_ga = {0, 0, sizeof(struct debuggy), 4, NULL};
 #define DBG_FILE	2
 #define DBG_EXPR	3
 
-static int dbg_parsearg(char_u *arg, garray_T *gap);
 static linenr_T debuggy_find(int file,char_u *fname, linenr_T after, garray_T *gap, int *fp);
 
 /*
@@ -1611,7 +1609,6 @@ profile_divide(proftime_T *tm, int count, proftime_T *tm2)
 /*
  * Functions for profiling.
  */
-static void script_do_profile(scriptitem_T *si);
 static void script_dump_profile(FILE *fd);
 static proftime_T prof_wait_time;
 
@@ -1866,9 +1863,9 @@ script_prof_save(
 {
     scriptitem_T    *si;
 
-    if (current_SID > 0 && current_SID <= script_items.ga_len)
+    if (current_sctx.sc_sid > 0 && current_sctx.sc_sid <= script_items.ga_len)
     {
-	si = &SCRIPT_ITEM(current_SID);
+	si = &SCRIPT_ITEM(current_sctx.sc_sid);
 	if (si->sn_prof_on && si->sn_pr_nest++ == 0)
 	    profile_start(&si->sn_pr_child);
     }
@@ -1883,9 +1880,9 @@ script_prof_restore(proftime_T *tm)
 {
     scriptitem_T    *si;
 
-    if (current_SID > 0 && current_SID <= script_items.ga_len)
+    if (current_sctx.sc_sid > 0 && current_sctx.sc_sid <= script_items.ga_len)
     {
-	si = &SCRIPT_ITEM(current_SID);
+	si = &SCRIPT_ITEM(current_sctx.sc_sid);
 	if (si->sn_prof_on && --si->sn_pr_nest == 0)
 	{
 	    profile_end(&si->sn_pr_child);
@@ -2003,8 +2000,8 @@ script_dump_profile(FILE *fd)
     int
 prof_def_func(void)
 {
-    if (current_SID > 0)
-	return SCRIPT_ITEM(current_SID).sn_pr_force;
+    if (current_sctx.sc_sid > 0)
+	return SCRIPT_ITEM(current_sctx.sc_sid).sn_pr_force;
     return FALSE;
 }
 
@@ -2041,7 +2038,7 @@ autowrite(buf_T *buf, int forceit)
 }
 
 /*
- * flush all buffers, except the ones that are readonly
+ * Flush all buffers, except the ones that are readonly or are never written.
  */
     void
 autowrite_all(void)
@@ -2051,7 +2048,7 @@ autowrite_all(void)
     if (!(p_aw || p_awa) || !p_write)
 	return;
     FOR_ALL_BUFFERS(buf)
-	if (bufIsChanged(buf) && !buf->b_p_ro)
+	if (bufIsChanged(buf) && !buf->b_p_ro && !bt_dontwrite(buf))
 	{
 	    bufref_T	bufref;
 
@@ -2241,8 +2238,6 @@ can_abandon(buf_T *buf, int forceit)
 		|| autowrite(buf, forceit) == OK
 		|| forceit);
 }
-
-static void add_bufnum(int *bufnrs, int *bufnump, int nr);
 
 /*
  * Add a buffer number to "bufnrs", unless it's already there.
@@ -2444,11 +2439,9 @@ buf_write_all(buf_T *buf, int forceit)
  * Code to handle the argument list.
  */
 
-static char_u	*do_one_arg(char_u *str);
-static int	do_arglist(char_u *str, int what, int after);
+static int	do_arglist(char_u *str, int what, int after, int will_edit);
 static void	alist_check_arg_idx(void);
-static int	editing_arg_idx(win_T *win);
-static int	alist_add_list(int count, char_u **files, int after);
+static void	alist_add_list(int count, char_u **files, int after, int will_edit);
 #define AL_SET	1
 #define AL_ADD	2
 #define AL_DEL	3
@@ -2553,7 +2546,7 @@ get_arglist_exp(
     void
 set_arglist(char_u *str)
 {
-    do_arglist(str, AL_SET, 0);
+    do_arglist(str, AL_SET, 0, FALSE);
 }
 
 /*
@@ -2567,7 +2560,8 @@ set_arglist(char_u *str)
 do_arglist(
     char_u	*str,
     int		what,
-    int		after UNUSED)		/* 0 means before first one */
+    int		after UNUSED,	// 0 means before first one
+    int		will_edit)	// will edit added argument
 {
     garray_T	new_ga;
     int		exp_count;
@@ -2652,11 +2646,11 @@ do_arglist(
 
 	if (what == AL_ADD)
 	{
-	    (void)alist_add_list(exp_count, exp_files, after);
+	    alist_add_list(exp_count, exp_files, after, will_edit);
 	    vim_free(exp_files);
 	}
 	else /* what == AL_SET */
-	    alist_set(ALIST(curwin), exp_count, exp_files, FALSE, NULL, 0);
+	    alist_set(ALIST(curwin), exp_count, exp_files, will_edit, NULL, 0);
     }
 
     alist_check_arg_idx();
@@ -2932,7 +2926,7 @@ ex_next(exarg_T *eap)
     {
 	if (*eap->arg != NUL)		    /* redefine file list */
 	{
-	    if (do_arglist(eap->arg, AL_SET, 0) == FAIL)
+	    if (do_arglist(eap->arg, AL_SET, 0, TRUE) == FAIL)
 		return;
 	    i = 0;
 	}
@@ -2952,7 +2946,7 @@ ex_argedit(exarg_T *eap)
     // Whether curbuf will be reused, curbuf->b_ffname will be set.
     int curbuf_is_reusable = curbuf_reusable();
 
-    if (do_arglist(eap->arg, AL_ADD, i) == FAIL)
+    if (do_arglist(eap->arg, AL_ADD, i, TRUE) == FAIL)
 	return;
 #ifdef FEAT_TITLE
     maketitle();
@@ -2974,7 +2968,8 @@ ex_argedit(exarg_T *eap)
 ex_argadd(exarg_T *eap)
 {
     do_arglist(eap->arg, AL_ADD,
-	       eap->addr_count > 0 ? (int)eap->line2 : curwin->w_arg_idx + 1);
+	       eap->addr_count > 0 ? (int)eap->line2 : curwin->w_arg_idx + 1,
+	       FALSE);
 #ifdef FEAT_TITLE
     maketitle();
 #endif
@@ -3024,7 +3019,7 @@ ex_argdelete(exarg_T *eap)
     else if (*eap->arg == NUL)
 	EMSG(_(e_argreq));
     else
-	do_arglist(eap->arg, AL_DEL, 0);
+	do_arglist(eap->arg, AL_DEL, 0, FALSE);
 #ifdef FEAT_TITLE
     maketitle();
 #endif
@@ -3269,13 +3264,13 @@ ex_listdo(exarg_T *eap)
  * Add files[count] to the arglist of the current window after arg "after".
  * The file names in files[count] must have been allocated and are taken over.
  * Files[] itself is not taken over.
- * Returns index of first added argument.  Returns -1 when failed (out of mem).
  */
-    static int
+    static void
 alist_add_list(
     int		count,
     char_u	**files,
-    int		after)	    /* where to add: 0 = before first one */
+    int		after,	    // where to add: 0 = before first one
+    int		will_edit)  // will edit adding argument
 {
     int		i;
     int		old_argcount = ARGCOUNT;
@@ -3291,19 +3286,19 @@ alist_add_list(
 				       (ARGCOUNT - after) * sizeof(aentry_T));
 	for (i = 0; i < count; ++i)
 	{
+	    int flags = BLN_LISTED | (will_edit ? BLN_CURBUF : 0);
+
 	    ARGLIST[after + i].ae_fname = files[i];
-	    ARGLIST[after + i].ae_fnum =
-				buflist_add(files[i], BLN_LISTED | BLN_CURBUF);
+	    ARGLIST[after + i].ae_fnum = buflist_add(files[i], flags);
 	}
 	ALIST(curwin)->al_ga.ga_len += count;
 	if (old_argcount > 0 && curwin->w_arg_idx >= after)
 	    curwin->w_arg_idx += count;
-	return after;
+	return;
     }
 
     for (i = 0; i < count; ++i)
 	vim_free(files[i]);
-    return -1;
 }
 
 #if defined(FEAT_CMDL_COMPL) || defined(PROTO)
@@ -3689,14 +3684,17 @@ source_all_matches(char_u *pat)
 add_pack_dir_to_rtp(char_u *fname)
 {
     char_u  *p4, *p3, *p2, *p1, *p;
-    char_u  *insp;
+    char_u  *entry;
+    char_u  *insp = NULL;
     int	    c;
     char_u  *new_rtp;
     int	    keep;
     size_t  oldlen;
     size_t  addlen;
+    size_t  new_rtp_len;
     char_u  *afterdir = NULL;
     size_t  afterlen = 0;
+    char_u  *after_insp = NULL;
     char_u  *ffname = NULL;
     size_t  fname_len;
     char_u  *buf = NULL;
@@ -3723,54 +3721,99 @@ add_pack_dir_to_rtp(char_u *fname)
     if (ffname == NULL)
 	return FAIL;
 
-    /* Find "ffname" in "p_rtp", ignoring '/' vs '\' differences. */
+    // Find "ffname" in "p_rtp", ignoring '/' vs '\' differences.
+    // Also stop at the first "after" directory.
     fname_len = STRLEN(ffname);
-    insp = p_rtp;
     buf = alloc(MAXPATHL);
     if (buf == NULL)
 	goto theend;
-    while (*insp != NUL)
+    for (entry = p_rtp; *entry != NUL; )
     {
-	copy_option_part(&insp, buf, MAXPATHL, ",");
-	add_pathsep(buf);
-	rtp_ffname = fix_fname(buf);
-	if (rtp_ffname == NULL)
-	    goto theend;
-	match = vim_fnamencmp(rtp_ffname, ffname, fname_len) == 0;
-	vim_free(rtp_ffname);
-	if (match)
+	char_u *cur_entry = entry;
+
+	copy_option_part(&entry, buf, MAXPATHL, ",");
+	if (insp == NULL)
+	{
+	    add_pathsep(buf);
+	    rtp_ffname = fix_fname(buf);
+	    if (rtp_ffname == NULL)
+		goto theend;
+	    match = vim_fnamencmp(rtp_ffname, ffname, fname_len) == 0;
+	    vim_free(rtp_ffname);
+	    if (match)
+		// Insert "ffname" after this entry (and comma).
+		insp = entry;
+	}
+
+	if ((p = (char_u *)strstr((char *)buf, "after")) != NULL
+		&& p > buf
+		&& vim_ispathsep(p[-1])
+		&& (vim_ispathsep(p[5]) || p[5] == NUL || p[5] == ','))
+	{
+	    if (insp == NULL)
+		// Did not find "ffname" before the first "after" directory,
+		// insert it before this entry.
+		insp = cur_entry;
+	    after_insp = cur_entry;
 	    break;
+	}
     }
 
-    if (*insp == NUL)
-	/* not found, append at the end */
+    if (insp == NULL)
+	// Both "fname" and "after" not found, append at the end.
 	insp = p_rtp + STRLEN(p_rtp);
-    else
-	/* append after the matching directory. */
-	--insp;
 
-    /* check if rtp/pack/name/start/name/after exists */
+    // check if rtp/pack/name/start/name/after exists
     afterdir = concat_fnames(fname, (char_u *)"after", TRUE);
     if (afterdir != NULL && mch_isdir(afterdir))
-	afterlen = STRLEN(afterdir) + 1; /* add one for comma */
+	afterlen = STRLEN(afterdir) + 1; // add one for comma
 
     oldlen = STRLEN(p_rtp);
-    addlen = STRLEN(fname) + 1; /* add one for comma */
-    new_rtp = alloc((int)(oldlen + addlen + afterlen + 1));
-    /* add one for NUL */
+    addlen = STRLEN(fname) + 1; // add one for comma
+    new_rtp = alloc((int)(oldlen + addlen + afterlen + 1)); // add one for NUL
     if (new_rtp == NULL)
 	goto theend;
+
+    // We now have 'rtp' parts: {keep}{keep_after}{rest}.
+    // Create new_rtp, first: {keep},{fname}
     keep = (int)(insp - p_rtp);
     mch_memmove(new_rtp, p_rtp, keep);
-    new_rtp[keep] = ',';
-    mch_memmove(new_rtp + keep + 1, fname, addlen);
-    if (p_rtp[keep] != NUL)
-	mch_memmove(new_rtp + keep + addlen, p_rtp + keep, oldlen - keep + 1);
-    if (afterlen > 0)
+    new_rtp_len = keep;
+    if (*insp == NUL)
+	new_rtp[new_rtp_len++] = ',';  // add comma before
+    mch_memmove(new_rtp + new_rtp_len, fname, addlen - 1);
+    new_rtp_len += addlen - 1;
+    if (*insp != NUL)
+	new_rtp[new_rtp_len++] = ',';  // add comma after
+
+    if (afterlen > 0 && after_insp != NULL)
     {
+	int keep_after = (int)(after_insp - p_rtp);
+
+	// Add to new_rtp: {keep},{fname}{keep_after},{afterdir}
+	mch_memmove(new_rtp + new_rtp_len, p_rtp + keep,
+							keep_after - keep);
+	new_rtp_len += keep_after - keep;
+	mch_memmove(new_rtp + new_rtp_len, afterdir, afterlen - 1);
+	new_rtp_len += afterlen - 1;
+	new_rtp[new_rtp_len++] = ',';
+	keep = keep_after;
+    }
+
+    if (p_rtp[keep] != NUL)
+	// Append rest: {keep},{fname}{keep_after},{afterdir}{rest}
+	mch_memmove(new_rtp + new_rtp_len, p_rtp + keep, oldlen - keep + 1);
+    else
+	new_rtp[new_rtp_len] = NUL;
+
+    if (afterlen > 0 && after_insp == NULL)
+    {
+	// Append afterdir when "after" was not found:
+	// {keep},{fname}{rest},{afterdir}
 	STRCAT(new_rtp, ",");
 	STRCAT(new_rtp, afterdir);
     }
+
     set_option_value((char_u *)"rtp", 0L, new_rtp, 0);
     vim_free(new_rtp);
     retval = OK;
@@ -4249,8 +4292,6 @@ static char_u *get_one_sourceline(struct source_cookie *sp);
 
 #if (defined(WIN32) && defined(FEAT_CSCOPE)) || defined(HAVE_FD_CLOEXEC)
 # define USE_FOPEN_NOINH
-static FILE *fopen_noinh_readbin(char *filename);
-
 /*
  * Special function to open a file without handle inheritance.
  * When possible the handle is closed on exec().
@@ -4301,9 +4342,9 @@ do_source(
     char_u		    *firstline = NULL;
     int			    retval = FAIL;
 #ifdef FEAT_EVAL
-    scid_T		    save_current_SID;
+    sctx_T		    save_current_sctx;
     static scid_T	    last_current_SID = 0;
-    void		    *save_funccalp;
+    funccal_entry_T	    funccalp_entry;
     int			    save_debug_break_level = debug_break_level;
     scriptitem_T	    *si = NULL;
 # ifdef UNIX
@@ -4465,19 +4506,21 @@ do_source(
 
     /* Don't use local function variables, if called from a function.
      * Also starts profiling timer for nested script. */
-    save_funccalp = save_funccal();
+    save_funccal(&funccalp_entry);
 
     /*
      * Check if this script was sourced before to finds its SID.
      * If it's new, generate a new SID.
      */
-    save_current_SID = current_SID;
+    save_current_sctx = current_sctx;
+    current_sctx.sc_lnum = 0;
 # ifdef UNIX
     stat_ok = (mch_stat((char *)fname_exp, &st) >= 0);
 # endif
-    for (current_SID = script_items.ga_len; current_SID > 0; --current_SID)
+    for (current_sctx.sc_sid = script_items.ga_len; current_sctx.sc_sid > 0;
+							 --current_sctx.sc_sid)
     {
-	si = &SCRIPT_ITEM(current_SID);
+	si = &SCRIPT_ITEM(current_sctx.sc_sid);
 	if (si->sn_name != NULL
 		&& (
 # ifdef UNIX
@@ -4491,13 +4534,13 @@ do_source(
 		fnamecmp(si->sn_name, fname_exp) == 0))
 	    break;
     }
-    if (current_SID == 0)
+    if (current_sctx.sc_sid == 0)
     {
-	current_SID = ++last_current_SID;
-	if (ga_grow(&script_items, (int)(current_SID - script_items.ga_len))
-								      == FAIL)
+	current_sctx.sc_sid = ++last_current_SID;
+	if (ga_grow(&script_items,
+		     (int)(current_sctx.sc_sid - script_items.ga_len)) == FAIL)
 	    goto almosttheend;
-	while (script_items.ga_len < current_SID)
+	while (script_items.ga_len < current_sctx.sc_sid)
 	{
 	    ++script_items.ga_len;
 	    SCRIPT_ITEM(script_items.ga_len).sn_name = NULL;
@@ -4505,7 +4548,7 @@ do_source(
 	    SCRIPT_ITEM(script_items.ga_len).sn_prof_on = FALSE;
 # endif
 	}
-	si = &SCRIPT_ITEM(current_SID);
+	si = &SCRIPT_ITEM(current_sctx.sc_sid);
 	si->sn_name = fname_exp;
 	fname_exp = NULL;
 # ifdef UNIX
@@ -4520,7 +4563,7 @@ do_source(
 # endif
 
 	/* Allocate the local script variables to use for this script. */
-	new_script_vars(current_SID);
+	new_script_vars(current_sctx.sc_sid);
     }
 
 # ifdef FEAT_PROFILE
@@ -4576,7 +4619,7 @@ do_source(
     if (do_profiling == PROF_YES)
     {
 	/* Get "si" again, "script_items" may have been reallocated. */
-	si = &SCRIPT_ITEM(current_SID);
+	si = &SCRIPT_ITEM(current_sctx.sc_sid);
 	if (si->sn_prof_on)
 	{
 	    profile_end(&si->sn_pr_start);
@@ -4621,8 +4664,8 @@ do_source(
 
 #ifdef FEAT_EVAL
 almosttheend:
-    current_SID = save_current_SID;
-    restore_funccal(save_funccalp);
+    current_sctx = save_current_sctx;
+    restore_funccal();
 # ifdef FEAT_PROFILE
     if (do_profiling == PROF_YES)
 	prof_child_exit(&wait_start);		/* leaving a child now */
@@ -4812,17 +4855,21 @@ getsourceline(int c UNUSED, void *cookie, int indent UNUSED)
 	/* compensate for the one line read-ahead */
 	--sourcing_lnum;
 
-	/* Get the next line and concatenate it when it starts with a
-	 * backslash. We always need to read the next line, keep it in
-	 * sp->nextline. */
+	// Get the next line and concatenate it when it starts with a
+	// backslash. We always need to read the next line, keep it in
+	// sp->nextline.
+	/* Also check for a comment in between continuation lines: "\ */
 	sp->nextline = get_one_sourceline(sp);
-	if (sp->nextline != NULL && *(p = skipwhite(sp->nextline)) == '\\')
+	if (sp->nextline != NULL
+		&& (*(p = skipwhite(sp->nextline)) == '\\'
+			      || (p[0] == '"' && p[1] == '\\' && p[2] == ' ')))
 	{
 	    garray_T    ga;
 
 	    ga_init2(&ga, (int)sizeof(char_u), 400);
 	    ga_concat(&ga, line);
-	    ga_concat(&ga, p + 1);
+	    if (*p == '\\')
+		ga_concat(&ga, p + 1);
 	    for (;;)
 	    {
 		vim_free(sp->nextline);
@@ -4830,18 +4877,21 @@ getsourceline(int c UNUSED, void *cookie, int indent UNUSED)
 		if (sp->nextline == NULL)
 		    break;
 		p = skipwhite(sp->nextline);
-		if (*p != '\\')
-		    break;
-		/* Adjust the growsize to the current length to speed up
-		 * concatenating many lines. */
-		if (ga.ga_len > 400)
+		if (*p == '\\')
 		{
-		    if (ga.ga_len > 8000)
-			ga.ga_growsize = 8000;
-		    else
-			ga.ga_growsize = ga.ga_len;
+		    // Adjust the growsize to the current length to speed up
+		    // concatenating many lines.
+		    if (ga.ga_len > 400)
+		    {
+			if (ga.ga_len > 8000)
+			    ga.ga_growsize = 8000;
+			else
+			    ga.ga_growsize = ga.ga_len;
+		    }
+		    ga_concat(&ga, p + 1);
 		}
-		ga_concat(&ga, p + 1);
+		else if (p[0] != '"' || p[1] != '\\' || p[2] != ' ')
+		    break;
 	    }
 	    ga_append(&ga, NUL);
 	    vim_free(line);
@@ -5040,9 +5090,9 @@ script_line_start(void)
     scriptitem_T    *si;
     sn_prl_T	    *pp;
 
-    if (current_SID <= 0 || current_SID > script_items.ga_len)
+    if (current_sctx.sc_sid <= 0 || current_sctx.sc_sid > script_items.ga_len)
 	return;
-    si = &SCRIPT_ITEM(current_SID);
+    si = &SCRIPT_ITEM(current_sctx.sc_sid);
     if (si->sn_prof_on && sourcing_lnum >= 1)
     {
 	/* Grow the array before starting the timer, so that the time spent
@@ -5075,9 +5125,9 @@ script_line_exec(void)
 {
     scriptitem_T    *si;
 
-    if (current_SID <= 0 || current_SID > script_items.ga_len)
+    if (current_sctx.sc_sid <= 0 || current_sctx.sc_sid > script_items.ga_len)
 	return;
-    si = &SCRIPT_ITEM(current_SID);
+    si = &SCRIPT_ITEM(current_sctx.sc_sid);
     if (si->sn_prof_on && si->sn_prl_idx >= 0)
 	si->sn_prl_execed = TRUE;
 }
@@ -5091,9 +5141,9 @@ script_line_end(void)
     scriptitem_T    *si;
     sn_prl_T	    *pp;
 
-    if (current_SID <= 0 || current_SID > script_items.ga_len)
+    if (current_sctx.sc_sid <= 0 || current_sctx.sc_sid > script_items.ga_len)
 	return;
-    si = &SCRIPT_ITEM(current_SID);
+    si = &SCRIPT_ITEM(current_sctx.sc_sid);
     if (si->sn_prof_on && si->sn_prl_idx >= 0
 				     && si->sn_prl_idx < si->sn_prl_ga.ga_len)
     {
@@ -5232,8 +5282,6 @@ ex_checktime(exarg_T *eap)
 #if (defined(HAVE_LOCALE_H) || defined(X_LOCALE)) \
 	&& (defined(FEAT_EVAL) || defined(FEAT_MULTI_LANG))
 # define HAVE_GET_LOCALE_VAL
-static char_u *get_locale_val(int what);
-
     static char_u *
 get_locale_val(int what)
 {
@@ -5351,8 +5399,6 @@ get_mess_lang(void)
 	|| ((defined(HAVE_LOCALE_H) || defined(X_LOCALE)) \
 		&& (defined(FEAT_GETTEXT) || defined(FEAT_MBYTE)) \
 		&& !defined(LC_MESSAGES))
-static char_u *get_mess_env(void);
-
 /*
  * Get the language used for messages from the environment.
  */

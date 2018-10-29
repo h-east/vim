@@ -138,7 +138,7 @@ ch_log_active(void)
 }
 
     static void
-ch_log_lead(const char *what, channel_T *ch)
+ch_log_lead(const char *what, channel_T *ch, ch_part_T part)
 {
     if (log_fd != NULL)
     {
@@ -150,7 +150,13 @@ ch_log_lead(const char *what, channel_T *ch)
 	fprintf(log_fd, "%s ", profile_msg(&log_now));
 #endif
 	if (ch != NULL)
-	    fprintf(log_fd, "%son %d: ", what, ch->ch_id);
+	{
+	    if (part < PART_COUNT)
+		fprintf(log_fd, "%son %d(%s): ",
+					   what, ch->ch_id, part_names[part]);
+	    else
+		fprintf(log_fd, "%son %d: ", what, ch->ch_id);
+	}
 	else
 	    fprintf(log_fd, "%s: ", what);
     }
@@ -166,7 +172,7 @@ ch_log(channel_T *ch, const char *fmt, ...)
     {
 	va_list ap;
 
-	ch_log_lead("", ch);
+	ch_log_lead("", ch, PART_COUNT);
 	va_start(ap, fmt);
 	vfprintf(log_fd, fmt, ap);
 	va_end(ap);
@@ -191,7 +197,7 @@ ch_error(channel_T *ch, const char *fmt, ...)
     {
 	va_list ap;
 
-	ch_log_lead("ERR ", ch);
+	ch_log_lead("ERR ", ch, PART_COUNT);
 	va_start(ap, fmt);
 	vfprintf(log_fd, fmt, ap);
 	va_end(ap);
@@ -1174,6 +1180,7 @@ channel_set_options(channel_T *channel, jobopt_T *opt)
 	channel->ch_part[PART_OUT].ch_mode = opt->jo_out_mode;
     if (opt->jo_set & JO_ERR_MODE)
 	channel->ch_part[PART_ERR].ch_mode = opt->jo_err_mode;
+    channel->ch_nonblock = opt->jo_noblock;
 
     if (opt->jo_set & JO_TIMEOUT)
 	for (part = PART_SOCK; part < PART_COUNT; ++part)
@@ -1849,9 +1856,9 @@ channel_save(channel_T *channel, ch_part_T part, char_u *buf, int len,
 
     if (ch_log_active() && lead != NULL)
     {
-	ch_log_lead(lead, channel);
+	ch_log_lead(lead, channel, part);
 	fprintf(log_fd, "'");
-	ignored = (int)fwrite(buf, len, 1, log_fd);
+	vim_ignored = (int)fwrite(buf, len, 1, log_fd);
 	fprintf(log_fd, "'\n");
     }
     return OK;
@@ -2381,7 +2388,7 @@ append_to_buffer(buf_T *buffer, char_u *msg, channel_T *channel, ch_part_T part)
 
     u_sync(TRUE);
     /* ignore undo failure, undo is not very useful here */
-    ignored = u_save(lnum - empty, lnum + 1);
+    vim_ignored = u_save(lnum - empty, lnum + 1);
 
     if (empty)
     {
@@ -3671,7 +3678,7 @@ channel_any_keep_open()
 channel_set_nonblock(channel_T *channel, ch_part_T part)
 {
     chanpart_T *ch_part = &channel->ch_part[part];
-    int fd = ch_part->ch_fd;
+    int		fd = ch_part->ch_fd;
 
     if (fd != INVALID_FD)
     {
@@ -3716,11 +3723,14 @@ channel_send(
 	return FAIL;
     }
 
+    if (channel->ch_nonblock && !ch_part->ch_nonblocking)
+	channel_set_nonblock(channel, part);
+
     if (ch_log_active())
     {
-	ch_log_lead("SEND ", channel);
+	ch_log_lead("SEND ", channel, part);
 	fprintf(log_fd, "'");
-	ignored = (int)fwrite(buf_arg, len_arg, 1, log_fd);
+	vim_ignored = (int)fwrite(buf_arg, len_arg, 1, log_fd);
 	fprintf(log_fd, "'\n");
 	fflush(log_fd);
 	did_log_msg = TRUE;
@@ -4547,6 +4557,12 @@ get_job_options(typval_T *tv, jobopt_T *opt, int supported, int supported2)
 								      == FAIL)
 		    return FAIL;
 	    }
+	    else if (STRCMP(hi->hi_key, "noblock") == 0)
+	    {
+		if (!(supported & JO_MODE))
+		    break;
+		opt->jo_noblock = get_tv_number(item);
+	    }
 	    else if (STRCMP(hi->hi_key, "in_io") == 0
 		    || STRCMP(hi->hi_key, "out_io") == 0
 		    || STRCMP(hi->hi_key, "err_io") == 0)
@@ -4900,7 +4916,11 @@ get_job_options(typval_T *tv, jobopt_T *opt, int supported, int supported2)
 		if (!(supported2 & JO2_CWD))
 		    break;
 		opt->jo_cwd = get_tv_string_buf_chk(item, opt->jo_cwd_buf);
-		if (opt->jo_cwd == NULL || !mch_isdir(opt->jo_cwd))
+		if (opt->jo_cwd == NULL || !mch_isdir(opt->jo_cwd)
+#ifndef WIN32  // Win32 directories don't have the concept of "executable"
+				|| mch_access((char *)opt->jo_cwd, X_OK) != 0
+#endif
+				)
 		{
 		    EMSG2(_(e_invargval), "cwd");
 		    return FAIL;

@@ -478,6 +478,28 @@ func Test_terminal_cwd()
   call delete('Xdir', 'rf')
 endfunc
 
+func Test_terminal_cwd_failure()
+  " Case 1: Provided directory is not actually a directory.  Attempt to make
+  " the file executable as well.
+  call writefile([], 'Xfile')
+  call setfperm('Xfile', 'rwx------')
+  call assert_fails("call term_start(&shell, {'cwd': 'Xfile'})", 'E475:')
+  call delete('Xfile')
+
+  " Case 2: Directory does not exist.
+  call assert_fails("call term_start(&shell, {'cwd': 'Xdir'})", 'E475:')
+
+  " Case 3: Directory exists but is not accessible.
+  call mkdir('Xdir', '', '0600')
+  " return early if the directory permissions could not be set properly
+  if getfperm('Xdir')[2] == 'x'
+    call delete('Xdir', 'rf')
+    return
+  endif
+  call assert_fails("call term_start(&shell, {'cwd': 'Xdir'})", 'E475:')
+  call delete('Xdir', 'rf')
+endfunc
+
 func Test_terminal_servername()
   if !has('clientserver')
     return
@@ -1604,4 +1626,32 @@ func Test_zz2_terminal_guioptions_bang()
 
   set guioptions&
   call delete(filename)
+endfunc
+
+func Test_terminal_hidden()
+  if !has('unix')
+    return
+  endif
+  term ++hidden cat
+  let bnr = bufnr('$')
+  call assert_equal('terminal', getbufvar(bnr, '&buftype'))
+  exe 'sbuf ' . bnr
+  call assert_equal('terminal', &buftype)
+  call term_sendkeys(bnr, "asdf\<CR>")
+  call WaitForAssert({-> assert_match('asdf', term_getline(bnr, 2))})
+  call term_sendkeys(bnr, "\<C-D>")
+  call WaitForAssert({-> assert_equal('finished', term_getstatus(bnr))})
+  bwipe!
+endfunc
+
+func Test_terminal_hidden_and_close()
+  if !has('unix')
+    return
+  endif
+  call assert_equal(1, winnr('$'))
+  term ++hidden ++close ls
+  let bnr = bufnr('$')
+  call assert_equal('terminal', getbufvar(bnr, '&buftype'))
+  call WaitForAssert({-> assert_false(bufexists(bnr))})
+  call assert_equal(1, winnr('$'))
 endfunc

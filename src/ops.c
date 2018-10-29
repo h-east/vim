@@ -95,7 +95,6 @@ struct block_def
 
 #ifdef FEAT_VISUALEXTRA
 static void shift_block(oparg_T *oap, int amount);
-static void block_insert(oparg_T *oap, char_u *s, int b_insert, struct block_def*bdp);
 #endif
 static int	stuff_yank(int, char_u *);
 static void	put_reedit_in_typebuf(int silent);
@@ -105,7 +104,6 @@ static void	stuffescaped(char_u *arg, int literally);
 #ifdef FEAT_MBYTE
 static void	mb_adjust_opend(oparg_T *oap);
 #endif
-static void	free_yank(long);
 static void	free_yank_all(void);
 static int	yank_copy_line(struct block_def *bd, long y_idx);
 #ifdef FEAT_CLIPBOARD
@@ -120,7 +118,6 @@ static void	str_to_reg(yankreg_T *y_ptr, int yank_type, char_u *str, long len, l
 #endif
 static int	ends_in_white(linenr_T lnum);
 #ifdef FEAT_COMMENTS
-static int	same_leader(linenr_T lnum, int, char_u *, int, char_u *);
 static int	fmt_check_par(linenr_T, int *, char_u **, int do_comments);
 #else
 static int	fmt_check_par(linenr_T);
@@ -244,7 +241,6 @@ op_shift(oparg_T *oap, int curs_top, int amount)
 {
     long	    i;
     int		    first_char;
-    char_u	    *s;
     int		    block_col = 0;
 
     if (u_save((linenr_T)(oap->start.lnum - 1),
@@ -297,26 +293,21 @@ op_shift(oparg_T *oap, int curs_top, int amount)
 
     if (oap->line_count > p_report)
     {
+	char	    *op;
+	char	    *msg_line_single;
+	char	    *msg_line_plural;
+
 	if (oap->op_type == OP_RSHIFT)
-	    s = (char_u *)">";
+	    op = ">";
 	else
-	    s = (char_u *)"<";
-	if (oap->line_count == 1)
-	{
-	    if (amount == 1)
-		sprintf((char *)IObuff, _("1 line %sed 1 time"), s);
-	    else
-		sprintf((char *)IObuff, _("1 line %sed %d times"), s, amount);
-	}
-	else
-	{
-	    if (amount == 1)
-		sprintf((char *)IObuff, _("%ld lines %sed 1 time"),
-							  oap->line_count, s);
-	    else
-		sprintf((char *)IObuff, _("%ld lines %sed %d times"),
-						  oap->line_count, s, amount);
-	}
+	    op = "<";
+	msg_line_single = NGETTEXT("%ld line %sed %d time",
+					     "%ld line %sed %d times", amount);
+	msg_line_plural = NGETTEXT("%ld lines %sed %d time",
+					    "%ld lines %sed %d times", amount);
+	vim_snprintf((char *)IObuff, IOSIZE,
+		NGETTEXT(msg_line_single, msg_line_plural, oap->line_count),
+		oap->line_count, op, amount);
 	msg(IObuff);
     }
 
@@ -376,11 +367,9 @@ shift_line(
     }
 
     /* Set new indent */
-#ifdef FEAT_VREPLACE
     if (State & VREPLACE_FLAG)
 	change_indent(INDENT_SET, count, FALSE, NUL, call_changed_bytes);
     else
-#endif
 	(void)set_indent(count, call_changed_bytes ? SIN_CHANGED : 0);
 }
 
@@ -791,10 +780,8 @@ op_reindent(oparg_T *oap, int (*how)(void))
     if (oap->line_count > p_report)
     {
 	i = oap->line_count - (i + 1);
-	if (i == 1)
-	    MSG(_("1 line indented "));
-	else
-	    smsg((char_u *)_("%ld lines indented "), i);
+	smsg((char_u *)NGETTEXT("%ld line indented ",
+						 "%ld lines indented ", i), i);
     }
     /* set '[ and '] marks */
     curbuf->b_op_start = oap->start;
@@ -2531,12 +2518,8 @@ op_tilde(oparg_T *oap)
     curbuf->b_op_end = oap->end;
 
     if (oap->line_count > p_report)
-    {
-	if (oap->line_count == 1)
-	    MSG(_("1 line changed"));
-	else
-	    smsg((char_u *)_("%ld lines changed"), oap->line_count);
-    }
+	smsg((char_u *)NGETTEXT("%ld line changed", "%ld lines changed",
+					    oap->line_count), oap->line_count);
 }
 
 /*
@@ -3350,19 +3333,18 @@ op_yank(oparg_T *oap, int deleting, int mess)
 
 	    /* redisplay now, so message is not deleted */
 	    update_topline_redraw();
-	    if (yanklines == 1)
+	    if (oap->block_mode)
 	    {
-		if (oap->block_mode)
-		    smsg((char_u *)_("block of 1 line yanked%s"), namebuf);
-		else
-		    smsg((char_u *)_("1 line yanked%s"), namebuf);
+		smsg((char_u *)NGETTEXT("block of %ld line yanked%s",
+				     "block of %ld lines yanked%s", yanklines),
+			yanklines, namebuf);
 	    }
-	    else if (oap->block_mode)
-		smsg((char_u *)_("block of %ld lines yanked%s"),
-		     yanklines, namebuf);
 	    else
-		smsg((char_u *)_("%ld lines yanked%s"), yanklines,
-		     namebuf);
+	    {
+		smsg((char_u *)NGETTEXT("%ld line yanked%s",
+					      "%ld lines yanked%s", yanklines),
+			yanklines, namebuf);
+	    }
 	}
     }
 
@@ -5655,12 +5637,8 @@ op_addsub(
 	    curbuf->b_op_start = startpos;
 
 	if (change_cnt > p_report)
-	{
-	    if (change_cnt == 1)
-		MSG(_("1 line changed"));
-	    else
-		smsg((char_u *)_("%ld lines changed"), change_cnt);
-	}
+	    smsg((char_u *)NGETTEXT("%ld line changed", "%ld lines changed",
+						      change_cnt), change_cnt);
     }
 }
 
@@ -6848,8 +6826,6 @@ get_reg_type(int regname, long *reglen)
     return MAUTO;
 }
 
-static char_u *getreg_wrap_one_line(char_u *s, int flags);
-
 /*
  * When "flags" has GREG_LIST return a list with text "s".
  * Otherwise just return "s".
@@ -7320,8 +7296,6 @@ clear_oparg(oparg_T *oap)
 {
     vim_memset(oap, 0, sizeof(oparg_T));
 }
-
-static varnumber_T line_count_info(char_u *line, varnumber_T *wc, varnumber_T *cc, varnumber_T limit, int eol_size);
 
 /*
  *  Count the number of bytes, characters and "words" in a line.

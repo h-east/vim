@@ -1,4 +1,5 @@
 " Tests for various functions.
+source shared.vim
 
 " Must be done first, since the alternate buffer must be unset.
 func Test_00_bufexists()
@@ -189,6 +190,52 @@ func Test_strftime()
   call assert_fails('call strftime("%Y", [])', 'E745:')
 endfunc
 
+func Test_resolve()
+  if !has('unix')
+    return
+  endif
+
+  " Xlink1 -> Xlink2
+  " Xlink2 -> Xlink3
+  silent !ln -s -f Xlink2 Xlink1
+  silent !ln -s -f Xlink3 Xlink2
+  call assert_equal('Xlink3', resolve('Xlink1'))
+  call assert_equal('./Xlink3', resolve('./Xlink1'))
+  call assert_equal('Xlink3/', resolve('Xlink2/'))
+  " FIXME: these tests result in things like "Xlink2/" instead of "Xlink3/"?!
+  "call assert_equal('Xlink3/', resolve('Xlink1/'))
+  "call assert_equal('./Xlink3/', resolve('./Xlink1/'))
+  "call assert_equal(getcwd() . '/Xlink3/', resolve(getcwd() . '/Xlink1/'))
+  call assert_equal(getcwd() . '/Xlink3', resolve(getcwd() . '/Xlink1'))
+
+  " Test resolve() with a symlink cycle.
+  " Xlink1 -> Xlink2
+  " Xlink2 -> Xlink3
+  " Xlink3 -> Xlink1
+  silent !ln -s -f Xlink1 Xlink3
+  call assert_fails('call resolve("Xlink1")',   'E655:')
+  call assert_fails('call resolve("./Xlink1")', 'E655:')
+  call assert_fails('call resolve("Xlink2")',   'E655:')
+  call assert_fails('call resolve("Xlink3")',   'E655:')
+  call delete('Xlink1')
+  call delete('Xlink2')
+  call delete('Xlink3')
+
+  silent !ln -s -f Xdir//Xfile Xlink
+  call assert_equal('Xdir/Xfile', resolve('Xlink'))
+  call delete('Xlink')
+
+  silent !ln -s -f Xlink2/ Xlink1
+  call assert_equal('Xlink2', resolve('Xlink1'))
+  call assert_equal('Xlink2/', resolve('Xlink1/'))
+  call delete('Xlink1')
+
+  silent !ln -s -f ./Xlink2 Xlink1
+  call assert_equal('Xlink2', resolve('Xlink1'))
+  call assert_equal('./Xlink2', resolve('./Xlink1'))
+  call delete('Xlink1')
+endfunc
+
 func Test_simplify()
   call assert_equal('',            simplify(''))
   call assert_equal('/',           simplify('/'))
@@ -206,6 +253,21 @@ func Test_simplify()
   call assert_fails('call simplify([])', 'E730:')
   call assert_fails('call simplify({})', 'E731:')
   call assert_fails('call simplify(1.2)', 'E806:')
+endfunc
+
+func Test_pathshorten()
+  call assert_equal('', pathshorten(''))
+  call assert_equal('foo', pathshorten('foo'))
+  call assert_equal('/foo', pathshorten('/foo'))
+  call assert_equal('f/', pathshorten('foo/'))
+  call assert_equal('f/bar', pathshorten('foo/bar'))
+  call assert_equal('f/b/foobar', pathshorten('foo/bar/foobar'))
+  call assert_equal('/f/b/foobar', pathshorten('/foo/bar/foobar'))
+  call assert_equal('.f/bar', pathshorten('.foo/bar'))
+  call assert_equal('~f/bar', pathshorten('~foo/bar'))
+  call assert_equal('~.f/bar', pathshorten('~.foo/bar'))
+  call assert_equal('.~f/bar', pathshorten('.~foo/bar'))
+  call assert_equal('~/f/bar', pathshorten('~/foo/bar'))
 endfunc
 
 func Test_strpart()
@@ -464,6 +526,18 @@ func Test_mode()
   call assert_equal('n', mode(0))
   call assert_equal('n', mode(1))
 
+  " i_CTRL-O
+  exe "normal i\<C-O>:call Save_mode()\<Cr>\<Esc>"
+  call assert_equal("n-niI", g:current_modes)
+
+  " R_CTRL-O
+  exe "normal R\<C-O>:call Save_mode()\<Cr>\<Esc>"
+  call assert_equal("n-niR", g:current_modes)
+
+  " gR_CTRL-O
+  exe "normal gR\<C-O>:call Save_mode()\<Cr>\<Esc>"
+  call assert_equal("n-niV", g:current_modes)
+
   " How to test operator-pending mode?
 
   call feedkeys("v", 'xt')
@@ -655,6 +729,7 @@ endfunc
 
 func Test_byte2line_line2byte()
   new
+  set endofline
   call setline(1, ['a', 'bc', 'd'])
 
   set fileformat=unix
@@ -675,7 +750,16 @@ func Test_byte2line_line2byte()
   call assert_equal([-1, -1, 1, 4, 8, 11, -1],
   \                 map(range(-1, 5), 'line2byte(v:val)'))
 
-  set fileformat&
+  bw!
+  set noendofline nofixendofline
+  normal a-
+  for ff in ["unix", "mac", "dos"]
+    let &fileformat = ff
+    call assert_equal(1, line2byte(1))
+    call assert_equal(2, line2byte(2))  " line2byte(line("$") + 1) is the buffer size plus one (as per :help line2byte).
+  endfor
+
+  set endofline& fixendofline& fileformat&
   bw!
 endfunc
 
@@ -760,6 +844,19 @@ func Test_filewritable()
 
   call delete('Xfilewritable')
   bw!
+endfunc
+
+func Test_Executable()
+  if has('win32')
+    call assert_equal(1, executable('notepad'))
+    call assert_equal(1, executable('notepad.exe'))
+    call assert_equal(0, executable('notepad.exe.exe'))
+    call assert_equal(0, executable('shell32.dll'))
+    call assert_equal(0, executable('win.ini'))
+  elseif has('unix')
+    call assert_equal(1, executable('cat'))
+    call assert_equal(0, executable('nodogshere'))
+  endif
 endfunc
 
 func Test_hostname()
@@ -969,6 +1066,17 @@ func Test_libcall_libcallnr()
     let libc = 'msvcrt.dll'
   elseif has('mac')
     let libc = 'libSystem.B.dylib'
+  elseif system('uname -s') =~ 'SunOS'
+    " Set the path to libc.so according to the architecture.
+    let test_bits = system('file ' . GetVimProg())
+    let test_arch = system('uname -p')
+    if test_bits =~ '64-bit' && test_arch =~ 'sparc'
+      let libc = '/usr/lib/sparcv9/libc.so'
+    elseif test_bits =~ '64-bit' && test_arch =~ 'i386'
+      let libc = '/usr/lib/amd64/libc.so'
+    else
+      let libc = '/usr/lib/libc.so'
+    endif
   else
     " On Unix, libc.so can be in various places.
     " Interestingly, using an empty string for the 1st argument of libcall

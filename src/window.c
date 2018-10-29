@@ -20,8 +20,6 @@ static void win_exchange(long);
 static void win_rotate(int, int);
 static void win_totop(int size, int flags);
 static void win_equal_rec(win_T *next_curwin, int current, frame_T *topfr, int dir, int col, int row, int width, int height);
-static int last_window(void);
-static int close_last_window_tabpage(win_T *win, int free_buf, tabpage_T *prev_curtab);
 static win_T *win_free_mem(win_T *win, int *dirp, tabpage_T *tp);
 static frame_T *win_altframe(win_T *win, tabpage_T *tp);
 static tabpage_T *alt_tabpage(void);
@@ -1308,7 +1306,7 @@ win_init(win_T *newp, win_T *oldp, int flags UNUSED)
 	newp->w_llist_ref = NULL;
     }
     else
-	copy_loclist(oldp, newp);
+	copy_loclist_stack(oldp, newp);
 #endif
     newp->w_localdir = (oldp->w_localdir == NULL)
 				    ? NULL : vim_strsave(oldp->w_localdir);
@@ -4436,7 +4434,7 @@ win_enter_ext(
     {
 	/* Window doesn't have a local directory and we are not in the global
 	 * directory: Change to the global directory. */
-	ignored = mch_chdir((char *)globaldir);
+	vim_ignored = mch_chdir((char *)globaldir);
 	VIM_CLEAR(globaldir);
 	shorten_fnames(TRUE);
     }
@@ -6246,8 +6244,6 @@ file_name_in_line(
 }
 
 # if defined(FEAT_FIND_ID) && defined(FEAT_EVAL)
-static char_u *eval_includeexpr(char_u *ptr, int len);
-
     static char_u *
 eval_includeexpr(char_u *ptr, int len)
 {
@@ -7236,4 +7232,53 @@ win_findbuf(typval_T *argvars, list_T *list)
 		list_append_number(list, wp->w_id);
 }
 
+/*
+ * Get the layout of the given tab page for winlayout().
+ */
+    void
+get_framelayout(frame_T *fr, list_T *l, int outer)
+{
+    frame_T	*child;
+    list_T	*fr_list;
+    list_T	*win_list;
+
+    if (fr == NULL)
+	return;
+
+    if (outer)
+	// outermost call from f_winlayout()
+	fr_list = l;
+    else
+    {
+	fr_list = list_alloc();
+	if (fr_list == NULL)
+	    return;
+	list_append_list(l, fr_list);
+    }
+
+    if (fr->fr_layout == FR_LEAF)
+    {
+	if (fr->fr_win != NULL)
+	{
+	    list_append_string(fr_list, (char_u *)"leaf", -1);
+	    list_append_number(fr_list, fr->fr_win->w_id);
+	}
+    }
+    else
+    {
+	list_append_string(fr_list,
+	     fr->fr_layout == FR_ROW ?  (char_u *)"row" : (char_u *)"col", -1);
+
+	win_list = list_alloc();
+	if (win_list == NULL)
+	    return;
+	list_append_list(fr_list, win_list);
+	child = fr->fr_child;
+	while (child != NULL)
+	{
+	    get_framelayout(child, win_list, FALSE);
+	    child = child->fr_next;
+	}
+    }
+}
 #endif

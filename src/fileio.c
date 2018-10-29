@@ -39,9 +39,6 @@ static void check_marks_read(void);
 #ifdef FEAT_CRYPT
 static char_u *check_for_cryptkey(char_u *cryptkey, char_u *ptr, long *sizep, off_T *filesizep, int newfile, char_u *fname, int *did_ask);
 #endif
-#ifdef UNIX
-static void set_file_time(char_u *fname, time_t atime, time_t mtime);
-#endif
 static int set_rw_fname(char_u *fname, char_u *sfname);
 static int msg_add_fileformat(int eol_type);
 static void msg_add_eol(void);
@@ -128,10 +125,6 @@ static int get_win_fio_flags(char_u *ptr);
 # ifdef MACOS_CONVERT
 static int get_mac_fio_flags(char_u *ptr);
 # endif
-#endif
-static int move_lines(buf_T *frombuf, buf_T *tobuf);
-#ifdef TEMPDIRNAMES
-static void vim_settempdir(char_u *tempdir);
 #endif
 static char *e_auchangedbuf = N_("E812: Autocommands changed buffer or buffer name");
 
@@ -424,12 +417,8 @@ readfile(
 	 */
 	perm = mch_getperm(fname);
 	if (perm >= 0 && !S_ISREG(perm)		    /* not a regular file ... */
-# ifdef S_ISFIFO
 		      && !S_ISFIFO(perm)	    /* ... or fifo */
-# endif
-# ifdef S_ISSOCK
 		      && !S_ISSOCK(perm)	    /* ... or socket */
-# endif
 # ifdef OPEN_CHR_FILES
 		      && !(S_ISCHR(perm) && is_dev_fd_file(fname))
 			/* ... or a character special file named /dev/fd/<n> */
@@ -2412,7 +2401,7 @@ failed:
     {
 	/* Use stderr for stdin, makes shell commands work. */
 	close(0);
-	ignored = dup(2);
+	vim_ignored = dup(2);
     }
 #endif
 
@@ -2497,28 +2486,16 @@ failed:
 	    c = FALSE;
 
 #ifdef UNIX
-# ifdef S_ISFIFO
-	    if (S_ISFIFO(perm))			    /* fifo or socket */
-	    {
-		STRCAT(IObuff, _("[fifo/socket]"));
-		c = TRUE;
-	    }
-# else
-#  ifdef S_IFIFO
-	    if ((perm & S_IFMT) == S_IFIFO)	    /* fifo */
+	    if (S_ISFIFO(perm))			    /* fifo */
 	    {
 		STRCAT(IObuff, _("[fifo]"));
 		c = TRUE;
 	    }
-#  endif
-#  ifdef S_IFSOCK
-	    if ((perm & S_IFMT) == S_IFSOCK)	    /* or socket */
+	    if (S_ISSOCK(perm))			    /* or socket */
 	    {
 		STRCAT(IObuff, _("[socket]"));
 		c = TRUE;
 	    }
-#  endif
-# endif
 # ifdef OPEN_CHR_FILES
 	    if (S_ISCHR(perm))			    /* or character special */
 	    {
@@ -3767,7 +3744,7 @@ buf_write(
 		{
 # ifdef UNIX
 #  ifdef HAVE_FCHOWN
-		    ignored = fchown(fd, st_old.st_uid, st_old.st_gid);
+		    vim_ignored = fchown(fd, st_old.st_uid, st_old.st_gid);
 #  endif
 		    if (mch_stat((char *)IObuff, &st) < 0
 			    || st.st_uid != st_old.st_uid
@@ -3850,6 +3827,9 @@ buf_write(
 	    stat_T	st_new;
 	    char_u	*dirp;
 	    char_u	*rootname;
+#if defined(UNIX) || defined(WIN3264)
+	    char_u      *p;
+#endif
 #if defined(UNIX)
 	    int		did_set_shortname;
 	    mode_t	umask_save;
@@ -3887,6 +3867,17 @@ buf_write(
 		 * Isolate one directory name, using an entry in 'bdir'.
 		 */
 		(void)copy_option_part(&dirp, copybuf, BUFSIZE, ",");
+
+#if defined(UNIX) || defined(WIN3264)
+		p = copybuf + STRLEN(copybuf);
+		if (after_pathsep(copybuf, p) && p[-1] == p[-2])
+		    // Ends with '//', use full path
+		    if ((p = make_percent_swname(copybuf, fname)) != NULL)
+		    {
+			backup = modname(p, backup_ext, FALSE);
+			vim_free(p);
+		    }
+#endif
 		rootname = get_file_in_dir(fname, copybuf);
 		if (rootname == NULL)
 		{
@@ -3904,9 +3895,10 @@ buf_write(
 		for (;;)
 		{
 		    /*
-		     * Make backup file name.
+		     * Make the backup file name.
 		     */
-		    backup = buf_modname((buf->b_p_sn || buf->b_shortname),
+		    if (backup == NULL)
+			backup = buf_modname((buf->b_p_sn || buf->b_shortname),
 						 rootname, backup_ext, FALSE);
 		    if (backup == NULL)
 		    {
@@ -4108,14 +4100,29 @@ buf_write(
 		 * Isolate one directory name and make the backup file name.
 		 */
 		(void)copy_option_part(&dirp, IObuff, IOSIZE, ",");
-		rootname = get_file_in_dir(fname, IObuff);
-		if (rootname == NULL)
-		    backup = NULL;
-		else
+
+#if defined(UNIX) || defined(WIN3264)
+		p = IObuff + STRLEN(IObuff);
+		if (after_pathsep(IObuff, p) && p[-1] == p[-2])
+		    // path ends with '//', use full path
+		    if ((p = make_percent_swname(IObuff, fname)) != NULL)
+		    {
+			backup = modname(p, backup_ext, FALSE);
+			vim_free(p);
+		    }
+#endif
+		if (backup == NULL)
 		{
-		    backup = buf_modname((buf->b_p_sn || buf->b_shortname),
-						 rootname, backup_ext, FALSE);
-		    vim_free(rootname);
+		    rootname = get_file_in_dir(fname, IObuff);
+		    if (rootname == NULL)
+			backup = NULL;
+		    else
+		    {
+			backup = buf_modname(
+				(buf->b_p_sn || buf->b_shortname),
+						rootname, backup_ext, FALSE);
+			vim_free(rootname);
+		    }
 		}
 
 		if (backup != NULL)
@@ -4495,7 +4502,7 @@ restore_backup:
 #endif
 #ifdef HAVE_FTRUNCATE
 	    if (!append)
-		ignored = ftruncate(fd, (off_t)0);
+		vim_ignored = ftruncate(fd, (off_t)0);
 #endif
 
 #if defined(WIN3264)
@@ -4775,7 +4782,7 @@ restore_backup:
 		    || st.st_gid != st_old.st_gid)
 	    {
 		/* changing owner might not be possible */
-		ignored = fchown(fd, st_old.st_uid, -1);
+		vim_ignored = fchown(fd, st_old.st_uid, -1);
 		/* if changing group fails clear the group permissions */
 		if (fchown(fd, -1, st_old.st_gid) == -1 && perm > 0)
 		    perm &= ~070;
@@ -5335,16 +5342,11 @@ msg_add_lines(
 		"%ldL, %lldC", lnum, (long long)nchars);
     else
     {
-	if (lnum == 1)
-	    STRCPY(p, _("1 line, "));
-	else
-	    sprintf((char *)p, _("%ld lines, "), lnum);
+	sprintf((char *)p, NGETTEXT("%ld line, ", "%ld lines, ", lnum), lnum);
 	p += STRLEN(p);
-	if (nchars == 1)
-	    STRCPY(p, _("1 character"));
-	else
-	    vim_snprintf((char *)p, IOSIZE - (p - IObuff),
-		    _("%lld characters"), (long long)nchars);
+	vim_snprintf((char *)p, IOSIZE - (p - IObuff),
+		NGETTEXT("%lld character", "%lld characters", nchars),
+		(long long)nchars);
     }
 }
 
@@ -6185,7 +6187,8 @@ shorten_buf_fname(buf_T *buf, char_u *dirname, int force)
 		|| buf->b_sfname == NULL
 		|| mch_isFullName(buf->b_sfname)))
     {
-	VIM_CLEAR(buf->b_sfname);
+	if (buf->b_sfname != buf->b_ffname)
+	    VIM_CLEAR(buf->b_sfname);
 	p = shorten_fname(buf->b_ffname, dirname);
 	if (p != NULL)
 	{
@@ -6252,7 +6255,7 @@ shorten_filenames(char_u **fnames, int count)
 #endif
 
 /*
- * add extension to file name - change path/fo.o.h to path/fo.o.h.ext or
+ * Add extension to file name - change path/fo.o.h to path/fo.o.h.ext or
  * fo_o_h.ext for MSDOS or when shortname option set.
  *
  * Assumed that fname is a valid name found in the filesystem we assure that
@@ -6473,9 +6476,9 @@ vim_fgets(char_u *buf, int size, FILE *fp)
 	{
 	    tbuf[FGETS_SIZE - 2] = NUL;
 #ifdef USE_CR
-	    ignoredp = fgets_cr((char *)tbuf, FGETS_SIZE, fp);
+	    vim_ignoredp = fgets_cr((char *)tbuf, FGETS_SIZE, fp);
 #else
-	    ignoredp = fgets((char *)tbuf, FGETS_SIZE, fp);
+	    vim_ignoredp = fgets((char *)tbuf, FGETS_SIZE, fp);
 #endif
 	} while (tbuf[FGETS_SIZE - 2] != NUL && tbuf[FGETS_SIZE - 2] != '\n');
     }
@@ -6897,7 +6900,7 @@ buf_check_timestamp(
      * this buffer. */
     if (buf->b_ffname == NULL
 	    || buf->b_ml.ml_mfp == NULL
-	    || *buf->b_p_bt != NUL
+	    || !bt_normal(buf)
 	    || buf->b_saving
 	    || busy
 #ifdef FEAT_NETBEANS_INTG
@@ -7691,7 +7694,7 @@ typedef struct AutoCmd
     char	    nested;		/* If autocommands nest here */
     char	    last;		/* last command in list */
 #ifdef FEAT_EVAL
-    scid_T	    scriptID;		/* script ID where defined */
+    sctx_T	    script_ctx;		/* script context where defined */
 #endif
     struct AutoCmd  *next;		/* Next AutoCmd in list */
 } AutoCmd;
@@ -7753,6 +7756,7 @@ static struct event_name
     {"CursorHoldI",	EVENT_CURSORHOLDI},
     {"CursorMoved",	EVENT_CURSORMOVED},
     {"CursorMovedI",	EVENT_CURSORMOVEDI},
+    {"DiffUpdated",	EVENT_DIFFUPDATED},
     {"DirChanged",	EVENT_DIRCHANGED},
     {"EncodingChanged",	EVENT_ENCODINGCHANGED},
     {"ExitPre",		EVENT_EXITPRE},
@@ -7875,16 +7879,7 @@ static int current_augroup = AUGROUP_DEFAULT;
 
 static int au_need_clean = FALSE;   /* need to delete marked patterns */
 
-static void show_autocmd(AutoPat *ap, event_T event);
-static void au_remove_pat(AutoPat *ap);
-static void au_remove_cmds(AutoPat *ap);
-static void au_cleanup(void);
-static int au_new_group(char_u *name);
-static void au_del_group(char_u *name);
-static event_T event_name2nr(char_u *start, char_u **end);
 static char_u *event_nr2name(event_T event);
-static char_u *find_end_event(char_u *arg, int have_group);
-static int event_ignored(event_T event);
 static int au_get_grouparg(char_u **argp);
 static int do_autocmd_event(event_T event, char_u *pat, int nested, char_u *cmd, int forceit, int group);
 static int apply_autocmds_group(event_T event, char_u *fname, char_u *fname_io, int force, int group, buf_T *buf, exarg_T *eap);
@@ -7954,7 +7949,7 @@ show_autocmd(AutoPat *ap, event_T event)
 	    msg_outtrans(ac->cmd);
 #ifdef FEAT_EVAL
 	    if (p_verbose > 0)
-		last_set_msg(ac->scriptID);
+		last_set_msg(ac->script_ctx);
 #endif
 	    if (got_int)
 		return;
@@ -8837,7 +8832,8 @@ do_autocmd_event(
 		return FAIL;
 	    ac->cmd = vim_strsave(cmd);
 #ifdef FEAT_EVAL
-	    ac->scriptID = current_SID;
+	    ac->script_ctx = current_sctx;
+	    ac->script_ctx.sc_lnum += sourcing_lnum;
 #endif
 	    if (ac->cmd == NULL)
 	    {
@@ -9404,8 +9400,8 @@ apply_autocmds_group(
     AutoPatCmd	patcmd;
     AutoPat	*ap;
 #ifdef FEAT_EVAL
-    scid_T	save_current_SID;
-    void	*save_funccalp;
+    sctx_T	save_current_sctx;
+    funccal_entry_T funccal_entry;
     char_u	*save_cmdarg;
     long	save_cmdbang;
 #endif
@@ -9613,15 +9609,15 @@ apply_autocmds_group(
     sourcing_lnum = 0;		/* no line number here */
 
 #ifdef FEAT_EVAL
-    save_current_SID = current_SID;
+    save_current_sctx = current_sctx;
 
 # ifdef FEAT_PROFILE
     if (do_profiling == PROF_YES)
 	prof_child_enter(&wait_time); /* doesn't count for the caller itself */
 # endif
 
-    /* Don't use local function variables, if called from a function */
-    save_funccalp = save_funccal();
+    // Don't use local function variables, if called from a function.
+    save_funccal(&funccal_entry);
 #endif
 
     /*
@@ -9717,8 +9713,8 @@ apply_autocmds_group(
     autocmd_bufnr = save_autocmd_bufnr;
     autocmd_match = save_autocmd_match;
 #ifdef FEAT_EVAL
-    current_SID = save_current_SID;
-    restore_funccal(save_funccalp);
+    current_sctx = save_current_sctx;
+    restore_funccal();
 # ifdef FEAT_PROFILE
     if (do_profiling == PROF_YES)
 	prof_child_exit(&wait_time);
@@ -9941,7 +9937,7 @@ getnextac(int c UNUSED, void *cookie, int indent UNUSED)
     retval = vim_strsave(ac->cmd);
     autocmd_nested = ac->nested;
 #ifdef FEAT_EVAL
-    current_SID = ac->scriptID;
+    current_sctx = ac->script_ctx;
 #endif
     if (ac->last)
 	acp->nextcmd = NULL;

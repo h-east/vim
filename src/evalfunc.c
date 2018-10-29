@@ -401,6 +401,8 @@ static void f_strdisplaywidth(typval_T *argvars, typval_T *rettv);
 static void f_strwidth(typval_T *argvars, typval_T *rettv);
 static void f_submatch(typval_T *argvars, typval_T *rettv);
 static void f_substitute(typval_T *argvars, typval_T *rettv);
+static void f_swapinfo(typval_T *argvars, typval_T *rettv);
+static void f_swapname(typval_T *argvars, typval_T *rettv);
 static void f_synID(typval_T *argvars, typval_T *rettv);
 static void f_synIDattr(typval_T *argvars, typval_T *rettv);
 static void f_synIDtrans(typval_T *argvars, typval_T *rettv);
@@ -417,6 +419,7 @@ static void f_tempname(typval_T *argvars, typval_T *rettv);
 static void f_test_alloc_fail(typval_T *argvars, typval_T *rettv);
 static void f_test_autochdir(typval_T *argvars, typval_T *rettv);
 static void f_test_feedinput(typval_T *argvars, typval_T *rettv);
+static void f_test_option_not_set(typval_T *argvars, typval_T *rettv);
 static void f_test_override(typval_T *argvars, typval_T *rettv);
 static void f_test_garbagecollect_now(typval_T *argvars, typval_T *rettv);
 static void f_test_ignore_error(typval_T *argvars, typval_T *rettv);
@@ -430,6 +433,9 @@ static void f_test_null_job(typval_T *argvars, typval_T *rettv);
 static void f_test_null_list(typval_T *argvars, typval_T *rettv);
 static void f_test_null_partial(typval_T *argvars, typval_T *rettv);
 static void f_test_null_string(typval_T *argvars, typval_T *rettv);
+#ifdef FEAT_GUI
+static void f_test_scrollbar(typval_T *argvars, typval_T *rettv);
+#endif
 static void f_test_settime(typval_T *argvars, typval_T *rettv);
 #ifdef FEAT_FLOAT
 static void f_tan(typval_T *argvars, typval_T *rettv);
@@ -466,6 +472,7 @@ static void f_win_screenpos(typval_T *argvars, typval_T *rettv);
 static void f_winbufnr(typval_T *argvars, typval_T *rettv);
 static void f_wincol(typval_T *argvars, typval_T *rettv);
 static void f_winheight(typval_T *argvars, typval_T *rettv);
+static void f_winlayout(typval_T *argvars, typval_T *rettv);
 static void f_winline(typval_T *argvars, typval_T *rettv);
 static void f_winnr(typval_T *argvars, typval_T *rettv);
 static void f_winrestcmd(typval_T *argvars, typval_T *rettv);
@@ -497,10 +504,10 @@ static struct fst
     {"and",		2, 2, f_and},
     {"append",		2, 2, f_append},
     {"appendbufline",	3, 3, f_appendbufline},
-    {"argc",		0, 0, f_argc},
+    {"argc",		0, 1, f_argc},
     {"argidx",		0, 0, f_argidx},
     {"arglistid",	0, 2, f_arglistid},
-    {"argv",		0, 1, f_argv},
+    {"argv",		0, 2, f_argv},
 #ifdef FEAT_FLOAT
     {"asin",		1, 1, f_asin},	/* WJMc */
 #endif
@@ -508,7 +515,7 @@ static struct fst
     {"assert_equal",	2, 3, f_assert_equal},
     {"assert_equalfile", 2, 2, f_assert_equalfile},
     {"assert_exception", 1, 2, f_assert_exception},
-    {"assert_fails",	1, 2, f_assert_fails},
+    {"assert_fails",	1, 3, f_assert_fails},
     {"assert_false",	1, 2, f_assert_false},
     {"assert_inrange",	3, 4, f_assert_inrange},
     {"assert_match",	2, 3, f_assert_match},
@@ -864,6 +871,8 @@ static struct fst
     {"strwidth",	1, 1, f_strwidth},
     {"submatch",	1, 2, f_submatch},
     {"substitute",	4, 4, f_substitute},
+    {"swapinfo",	1, 1, f_swapinfo},
+    {"swapname",	1, 1, f_swapname},
     {"synID",		3, 3, f_synID},
     {"synIDattr",	2, 3, f_synIDattr},
     {"synIDtrans",	1, 1, f_synIDtrans},
@@ -925,7 +934,11 @@ static struct fst
     {"test_null_list",	0, 0, f_test_null_list},
     {"test_null_partial", 0, 0, f_test_null_partial},
     {"test_null_string", 0, 0, f_test_null_string},
+    {"test_option_not_set", 1, 1, f_test_option_not_set},
     {"test_override",    2, 2, f_test_override},
+#ifdef FEAT_GUI
+    {"test_scrollbar",	3, 3, f_test_scrollbar},
+#endif
     {"test_settime",	1, 1, f_test_settime},
 #ifdef FEAT_TIMERS
     {"timer_info",	0, 1, f_timer_info},
@@ -958,6 +971,7 @@ static struct fst
     {"winbufnr",	1, 1, f_winbufnr},
     {"wincol",		0, 0, f_wincol},
     {"winheight",	1, 1, f_winheight},
+    {"winlayout",	0, 1, f_winlayout},
     {"winline",		0, 0, f_winline},
     {"winnr",		0, 1, f_winnr},
     {"winrestcmd",	0, 0, f_winrestcmd},
@@ -1113,8 +1127,6 @@ get_tv_lnum(typval_T *argvars)
 }
 
 #ifdef FEAT_FLOAT
-static int get_float_arg(typval_T *argvars, float_T *f);
-
 /*
  * Get the float value of "argvars[0]" into "f".
  * Returns FAIL when the argument is not a Number or Float.
@@ -1401,12 +1413,29 @@ f_appendbufline(typval_T *argvars, typval_T *rettv)
 }
 
 /*
- * "argc()" function
+ * "argc([window id])" function
  */
     static void
-f_argc(typval_T *argvars UNUSED, typval_T *rettv)
+f_argc(typval_T *argvars, typval_T *rettv)
 {
-    rettv->vval.v_number = ARGCOUNT;
+    win_T	*wp;
+
+    if (argvars[0].v_type == VAR_UNKNOWN)
+	// use the current window
+	rettv->vval.v_number = ARGCOUNT;
+    else if (argvars[0].v_type == VAR_NUMBER
+					   && get_tv_number(&argvars[0]) == -1)
+	// use the global argument list
+	rettv->vval.v_number = GARGCOUNT;
+    else
+    {
+	// use the argument list of the specified window
+	wp = find_win_by_nr_or_id(&argvars[0]);
+	if (wp != NULL)
+	    rettv->vval.v_number = WARGCOUNT(wp);
+	else
+	    rettv->vval.v_number = -1;
+    }
 }
 
 /*
@@ -1433,26 +1462,64 @@ f_arglistid(typval_T *argvars, typval_T *rettv)
 }
 
 /*
+ * Get the argument list for a given window
+ */
+    static void
+get_arglist_as_rettv(aentry_T *arglist, int argcount, typval_T *rettv)
+{
+    int		idx;
+
+    if (rettv_list_alloc(rettv) == OK && arglist != NULL)
+	for (idx = 0; idx < argcount; ++idx)
+	    list_append_string(rettv->vval.v_list,
+						alist_name(&arglist[idx]), -1);
+}
+
+/*
  * "argv(nr)" function
  */
     static void
 f_argv(typval_T *argvars, typval_T *rettv)
 {
     int		idx;
+    aentry_T	*arglist = NULL;
+    int		argcount = -1;
 
     if (argvars[0].v_type != VAR_UNKNOWN)
     {
-	idx = (int)get_tv_number_chk(&argvars[0], NULL);
-	if (idx >= 0 && idx < ARGCOUNT)
-	    rettv->vval.v_string = vim_strsave(alist_name(&ARGLIST[idx]));
+	if (argvars[1].v_type == VAR_UNKNOWN)
+	{
+	    arglist = ARGLIST;
+	    argcount = ARGCOUNT;
+	}
+	else if (argvars[1].v_type == VAR_NUMBER
+					   && get_tv_number(&argvars[1]) == -1)
+	{
+	    arglist = GARGLIST;
+	    argcount = GARGCOUNT;
+	}
 	else
-	    rettv->vval.v_string = NULL;
+	{
+	    win_T	*wp = find_win_by_nr_or_id(&argvars[1]);
+
+	    if (wp != NULL)
+	    {
+		/* Use the argument list of the specified window */
+		arglist = WARGLIST(wp);
+		argcount = WARGCOUNT(wp);
+	    }
+	}
+
 	rettv->v_type = VAR_STRING;
+	rettv->vval.v_string = NULL;
+	idx = get_tv_number_chk(&argvars[0], NULL);
+	if (arglist != NULL && idx >= 0 && idx < argcount)
+	    rettv->vval.v_string = vim_strsave(alist_name(&arglist[idx]));
+	else if (idx == -1)
+	    get_arglist_as_rettv(arglist, argcount, rettv);
     }
-    else if (rettv_list_alloc(rettv) == OK)
-	for (idx = 0; idx < ARGCOUNT; ++idx)
-	    list_append_string(rettv->vval.v_list,
-					       alist_name(&ARGLIST[idx]), -1);
+    else
+	get_arglist_as_rettv(ARGLIST, ARGCOUNT, rettv);
 }
 
 /*
@@ -1501,7 +1568,7 @@ f_assert_exception(typval_T *argvars, typval_T *rettv)
 }
 
 /*
- * "assert_fails(cmd [, error])" function
+ * "assert_fails(cmd [, error[, msg]])" function
  */
     static void
 f_assert_fails(typval_T *argvars, typval_T *rettv)
@@ -1713,8 +1780,6 @@ f_browsedir(typval_T *argvars UNUSED, typval_T *rettv)
 #endif
     rettv->v_type = VAR_STRING;
 }
-
-static buf_T *find_buffer(typval_T *avar);
 
 /*
  * Find a buffer by number or exact name.
@@ -3598,7 +3663,7 @@ f_feedkeys(typval_T *argvars, typval_T *rettv UNUSED)
 
 		if (!dangerous)
 		    ++ex_normal_busy;
-		exec_normal(TRUE, TRUE);
+		exec_normal(TRUE, FALSE, TRUE);
 		if (!dangerous)
 		    --ex_normal_busy;
 
@@ -3831,8 +3896,6 @@ f_fnamemodify(typval_T *argvars, typval_T *rettv)
 	rettv->vval.v_string = vim_strnsave(fname, len);
     vim_free(fbuf);
 }
-
-static void foldclosed_both(typval_T *argvars, typval_T *rettv, int end);
 
 /*
  * "foldclosed()" function
@@ -4077,7 +4140,7 @@ common_function(typval_T *argvars, typval_T *rettv, int is_funcref)
 	     * also be called from another script. Using trans_function_name()
 	     * would also work, but some plugins depend on the name being
 	     * printable text. */
-	    sprintf(sid_buf, "<SNR>%ld_", (long)current_SID);
+	    sprintf(sid_buf, "<SNR>%ld_", (long)current_sctx.sc_sid);
 	    name = alloc((int)(STRLEN(sid_buf) + STRLEN(s + off) + 1));
 	    if (name != NULL)
 	    {
@@ -4491,8 +4554,6 @@ f_getbufinfo(typval_T *argvars, typval_T *rettv)
     }
 }
 
-static void get_buffer_lines(buf_T *buf, linenr_T start, linenr_T end, int retlist, typval_T *rettv);
-
 /*
  * Get line or list of lines from buffer "buf" into "rettv".
  * Return a range (from start to end) of lines in rettv from the specified
@@ -4695,6 +4756,13 @@ f_getchar(typval_T *argvars, typval_T *rettv)
 {
     varnumber_T		n;
     int			error = FALSE;
+
+#ifdef MESSAGE_QUEUE
+    // vpeekc() used to check for messages, but that caused problems, invoking
+    // a callback where it was not expected.  Some plugins use getchar(1) in a
+    // loop to await a message, therefore make sure we check for messages here.
+    parse_queued_messages();
+#endif
 
     /* Position the cursor.  Needed after a message that ends in a space. */
     windgoto(msg_row, msg_col);
@@ -4971,11 +5039,11 @@ f_getcwd(typval_T *argvars, typval_T *rettv)
 		vim_free(cwd);
 	    }
 	}
-#ifdef BACKSLASH_IN_FILENAME
-	if (rettv->vval.v_string != NULL)
-	    slash_adjust(rettv->vval.v_string);
-#endif
     }
+#ifdef BACKSLASH_IN_FILENAME
+    if (rettv->vval.v_string != NULL)
+	slash_adjust(rettv->vval.v_string);
+#endif
 }
 
 /*
@@ -5108,63 +5176,22 @@ f_getftype(typval_T *argvars, typval_T *rettv)
     rettv->v_type = VAR_STRING;
     if (mch_lstat((char *)fname, &st) >= 0)
     {
-#ifdef S_ISREG
 	if (S_ISREG(st.st_mode))
 	    t = "file";
 	else if (S_ISDIR(st.st_mode))
 	    t = "dir";
-# ifdef S_ISLNK
 	else if (S_ISLNK(st.st_mode))
 	    t = "link";
-# endif
-# ifdef S_ISBLK
 	else if (S_ISBLK(st.st_mode))
 	    t = "bdev";
-# endif
-# ifdef S_ISCHR
 	else if (S_ISCHR(st.st_mode))
 	    t = "cdev";
-# endif
-# ifdef S_ISFIFO
 	else if (S_ISFIFO(st.st_mode))
 	    t = "fifo";
-# endif
-# ifdef S_ISSOCK
 	else if (S_ISSOCK(st.st_mode))
-	    t = "fifo";
-# endif
+	    t = "socket";
 	else
 	    t = "other";
-#else
-# ifdef S_IFMT
-	switch (st.st_mode & S_IFMT)
-	{
-	    case S_IFREG: t = "file"; break;
-	    case S_IFDIR: t = "dir"; break;
-#  ifdef S_IFLNK
-	    case S_IFLNK: t = "link"; break;
-#  endif
-#  ifdef S_IFBLK
-	    case S_IFBLK: t = "bdev"; break;
-#  endif
-#  ifdef S_IFCHR
-	    case S_IFCHR: t = "cdev"; break;
-#  endif
-#  ifdef S_IFIFO
-	    case S_IFIFO: t = "fifo"; break;
-#  endif
-#  ifdef S_IFSOCK
-	    case S_IFSOCK: t = "socket"; break;
-#  endif
-	    default: t = "other";
-	}
-# else
-	if (mch_isdir(fname))
-	    t = "dir";
-	else
-	    t = "file";
-# endif
-#endif
 	type = vim_strsave((char_u *)t);
     }
     rettv->vval.v_string = type;
@@ -5284,7 +5311,7 @@ f_getloclist(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
 #ifdef FEAT_QUICKFIX
     win_T	*wp;
 
-    wp = find_win_by_nr(&argvars[0], NULL);
+    wp = find_win_by_nr_or_id(&argvars[0]);
     get_qf_loc_list(FALSE, wp, &argvars[1], rettv);
 #endif
 }
@@ -5405,7 +5432,6 @@ getpos_both(
     else
 	rettv->vval.v_number = FALSE;
 }
-
 
 /*
  * "getcurpos()" function
@@ -5790,7 +5816,7 @@ f_win_screenpos(typval_T *argvars, typval_T *rettv)
     if (rettv_list_alloc(rettv) == FAIL)
 	return;
 
-    wp = find_win_by_nr(&argvars[0], NULL);
+    wp = find_win_by_nr_or_id(&argvars[0]);
     list_append_number(rettv->vval.v_list, wp == NULL ? 0 : wp->w_winrow + 1);
     list_append_number(rettv->vval.v_list, wp == NULL ? 0 : wp->w_wincol + 1);
 }
@@ -6065,6 +6091,9 @@ f_has(typval_T *argvars, typval_T *rettv)
 	"arabic",
 #endif
 	"autocmd",
+#ifdef FEAT_AUTOCHDIR
+       "autochdir",
+#endif
 #ifdef FEAT_AUTOSERVERNAME
 	"autoservername",
 #endif
@@ -6470,9 +6499,7 @@ f_has(typval_T *argvars, typval_T *rettv)
 #ifdef FEAT_VISUALEXTRA
 	"visualextra",
 #endif
-#ifdef FEAT_VREPLACE
 	"vreplace",
-#endif
 #ifdef FEAT_VTP
 	"vtp",
 #endif
@@ -7031,7 +7058,6 @@ f_inputlist(typval_T *argvars, typval_T *rettv)
 
     rettv->vval.v_number = selected;
 }
-
 
 static garray_T	    ga_userinput = {0, 0, sizeof(tasave_T), 4, NULL};
 
@@ -7608,8 +7634,6 @@ f_localtime(typval_T *argvars UNUSED, typval_T *rettv)
     rettv->vval.v_number = (varnumber_T)time(NULL);
 }
 
-static void get_maparg(typval_T *argvars, typval_T *rettv, int exact);
-
     static void
 get_maparg(typval_T *argvars, typval_T *rettv, int exact)
 {
@@ -7677,7 +7701,8 @@ get_maparg(typval_T *argvars, typval_T *rettv, int exact)
 	dict_add_number(dict, "noremap", mp->m_noremap ? 1L : 0L);
 	dict_add_number(dict, "expr", mp->m_expr ? 1L : 0L);
 	dict_add_number(dict, "silent", mp->m_silent ? 1L : 0L);
-	dict_add_number(dict, "sid", (long)mp->m_script_ID);
+	dict_add_number(dict, "sid", (long)mp->m_script_ctx.sc_sid);
+	dict_add_number(dict, "lnum", (long)mp->m_script_ctx.sc_lnum);
 	dict_add_number(dict, "buffer", (long)buffer_local);
 	dict_add_number(dict, "nowait", mp->m_nowait ? 1L : 0L);
 	dict_add_string(dict, "mode", mapmode);
@@ -8008,6 +8033,36 @@ f_match(typval_T *argvars, typval_T *rettv)
     find_some_match(argvars, rettv, MATCH_MATCH);
 }
 
+#ifdef FEAT_SEARCH_EXTRA
+    static int
+matchadd_dict_arg(typval_T *tv, char_u **conceal_char, win_T **win)
+{
+    dictitem_T *di;
+
+    if (tv->v_type != VAR_DICT)
+    {
+	EMSG(_(e_dictreq));
+	return FAIL;
+    }
+
+    if (dict_find(tv->vval.v_dict, (char_u *)"conceal", -1) != NULL)
+	*conceal_char = get_dict_string(tv->vval.v_dict,
+						   (char_u *)"conceal", FALSE);
+
+    if ((di = dict_find(tv->vval.v_dict, (char_u *)"window", -1)) != NULL)
+    {
+	*win = find_win_by_nr_or_id(&di->di_tv);
+	if (*win == NULL)
+	{
+	    EMSG(_("E957: Invalid window number"));
+	    return FAIL;
+	}
+    }
+
+    return OK;
+}
+#endif
+
 /*
  * "matchadd()" function
  */
@@ -8022,6 +8077,7 @@ f_matchadd(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
     int		id = -1;
     int		error = FALSE;
     char_u	*conceal_char = NULL;
+    win_T	*win = curwin;
 
     rettv->vval.v_number = -1;
 
@@ -8033,18 +8089,9 @@ f_matchadd(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
 	if (argvars[3].v_type != VAR_UNKNOWN)
 	{
 	    id = (int)get_tv_number_chk(&argvars[3], &error);
-	    if (argvars[4].v_type != VAR_UNKNOWN)
-	    {
-		if (argvars[4].v_type != VAR_DICT)
-		{
-		    EMSG(_(e_dictreq));
-		    return;
-		}
-		if (dict_find(argvars[4].vval.v_dict,
-					     (char_u *)"conceal", -1) != NULL)
-		    conceal_char = get_dict_string(argvars[4].vval.v_dict,
-						  (char_u *)"conceal", FALSE);
-	    }
+	    if (argvars[4].v_type != VAR_UNKNOWN
+		&& matchadd_dict_arg(&argvars[4], &conceal_char, &win) == FAIL)
+		return;
 	}
     }
     if (error == TRUE)
@@ -8055,7 +8102,7 @@ f_matchadd(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
 	return;
     }
 
-    rettv->vval.v_number = match_add(curwin, grp, pat, prio, id, NULL,
+    rettv->vval.v_number = match_add(win, grp, pat, prio, id, NULL,
 								conceal_char);
 #endif
 }
@@ -8074,6 +8121,7 @@ f_matchaddpos(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
     int		error = FALSE;
     list_T	*l;
     char_u	*conceal_char = NULL;
+    win_T	*win = curwin;
 
     rettv->vval.v_number = -1;
 
@@ -8096,18 +8144,10 @@ f_matchaddpos(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
 	if (argvars[3].v_type != VAR_UNKNOWN)
 	{
 	    id = (int)get_tv_number_chk(&argvars[3], &error);
-	    if (argvars[4].v_type != VAR_UNKNOWN)
-	    {
-		if (argvars[4].v_type != VAR_DICT)
-		{
-		    EMSG(_(e_dictreq));
-		    return;
-		}
-		if (dict_find(argvars[4].vval.v_dict,
-					     (char_u *)"conceal", -1) != NULL)
-		    conceal_char = get_dict_string(argvars[4].vval.v_dict,
-						  (char_u *)"conceal", FALSE);
-	    }
+
+	    if (argvars[4].v_type != VAR_UNKNOWN
+		&& matchadd_dict_arg(&argvars[4], &conceal_char, &win) == FAIL)
+		return;
 	}
     }
     if (error == TRUE)
@@ -8120,7 +8160,7 @@ f_matchaddpos(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
 	return;
     }
 
-    rettv->vval.v_number = match_add(curwin, group, NULL, prio, id, l,
+    rettv->vval.v_number = match_add(win, group, NULL, prio, id, l,
 								conceal_char);
 #endif
 }
@@ -8202,8 +8242,6 @@ f_matchstrpos(typval_T *argvars, typval_T *rettv)
 {
     find_some_match(argvars, rettv, MATCH_POS);
 }
-
-static void max_min(typval_T *argvars, typval_T *rettv, int domax);
 
     static void
 max_min(typval_T *argvars, typval_T *rettv, int domax)
@@ -8287,8 +8325,6 @@ f_min(typval_T *argvars, typval_T *rettv)
     max_min(argvars, rettv, FALSE);
 }
 
-static int mkdir_recurse(char_u *dir, int prot);
-
 /*
  * Create the directory in which "dir" is located, and higher levels when
  * needed.
@@ -8371,10 +8407,9 @@ f_mkdir(typval_T *argvars, typval_T *rettv)
     static void
 f_mode(typval_T *argvars, typval_T *rettv)
 {
-    char_u	buf[3];
+    char_u	buf[4];
 
-    buf[1] = NUL;
-    buf[2] = NUL;
+    vim_memset(buf, 0, sizeof(buf));
 
     if (time_for_testing == 93784)
     {
@@ -8406,14 +8441,12 @@ f_mode(typval_T *argvars, typval_T *rettv)
 	buf[0] = '!';
     else if (State & INSERT)
     {
-#ifdef FEAT_VREPLACE
 	if (State & VREPLACE_FLAG)
 	{
 	    buf[0] = 'R';
 	    buf[1] = 'v';
 	}
 	else
-#endif
 	{
 	    if (State & REPLACE_FLAG)
 		buf[0] = 'R';
@@ -8440,6 +8473,12 @@ f_mode(typval_T *argvars, typval_T *rettv)
 	buf[0] = 'n';
 	if (finish_op)
 	    buf[1] = 'o';
+	else if (restart_edit == 'I' || restart_edit == 'R'
+							|| restart_edit == 'V')
+	{
+	    buf[1] = 'i';
+	    buf[2] = restart_edit;
+	}
     }
 
     /* Clear out the minor mode when the argument is not a non-zero number or
@@ -9080,8 +9119,6 @@ f_reg_recording(typval_T *argvars UNUSED, typval_T *rettv)
 }
 
 #if defined(FEAT_RELTIME)
-static int list2proftime(typval_T *arg, proftime_T *tm);
-
 /*
  * Convert a List to proftime_T.
  * Return FAIL when there is something wrong.
@@ -9194,9 +9231,6 @@ f_reltimestr(typval_T *argvars UNUSED, typval_T *rettv)
 }
 
 #if defined(FEAT_CLIENTSERVER) && defined(FEAT_X11)
-static void make_connection(void);
-static int check_connection(void);
-
     static void
 make_connection(void)
 {
@@ -9865,8 +9899,6 @@ f_reverse(typval_T *argvars, typval_T *rettv)
 #define SP_SUBPAT	0x20	    /* return nr of matching sub-pattern */
 #define SP_END		0x40	    /* leave cursor at end of match */
 #define SP_COLUMN	0x80	    /* start at cursor column */
-
-static int get_search_arg(typval_T *varp, int *flagsp);
 
 /*
  * Get flags for a search function.
@@ -10697,8 +10729,6 @@ f_setline(typval_T *argvars, typval_T *rettv)
     set_buffer_lines(curbuf, lnum, FALSE, &argvars[1], rettv);
 }
 
-static void set_qf_ll_list(win_T *wp, typval_T *list_arg, typval_T *action_arg, typval_T *what_arg, typval_T *rettv);
-
 /*
  * Used by "setqflist()" and "setloclist()" functions
  */
@@ -10778,7 +10808,7 @@ f_setloclist(typval_T *argvars, typval_T *rettv)
 
     rettv->vval.v_number = -1;
 
-    win = find_win_by_nr(&argvars[0], NULL);
+    win = find_win_by_nr_or_id(&argvars[0]);
     if (win != NULL)
 	set_qf_ll_list(win, &argvars[1], &argvars[2], &argvars[3], rettv);
 }
@@ -11238,7 +11268,6 @@ typedef struct
     int		item_compare_keep_zero;
 } sortinfo_T;
 static sortinfo_T	*sortinfo = NULL;
-static void	do_sort_uniq(typval_T *argvars, typval_T *rettv, int sort);
 #define ITEM_COMPARE_FAIL 999
 
 /*
@@ -12357,6 +12386,33 @@ f_substitute(typval_T *argvars, typval_T *rettv)
 }
 
 /*
+ * "swapinfo(swap_filename)" function
+ */
+    static void
+f_swapinfo(typval_T *argvars, typval_T *rettv)
+{
+    if (rettv_dict_alloc(rettv) == OK)
+	get_b0_dict(get_tv_string(argvars), rettv->vval.v_dict);
+}
+
+/*
+ * "swapname(expr)" function
+ */
+    static void
+f_swapname(typval_T *argvars, typval_T *rettv)
+{
+    buf_T	*buf;
+
+    rettv->v_type = VAR_STRING;
+    buf = get_buf_tv(&argvars[0], FALSE);
+    if (buf == NULL || buf->b_ml.ml_mfp == NULL
+					|| buf->b_ml.ml_mfp->mf_fname == NULL)
+	rettv->vval.v_string = NULL;
+    else
+	rettv->vval.v_string = vim_strsave(buf->b_ml.ml_mfp->mf_fname);
+}
+
+/*
  * "synID(lnum, col, trans)" function
  */
     static void
@@ -12416,7 +12472,6 @@ f_synIDattr(typval_T *argvars UNUSED, typval_T *rettv)
 	else
 	    modec = 't';
     }
-
 
     switch (TOLOWER_ASC(what[0]))
     {
@@ -12828,7 +12883,6 @@ f_tabpagebuflist(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
     }
 }
 
-
 /*
  * "tabpagenr()" function
  */
@@ -12855,8 +12909,6 @@ f_tabpagenr(typval_T *argvars UNUSED, typval_T *rettv)
     rettv->vval.v_number = nr;
 }
 
-
-static int get_winnr(tabpage_T *tp, typval_T *argvar);
 
 /*
  * Common code for tabpagewinnr() and winnr().
@@ -12921,7 +12973,6 @@ f_tabpagewinnr(typval_T *argvars UNUSED, typval_T *rettv)
 	nr = get_winnr(tp, &argvars[1]);
     rettv->vval.v_number = nr;
 }
-
 
 /*
  * "tagfiles()" function
@@ -13085,7 +13136,25 @@ f_test_feedinput(typval_T *argvars, typval_T *rettv UNUSED)
 }
 
 /*
- * "test_disable({name}, {val})" function
+ * "test_option_not_set({name})" function
+ */
+    static void
+f_test_option_not_set(typval_T *argvars, typval_T *rettv UNUSED)
+{
+    char_u *name = (char_u *)"";
+
+    if (argvars[0].v_type != VAR_STRING)
+	EMSG(_(e_invarg));
+    else
+    {
+	name = get_tv_string(&argvars[0]);
+	if (reset_option_was_set(name) == FAIL)
+	    EMSG2(_(e_invarg2), name);
+    }
+}
+
+/*
+ * "test_override({name}, {val})" function
  */
     static void
 f_test_override(typval_T *argvars, typval_T *rettv UNUSED)
@@ -13104,6 +13173,8 @@ f_test_override(typval_T *argvars, typval_T *rettv UNUSED)
 
 	if (STRCMP(name, (char_u *)"redraw") == 0)
 	    disable_redraw_for_testing = val;
+	else if (STRCMP(name, (char_u *)"redraw_flag") == 0)
+	    ignore_redraw_flag_for_testing = val;
 	else if (STRCMP(name, (char_u *)"char_avail") == 0)
 	    disable_char_avail_for_testing = val;
 	else if (STRCMP(name, (char_u *)"starting") == 0)
@@ -13126,6 +13197,7 @@ f_test_override(typval_T *argvars, typval_T *rettv UNUSED)
 	{
 	    disable_char_avail_for_testing = FALSE;
 	    disable_redraw_for_testing = FALSE;
+	    ignore_redraw_flag_for_testing = FALSE;
 	    nfa_fail_for_testing = FALSE;
 	    if (save_starting >= 0)
 	    {
@@ -13201,6 +13273,45 @@ f_test_null_string(typval_T *argvars UNUSED, typval_T *rettv)
     rettv->v_type = VAR_STRING;
     rettv->vval.v_string = NULL;
 }
+
+#ifdef FEAT_GUI
+    static void
+f_test_scrollbar(typval_T *argvars, typval_T *rettv UNUSED)
+{
+    char_u	*which;
+    long	value;
+    int		dragging;
+    scrollbar_T *sb = NULL;
+
+    if (argvars[0].v_type != VAR_STRING
+	    || (argvars[1].v_type) != VAR_NUMBER
+	    || (argvars[2].v_type) != VAR_NUMBER)
+    {
+	EMSG(_(e_invarg));
+	return;
+    }
+    which = get_tv_string(&argvars[0]);
+    value = get_tv_number(&argvars[1]);
+    dragging = get_tv_number(&argvars[2]);
+
+    if (STRCMP(which, "left") == 0)
+	sb = &curwin->w_scrollbars[SBAR_LEFT];
+    else if (STRCMP(which, "right") == 0)
+	sb = &curwin->w_scrollbars[SBAR_RIGHT];
+    else if (STRCMP(which, "hor") == 0)
+	sb = &gui.bottom_sbar;
+    if (sb == NULL)
+    {
+	EMSG2(_(e_invarg2), which);
+	return;
+    }
+    gui_drag_scrollbar(sb, value, dragging);
+# ifndef USE_ON_FLY_SCROLL
+    // need to loop through normal_cmd() to handle the scroll events
+    exec_normal(FALSE, TRUE, FALSE);
+# endif
+}
+#endif
 
     static void
 f_test_settime(typval_T *argvars, typval_T *rettv UNUSED)
@@ -13755,7 +13866,7 @@ f_winbufnr(typval_T *argvars, typval_T *rettv)
 {
     win_T	*wp;
 
-    wp = find_win_by_nr(&argvars[0], NULL);
+    wp = find_win_by_nr_or_id(&argvars[0]);
     if (wp == NULL)
 	rettv->vval.v_number = -1;
     else
@@ -13780,11 +13891,34 @@ f_winheight(typval_T *argvars, typval_T *rettv)
 {
     win_T	*wp;
 
-    wp = find_win_by_nr(&argvars[0], NULL);
+    wp = find_win_by_nr_or_id(&argvars[0]);
     if (wp == NULL)
 	rettv->vval.v_number = -1;
     else
 	rettv->vval.v_number = wp->w_height;
+}
+
+/*
+ * "winlayout()" function
+ */
+    static void
+f_winlayout(typval_T *argvars, typval_T *rettv)
+{
+    tabpage_T	*tp;
+
+    if (rettv_list_alloc(rettv) != OK)
+	return;
+
+    if (argvars[0].v_type == VAR_UNKNOWN)
+	tp = curtab;
+    else
+    {
+	tp = find_tabpage((int)get_tv_number(&argvars[0]));
+	if (tp == NULL)
+	    return;
+    }
+
+    get_framelayout(tp->tp_topframe, rettv->vval.v_list, TRUE);
 }
 
 /*
@@ -13924,7 +14058,7 @@ f_winwidth(typval_T *argvars, typval_T *rettv)
 {
     win_T	*wp;
 
-    wp = find_win_by_nr(&argvars[0], NULL);
+    wp = find_win_by_nr_or_id(&argvars[0]);
     if (wp == NULL)
 	rettv->vval.v_number = -1;
     else
@@ -14013,7 +14147,7 @@ f_writefile(typval_T *argvars, typval_T *rettv)
 	else if (do_fsync)
 	    /* Ignore the error, the user wouldn't know what to do about it.
 	     * May happen for a device. */
-	    ignored = fsync(fileno(fd));
+	    vim_ignored = fsync(fileno(fd));
 #endif
 	fclose(fd);
     }
@@ -14030,6 +14164,5 @@ f_xor(typval_T *argvars, typval_T *rettv)
     rettv->vval.v_number = get_tv_number_chk(&argvars[0], NULL)
 					^ get_tv_number_chk(&argvars[1], NULL);
 }
-
 
 #endif /* FEAT_EVAL */

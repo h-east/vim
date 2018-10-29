@@ -302,7 +302,8 @@ get_lambda_tv(char_u **arg, typval_T *rettv, int evaluate)
 	fp->uf_varargs = TRUE;
 	fp->uf_flags = flags;
 	fp->uf_calls = 0;
-	fp->uf_script_ID = current_SID;
+	fp->uf_script_ctx = current_sctx;
+	fp->uf_script_ctx.sc_lnum += sourcing_lnum - newlines.ga_len;
 
 	pt->pt_func = fp;
 	pt->pt_refcount = 1;
@@ -505,11 +506,11 @@ fname_trans_sid(char_u *name, char_u *fname_buf, char_u **tofree, int *error)
 	i = 3;
 	if (eval_fname_sid(name))	/* "<SID>" or "s:" */
 	{
-	    if (current_SID <= 0)
+	    if (current_sctx.sc_sid <= 0)
 		*error = ERROR_SCRIPT;
 	    else
 	    {
-		sprintf((char *)fname_buf + 3, "%ld_", (long)current_SID);
+		sprintf((char *)fname_buf + 3, "%ld_", (long)current_sctx.sc_sid);
 		i = (int)STRLEN(fname_buf);
 	    }
 	}
@@ -690,7 +691,7 @@ call_user_func(
 {
     char_u	*save_sourcing_name;
     linenr_T	save_sourcing_lnum;
-    scid_T	save_current_SID;
+    sctx_T	save_current_sctx;
     int		using_sandbox = FALSE;
     funccall_T	*fc;
     int		save_did_emsg;
@@ -944,8 +945,8 @@ call_user_func(
     }
 #endif
 
-    save_current_SID = current_SID;
-    current_SID = fp->uf_script_ID;
+    save_current_sctx = current_sctx;
+    current_sctx = fp->uf_script_ctx;
     save_did_emsg = did_emsg;
     did_emsg = FALSE;
 
@@ -1026,7 +1027,7 @@ call_user_func(
     vim_free(sourcing_name);
     sourcing_name = save_sourcing_name;
     sourcing_lnum = save_sourcing_lnum;
-    current_SID = save_current_SID;
+    current_sctx = save_current_sctx;
 #ifdef FEAT_PROFILE
     if (do_profiling == PROF_YES)
 	script_prof_restore(&wait_start);
@@ -1102,6 +1103,21 @@ func_remove(ufunc_T *fp)
     return FALSE;
 }
 
+    static void
+func_clear_items(ufunc_T *fp)
+{
+    ga_clear_strings(&(fp->uf_args));
+    ga_clear_strings(&(fp->uf_lines));
+#ifdef FEAT_PROFILE
+    vim_free(fp->uf_tml_count);
+    fp->uf_tml_count = NULL;
+    vim_free(fp->uf_tml_total);
+    fp->uf_tml_total = NULL;
+    vim_free(fp->uf_tml_self);
+    fp->uf_tml_self = NULL;
+#endif
+}
+
 /*
  * Free all things that a function contains.  Does not free the function
  * itself, use func_free() for that.
@@ -1115,13 +1131,7 @@ func_clear(ufunc_T *fp, int force)
     fp->uf_cleared = TRUE;
 
     /* clear this function */
-    ga_clear_strings(&(fp->uf_args));
-    ga_clear_strings(&(fp->uf_lines));
-#ifdef FEAT_PROFILE
-    vim_free(fp->uf_tml_count);
-    vim_free(fp->uf_tml_total);
-    vim_free(fp->uf_tml_self);
-#endif
+    func_clear_items(fp);
     funccal_unref(fp->uf_scoped, fp, force);
 }
 
@@ -1165,6 +1175,33 @@ func_name_refcount(char_u *name)
     return isdigit(*name) || *name == '<';
 }
 
+static funccal_entry_T *funccal_stack = NULL;
+
+/*
+ * Save the current function call pointer, and set it to NULL.
+ * Used when executing autocommands and for ":source".
+ */
+    void
+save_funccal(funccal_entry_T *entry)
+{
+    entry->top_funccal = current_funccal;
+    entry->next = funccal_stack;
+    funccal_stack = entry;
+    current_funccal = NULL;
+}
+
+    void
+restore_funccal(void)
+{
+    if (funccal_stack == NULL)
+	IEMSG("INTERNAL: restore_funccal()");
+    else
+    {
+	current_funccal = funccal_stack->top_funccal;
+	funccal_stack = funccal_stack->next;
+    }
+}
+
 #if defined(EXITFREE) || defined(PROTO)
     void
 free_all_functions(void)
@@ -1175,11 +1212,13 @@ free_all_functions(void)
     long_u	todo = 1;
     long_u	used;
 
-    /* Clean up the call stack. */
+    /* Clean up the current_funccal chain and the funccal stack. */
     while (current_funccal != NULL)
     {
 	clear_tv(current_funccal->rettv);
 	cleanup_function_call(current_funccal);
+	if (current_funccal == NULL && funccal_stack != NULL)
+	    restore_funccal();
     }
 
     /* First clear what the functions contain.  Since this may lower the
@@ -1565,7 +1604,7 @@ list_func_head(ufunc_T *fp, int indent)
 	MSG_PUTS(" closure");
     msg_clr_eos();
     if (p_verbose > 0)
-	last_set_msg(fp->uf_script_ID);
+	last_set_msg(fp->uf_script_ctx);
 }
 
 /*
@@ -1748,12 +1787,12 @@ trans_function_name(
 						       || eval_fname_sid(*pp))
 	{
 	    /* It's "s:" or "<SID>" */
-	    if (current_SID <= 0)
+	    if (current_sctx.sc_sid <= 0)
 	    {
 		EMSG(_(e_usingsid));
 		goto theend;
 	    }
-	    sprintf((char *)sid_buf, "%ld_", (long)current_SID);
+	    sprintf((char *)sid_buf, "%ld_", (long)current_sctx.sc_sid);
 	    lead += (int)STRLEN(sid_buf);
 	}
     }
@@ -1843,6 +1882,8 @@ ex_function(exarg_T *eap)
 		{
 		    --todo;
 		    fp = HI2UF(hi);
+		    if (message_filtered(fp->uf_name))
+			continue;
 		    if (!func_name_refcount(fp->uf_name))
 			list_func_head(fp, FALSE);
 		}
@@ -2312,9 +2353,12 @@ ex_function(exarg_T *eap)
 	    else
 	    {
 		/* redefine existing function */
-		ga_clear_strings(&(fp->uf_args));
-		ga_clear_strings(&(fp->uf_lines));
 		VIM_CLEAR(name);
+		func_clear_items(fp);
+#ifdef FEAT_PROFILE
+		fp->uf_profiling = FALSE;
+		fp->uf_prof_initialized = FALSE;
+#endif
 	    }
 	}
     }
@@ -2434,10 +2478,6 @@ ex_function(exarg_T *eap)
 	fp->uf_scoped = NULL;
 
 #ifdef FEAT_PROFILE
-    fp->uf_tml_count = NULL;
-    fp->uf_tml_total = NULL;
-    fp->uf_tml_self = NULL;
-    fp->uf_profiling = FALSE;
     if (prof_def_func())
 	func_do_profile(fp);
 #endif
@@ -2446,7 +2486,8 @@ ex_function(exarg_T *eap)
 	flags |= FC_SANDBOX;
     fp->uf_flags = flags;
     fp->uf_calls = 0;
-    fp->uf_script_ID = current_SID;
+    fp->uf_script_ctx = current_sctx;
+    fp->uf_script_ctx.sc_lnum += sourcing_lnum - newlines.ga_len - 1;
     goto ret_free;
 
 erret:
@@ -2577,6 +2618,7 @@ func_dump_profile(FILE *fd)
     int		i;
     ufunc_T	**sorttab;
     int		st_len = 0;
+    char_u	*p;
 
     todo = (int)func_hashtab.ht_used;
     if (todo == 0)
@@ -2599,6 +2641,14 @@ func_dump_profile(FILE *fd)
 		    fprintf(fd, "FUNCTION  <SNR>%s()\n", fp->uf_name + 3);
 		else
 		    fprintf(fd, "FUNCTION  %s()\n", fp->uf_name);
+		p = home_replace_save(NULL,
+				     get_scriptname(fp->uf_script_ctx.sc_sid));
+		if (p != NULL)
+		{
+		    fprintf(fd, "    Defined: %s line %ld\n",
+					   p, (long)fp->uf_script_ctx.sc_lnum);
+		    vim_free(p);
+		}
 		if (fp->uf_tm_count == 1)
 		    fprintf(fd, "Called 1 time\n");
 		else
@@ -3559,27 +3609,6 @@ current_func_returned(void)
     return current_funccal->returned;
 }
 
-/*
- * Save the current function call pointer, and set it to NULL.
- * Used when executing autocommands and for ":source".
- */
-    void *
-save_funccal(void)
-{
-    funccall_T *fc = current_funccal;
-
-    current_funccal = NULL;
-    return (void *)fc;
-}
-
-    void
-restore_funccal(void *vfc)
-{
-    funccall_T *fc = (funccall_T *)vfc;
-
-    current_funccal = fc;
-}
-
     int
 free_unref_funccal(int copyID, int testing)
 {
@@ -3680,25 +3709,6 @@ get_funccal_args_var()
     if (current_funccal == NULL)
 	return NULL;
     return &get_funccal()->l_avars_var;
-}
-
-/*
- * Clear the current_funccal and return the old value.
- * Caller is expected to invoke restore_current_funccal().
- */
-    void *
-clear_current_funccal()
-{
-    funccall_T *f = current_funccal;
-
-    current_funccal = NULL;
-    return f;
-}
-
-    void
-restore_current_funccal(void *f)
-{
-    current_funccal = f;
 }
 
 /*

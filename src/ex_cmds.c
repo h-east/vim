@@ -281,7 +281,7 @@ linelen(int *has_tab)
     *last = NUL;
     len = linetabsize(line);		/* get line length */
     if (has_tab != NULL)		/* check for embedded TAB */
-	*has_tab = (vim_strrchr(first, TAB) != NULL);
+	*has_tab = (vim_strchr(first, TAB) != NULL);
     *last = save;
 
     return len;
@@ -649,7 +649,10 @@ ex_sort(exarg_T *eap)
     /* Adjust marks for deleted (or added) lines and prepare for displaying. */
     deleted = (long)(count - (lnum - eap->line2));
     if (deleted > 0)
+    {
 	mark_adjust(eap->line2 - deleted, eap->line2, (long)MAXLNUM, -deleted);
+	msgmore(-deleted);
+    }
     else if (deleted < 0)
 	mark_adjust(eap->line2, MAXLNUM, -deleted, 0L);
 
@@ -985,12 +988,8 @@ do_move(linenr_T line1, linenr_T line2, linenr_T dest)
 	ml_delete(line1 + extra, TRUE);
 
     if (!global_busy && num_lines > p_report)
-    {
-	if (num_lines == 1)
-	    MSG(_("1 line moved"));
-	else
-	    smsg((char_u *)_("%ld lines moved"), num_lines);
-    }
+	smsg((char_u *)NGETTEXT("%ld line moved", "%ld lines moved", num_lines),
+			(long)num_lines);
 
     /*
      * Leave the cursor on the last of the moved lines.
@@ -1677,6 +1676,26 @@ do_shell(
     apply_autocmds(EVENT_SHELLCMDPOST, NULL, NULL, FALSE, curbuf);
 }
 
+#if !defined(UNIX)
+    static char_u *
+find_pipe(char_u *cmd)
+{
+    char_u  *p;
+    int	    inquote = FALSE;
+
+    for (p = cmd; *p != NUL; ++p)
+    {
+	if (!inquote && *p == '|')
+	    return p;
+	if (*p == '"')
+	    inquote = !inquote;
+	else if (rem_backslash(p))
+	    ++p;
+    }
+    return NULL;
+}
+#endif
+
 /*
  * Create a shell command from a command string, input redirection file and
  * output redirection file.
@@ -1747,7 +1766,7 @@ make_filter_cmd(
 	 */
 	if (*p_shq == NUL)
 	{
-	    p = vim_strchr(buf, '|');
+	    p = find_pipe(buf);
 	    if (p != NULL)
 		*p = NUL;
 	}
@@ -1755,7 +1774,7 @@ make_filter_cmd(
 	STRCAT(buf, itmp);
 	if (*p_shq == NUL)
 	{
-	    p = vim_strchr(cmd, '|');
+	    p = find_pipe(cmd);
 	    if (p != NULL)
 	    {
 		STRCAT(buf, " ");   /* insert a space before the '|' for DOS */
@@ -1814,7 +1833,6 @@ append_redir(
 
 #if defined(FEAT_VIMINFO) || defined(PROTO)
 
-static int no_viminfo(void);
 static int read_viminfo_barline(vir_T *virp, int got_encoding, int force, int writing);
 static void write_viminfo_version(FILE *fp_out);
 static void write_viminfo_barlines(vir_T *virp, FILE *fp_out);
@@ -2121,7 +2139,7 @@ write_viminfo(char_u *file, int forceit)
 		if (st_old.st_uid != tmp_st.st_uid)
 		    /* Changing the owner might fail, in which case the
 		     * file will now owned by the current user, oh well. */
-		    ignored = fchown(fileno(fp_out), st_old.st_uid, -1);
+		    vim_ignored = fchown(fileno(fp_out), st_old.st_uid, -1);
 		if (st_old.st_gid != tmp_st.st_gid
 			&& fchown(fileno(fp_out), -1, st_old.st_gid) == -1)
 		    /* can't set the group to what it should be, remove
@@ -3630,8 +3648,8 @@ check_readonly(int *forceit, buf_T *buf)
 }
 
 /*
- * Try to abandon current file and edit a new or existing file.
- * "fnum" is the number of the file, if zero use ffname/sfname.
+ * Try to abandon the current file and edit a new or existing file.
+ * "fnum" is the number of the file, if zero use "ffname_arg"/"sfname_arg".
  * "lnum" is the line number for the cursor in the new file (if non-zero).
  *
  * Return:
@@ -3643,12 +3661,14 @@ check_readonly(int *forceit, buf_T *buf)
     int
 getfile(
     int		fnum,
-    char_u	*ffname,
-    char_u	*sfname,
+    char_u	*ffname_arg,
+    char_u	*sfname_arg,
     int		setpm,
     linenr_T	lnum,
     int		forceit)
 {
+    char_u	*ffname = ffname_arg;
+    char_u	*sfname = sfname_arg;
     int		other;
     int		retval;
     char_u	*free_me = NULL;
@@ -5940,23 +5960,29 @@ do_sub_msg(
 		|| count_only)
 	    && messaging())
     {
+	char	*msg_single;
+	char	*msg_plural;
+
 	if (got_int)
 	    STRCPY(msg_buf, _("(Interrupted) "));
 	else
 	    *msg_buf = NUL;
-	if (sub_nsubs == 1)
-	    vim_snprintf_add((char *)msg_buf, sizeof(msg_buf),
-		    "%s", count_only ? _("1 match") : _("1 substitution"));
-	else
-	    vim_snprintf_add((char *)msg_buf, sizeof(msg_buf),
-		    count_only ? _("%ld matches") : _("%ld substitutions"),
-								   sub_nsubs);
-	if (sub_nlines == 1)
-	    vim_snprintf_add((char *)msg_buf, sizeof(msg_buf),
-		    "%s", _(" on 1 line"));
-	else
-	    vim_snprintf_add((char *)msg_buf, sizeof(msg_buf),
-		    _(" on %ld lines"), (long)sub_nlines);
+
+	msg_single = count_only
+		    ? NGETTEXT("%ld match on %ld line",
+					  "%ld matches on %ld line", sub_nsubs)
+		    : NGETTEXT("%ld substitution on %ld line",
+				   "%ld substitutions on %ld line", sub_nsubs);
+	msg_plural = count_only
+		    ? NGETTEXT("%ld match on %ld lines",
+					 "%ld matches on %ld lines", sub_nsubs)
+		    : NGETTEXT("%ld substitution on %ld lines",
+				  "%ld substitutions on %ld lines", sub_nsubs);
+
+	vim_snprintf_add((char *)msg_buf, sizeof(msg_buf),
+				 NGETTEXT(msg_single, msg_plural, sub_nlines),
+				 sub_nsubs, (long)sub_nlines);
+
 	if (msg(msg_buf))
 	    /* save message to display it after redraw */
 	    set_keep_msg(msg_buf, 0);
@@ -6584,6 +6610,7 @@ find_help_tags(
 			       "/*", "/\\*", "\"*", "**",
 			       "cpo-*", "/\\(\\)", "/\\%(\\)",
 			       "?", ":?", "?<CR>", "g?", "g?g?", "g??",
+			       "-?", "q?", "v_g?",
 			       "/\\?", "/\\z(\\)", "\\=", ":s\\=",
 			       "[count]", "[quotex]",
 			       "[range]", ":[range]",
@@ -6594,26 +6621,42 @@ find_help_tags(
 			       "/star", "/\\\\star", "quotestar", "starstar",
 			       "cpo-star", "/\\\\(\\\\)", "/\\\\%(\\\\)",
 			       "?", ":?", "?<CR>", "g?", "g?g?", "g??",
+			       "-?", "q?", "v_g?",
 			       "/\\\\?", "/\\\\z(\\\\)", "\\\\=", ":s\\\\=",
 			       "\\[count]", "\\[quotex]",
 			       "\\[range]", ":\\[range]",
 			       "\\[pattern]", "\\\\bar", "/\\\\%\\$",
 			       "s/\\\\\\~", "s/\\\\U", "s/\\\\L",
 			       "s/\\\\1", "s/\\\\2", "s/\\\\3", "s/\\\\9"};
+    static char *(expr_table[]) = {"!=?", "!~?", "<=?", "<?", "==?", "=~?",
+				">=?", ">?", "is?", "isnot?"};
     int flags;
 
     d = IObuff;		    /* assume IObuff is long enough! */
 
-    /*
-     * Recognize a few exceptions to the rule.	Some strings that contain '*'
-     * with "star".  Otherwise '*' is recognized as a wildcard.
-     */
-    for (i = (int)(sizeof(mtable) / sizeof(char *)); --i >= 0; )
-	if (STRCMP(arg, mtable[i]) == 0)
-	{
-	    STRCPY(d, rtable[i]);
-	    break;
-	}
+    if (STRNICMP(arg, "expr-", 5) == 0)
+    {
+	// When the string starting with "expr-" and containing '?' and matches
+	// the table, it is taken literally.  Otherwise '?' is recognized as a
+	// wildcard.
+	for (i = (int)(sizeof(expr_table) / sizeof(char *)); --i >= 0; )
+	    if (STRCMP(arg + 5, expr_table[i]) == 0)
+	    {
+		STRCPY(d, arg);
+		break;
+	    }
+    }
+    else
+    {
+	// Recognize a few exceptions to the rule.  Some strings that contain
+	// '*' with "star".  Otherwise '*' is recognized as a wildcard.
+	for (i = (int)(sizeof(mtable) / sizeof(char *)); --i >= 0; )
+	    if (STRCMP(arg, mtable[i]) == 0)
+	    {
+		STRCPY(d, rtable[i]);
+		break;
+	    }
+    }
 
     if (i < 0)	/* no match in table */
     {
@@ -7546,7 +7589,6 @@ struct sign
 static sign_T	*first_sign = NULL;
 static int	next_sign_typenr = 1;
 
-static int sign_cmd_idx(char_u *begin_cmd, char_u *end_cmd);
 static void sign_list_defined(sign_T *sp);
 static void sign_undefine(sign_T *sp, sign_T *sp_prev);
 

@@ -80,6 +80,25 @@ func Test_argadd()
   call assert_equal(0, len(argv()))
 endfunc
 
+func Test_argadd_empty_curbuf()
+  new
+  let curbuf = bufnr('%')
+  call writefile(['test', 'Xargadd'], 'Xargadd')
+  " must not re-use the current buffer.
+  argadd Xargadd
+  call assert_equal(curbuf, bufnr('%'))
+  call assert_equal('', bufname('%'))
+  call assert_equal(1, line('$'))
+  rew
+  call assert_notequal(curbuf, bufnr('%'))
+  call assert_equal('Xargadd', bufname('%'))
+  call assert_equal(2, line('$'))
+
+  call delete('Xargadd')
+  %argd
+  bwipe!
+endfunc
+
 func Init_abc()
   args a b c
   next
@@ -259,13 +278,53 @@ func Test_arglistid()
   call assert_equal(0, arglistid())
 endfunc
 
-" Test for argv()
+" Tests for argv() and argc()
 func Test_argv()
   call Reset_arglist()
   call assert_equal([], argv())
   call assert_equal("", argv(2))
+  call assert_equal(0, argc())
   argadd a b c d
+  call assert_equal(4, argc())
   call assert_equal('c', argv(2))
+
+  let w1_id = win_getid()
+  split
+  let w2_id = win_getid()
+  arglocal
+  args e f g
+  tabnew
+  let w3_id = win_getid()
+  split
+  let w4_id = win_getid()
+  argglobal
+  tabfirst
+  call assert_equal(4, argc(w1_id))
+  call assert_equal('b', argv(1, w1_id))
+  call assert_equal(['a', 'b', 'c', 'd'], argv(-1, w1_id))
+
+  call assert_equal(3, argc(w2_id))
+  call assert_equal('f', argv(1, w2_id))
+  call assert_equal(['e', 'f', 'g'], argv(-1, w2_id))
+
+  call assert_equal(3, argc(w3_id))
+  call assert_equal('e', argv(0, w3_id))
+  call assert_equal(['e', 'f', 'g'], argv(-1, w3_id))
+
+  call assert_equal(4, argc(w4_id))
+  call assert_equal('c', argv(2, w4_id))
+  call assert_equal(['a', 'b', 'c', 'd'], argv(-1, w4_id))
+
+  call assert_equal(4, argc(-1))
+  call assert_equal(3, argc())
+  call assert_equal('d', argv(3, -1))
+  call assert_equal(['a', 'b', 'c', 'd'], argv(-1, -1))
+  tabonly | only | enew!
+  " Negative test cases
+  call assert_equal(-1, argc(100))
+  call assert_equal('', argv(1, 100))
+  call assert_equal([], argv(-1, 100))
+  call assert_equal('', argv(10, -1))
 endfunc
 
 " Test for the :argedit command
@@ -392,4 +451,11 @@ func Test_arg_all_expand()
   next notexist Xx\ x runtest.vim
   call assert_equal('notexist Xx\ x runtest.vim', expand('##'))
   call delete('Xx x')
+endfunc
+
+func Test_large_arg()
+  " Argument longer or equal to the number of columns used to cause
+  " access to invalid memory.
+  exe 'argadd ' .repeat('x', &columns)
+  args
 endfunc

@@ -403,7 +403,7 @@ ui_breakcheck(void)
     void
 ui_breakcheck_force(int force)
 {
-    int save_us = updating_screen;
+    int save_updating_screen = updating_screen;
 
     /* We do not want gui_resize_shell() to redraw the screen here. */
     ++updating_screen;
@@ -415,8 +415,8 @@ ui_breakcheck_force(int force)
 #endif
 	mch_breakcheck(force);
 
-    if (save_us)
-	updating_screen = save_us;
+    if (save_updating_screen)
+	updating_screen = TRUE;
     else
 	reset_updating_screen(FALSE);
 }
@@ -715,7 +715,6 @@ clip_isautosel_plus(void)
  * Stuff for general mouse selection, without using Visual mode.
  */
 
-static int clip_compare_pos(int row1, int col1, int row2, int col2);
 static void clip_invert_area(int, int, int, int, int how);
 static void clip_invert_rectangle(int row, int col, int height, int width, int invert);
 static void clip_get_word_boundaries(VimClipboard *, int, int);
@@ -1885,7 +1884,7 @@ fill_input_buf(int exit_on_error UNUSED)
 #ifdef HAVE_DUP
 	    /* Use stderr for stdin, also works for shell commands. */
 	    close(0);
-	    ignored = dup(2);
+	    vim_ignored = dup(2);
 #else
 	    read_cmd_fd = 2;	/* read from stderr instead of stdin */
 #endif
@@ -2069,8 +2068,6 @@ x11_setup_atoms(Display *dpy)
 static Boolean	clip_x11_convert_selection_cb(Widget w, Atom *sel_atom, Atom *target, Atom *type, XtPointer *value, long_u *length, int *format);
 static void clip_x11_lose_ownership_cb(Widget w, Atom *sel_atom);
 static void clip_x11_notify_cb(Widget w, Atom *sel_atom, Atom *target);
-static void clip_x11_timestamp_cb(Widget w, XtPointer n, XEvent *event, Boolean *cont);
-static void clip_x11_request_selection_cb(Widget w, XtPointer success, Atom *sel_atom, Atom *type, XtPointer value, long_u *length, int *format);
 
 /*
  * Property callback to get a timestamp for XtOwnSelection.

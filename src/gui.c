@@ -17,21 +17,14 @@ gui_T gui;
 static void set_guifontwide(char_u *font_name);
 #endif
 static void gui_check_pos(void);
-static void gui_position_components(int);
 static void gui_outstr(char_u *, int);
 static int gui_screenchar(int off, int flags, guicolor_T fg, guicolor_T bg, int back);
-#ifdef FEAT_GUI_GTK
-static int gui_screenstr(int off, int len, int flags, guicolor_T fg, guicolor_T bg, int back);
-#endif
 static void gui_delete_lines(int row, int count);
 static void gui_insert_lines(int row, int count);
-static void fill_mouse_coord(char_u *p, int col, int row);
 #if defined(FEAT_GUI_TABLINE) || defined(PROTO)
 static int gui_has_tabline(void);
 #endif
 static void gui_do_scrollbar(win_T *wp, int which, int enable);
-static colnr_T scroll_line_len(linenr_T lnum);
-static linenr_T gui_find_longest_lnum(void);
 static void gui_update_horiz_scrollbar(int);
 static void gui_set_fg_color(char_u *name);
 static void gui_set_bg_color(char_u *name);
@@ -3181,10 +3174,8 @@ button_set:
 	case SELECTMODE:	checkfor = MOUSE_VISUAL;	break;
 	case REPLACE:
 	case REPLACE+LANGMAP:
-# ifdef FEAT_VREPLACE
 	case VREPLACE:
 	case VREPLACE+LANGMAP:
-# endif
 	case INSERT:
 	case INSERT+LANGMAP:	checkfor = MOUSE_INSERT;	break;
 	case ASKMORE:
@@ -5041,7 +5032,6 @@ ex_gui(exarg_T *eap)
 /*
  * This is shared between Athena, Motif and GTK.
  */
-static void gfp_setname(char_u *fname, void *cookie);
 
 /*
  * Callback function for do_in_runtimepath().
@@ -5401,13 +5391,7 @@ gui_do_findrepl(
 
 #endif
 
-#if (defined(FEAT_DND) && defined(FEAT_GUI_GTK)) \
-	|| defined(FEAT_GUI_MSWIN) \
-	|| defined(FEAT_GUI_MAC) \
-	|| defined(PROTO)
-
-static void gui_wingoto_xy(int x, int y);
-
+#if defined(HAVE_DROP_FILE) || defined(PROTO)
 /*
  * Jump to the window at specified point (x, y).
  */
@@ -5424,6 +5408,42 @@ gui_wingoto_xy(int x, int y)
 	if (wp != NULL && wp != curwin)
 	    win_goto(wp);
     }
+}
+
+/*
+ * Function passed to handle_drop() for the actions to be done after the
+ * argument list has been updated.
+ */
+    static void
+drop_callback(void *cookie)
+{
+    char_u	*p = cookie;
+
+    /* If Shift held down, change to first file's directory.  If the first
+     * item is a directory, change to that directory (and let the explorer
+     * plugin show the contents). */
+    if (p != NULL)
+    {
+	if (mch_isdir(p))
+	{
+	    if (mch_chdir((char *)p) == 0)
+		shorten_fnames(TRUE);
+	}
+	else if (vim_chdirfile(p, "drop") == OK)
+	    shorten_fnames(TRUE);
+	vim_free(p);
+    }
+
+    /* Update the screen display */
+    update_screen(NOT_VALID);
+# ifdef FEAT_MENU
+    gui_update_menus(0);
+# endif
+#ifdef FEAT_TITLE
+    maketitle();
+#endif
+    setcursor();
+    out_flush_cursor(FALSE, FALSE);
 }
 
 /*
@@ -5506,33 +5526,8 @@ gui_handle_drop(
 	    vim_free(fnames);
 	}
 	else
-	    handle_drop(count, fnames, (modifiers & MOUSE_CTRL) != 0);
-
-	/* If Shift held down, change to first file's directory.  If the first
-	 * item is a directory, change to that directory (and let the explorer
-	 * plugin show the contents). */
-	if (p != NULL)
-	{
-	    if (mch_isdir(p))
-	    {
-		if (mch_chdir((char *)p) == 0)
-		    shorten_fnames(TRUE);
-	    }
-	    else if (vim_chdirfile(p, "drop") == OK)
-		shorten_fnames(TRUE);
-	    vim_free(p);
-	}
-
-	/* Update the screen display */
-	update_screen(NOT_VALID);
-# ifdef FEAT_MENU
-	gui_update_menus(0);
-# endif
-#ifdef FEAT_TITLE
-	maketitle();
-#endif
-	setcursor();
-	out_flush_cursor(FALSE, FALSE);
+	    handle_drop(count, fnames, (modifiers & MOUSE_CTRL) != 0,
+		    drop_callback, (void *)p);
     }
 
     entered = FALSE;

@@ -8,6 +8,7 @@
  * See README.txt for an overview of the Vim source code.
  */
 
+#include "protodef.h"
 #ifdef HAVE_CONFIG_H
 # include "auto/config.h"
 #endif
@@ -44,7 +45,6 @@ static char	*addUniqueMnemonic(char *, char *);
 static char	*fixup(char *);
 static char	*get_selection(buf_T *);
 static char	*append_selection(int, char *, int *, int *);
-static void	 load_buffer_by_name(char *, int);
 static void	 load_window(char *, int lnum);
 static void	 warp_to_pc(int);
 #ifdef FEAT_BEVAL_GUI
@@ -1227,7 +1227,6 @@ append_selection(
 }
 
 
-
     static void
 load_buffer_by_name(
 	char	*filename,		/* the file to load */
@@ -1541,7 +1540,7 @@ workshop_beval_cb(
 #ifdef FEAT_VARTABS
 	    idx = computeIndex(col, text, beval->ts, beval->vts);
 #else
-	    idx = computeIndex(col, text, beval->ts);
+	    idx = computeIndex(col, text, beval->ts, 0);
 #endif
 	    if (idx > 0)
 	    {
@@ -1577,11 +1576,8 @@ workshop_beval_cb(
 computeIndex(
 	int		 wantedCol,
 	char_u		*line,
-	int		 ts
-#ifdef FEAT_VARTABS
-	int		*vts
-#else
-	)
+	int		 ts,
+	int		*vts UNUSED)
 {
     int		 col = 0;
     int		 idx = 0;

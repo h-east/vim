@@ -207,13 +207,6 @@
 #endif
 
 /*
- * +vreplace		"gR" and "gr" commands.
- */
-#ifdef FEAT_NORMAL
-# define FEAT_VREPLACE
-#endif
-
-/*
  * +cmdline_info	'showcmd' and 'ruler' options.
  */
 #ifdef FEAT_NORMAL
@@ -360,6 +353,10 @@
 # if defined(HAVE_STDINT_H) || defined(WIN3264) || (VIM_SIZEOF_LONG >= 8)
 #  define FEAT_NUM64
 # endif
+#endif
+
+#ifdef FEAT_EVAL
+# define HAVE_SANDBOX
 #endif
 
 /*

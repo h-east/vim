@@ -20,10 +20,6 @@
 
 static char_u *vim_version_dir(char_u *vimdir);
 static char_u *remove_tail(char_u *p, char_u *pend, char_u *name);
-#if defined(FEAT_CMDL_COMPL)
-static void init_users(void);
-#endif
-static int copy_indent(int size, char_u	*src);
 
 /* All user names (for ~user completion as done by shell). */
 #if defined(FEAT_CMDL_COMPL) || defined(PROTO)
@@ -705,8 +701,6 @@ get_breakindent_win(
 
 #if defined(FEAT_CINDENT) || defined(FEAT_SMARTINDENT)
 
-static int cin_is_cinword(char_u *line);
-
 /*
  * Return TRUE if the string "line" starts with a word from 'cinwords'.
  */
@@ -784,10 +778,7 @@ open_line(
     char_u	*leader = NULL;		/* copy of comment leader */
 #endif
     char_u	*allocated = NULL;	/* allocated memory */
-#if defined(FEAT_SMARTINDENT) || defined(FEAT_VREPLACE) || defined(FEAT_LISP) \
-	|| defined(FEAT_CINDENT) || defined(FEAT_COMMENTS)
     char_u	*p;
-#endif
     int		saved_char = NUL;	/* init for GCC */
 #if defined(FEAT_SMARTINDENT) || defined(FEAT_COMMENTS)
     pos_T	*pos;
@@ -804,7 +795,7 @@ open_line(
     int		no_si = FALSE;		/* reset did_si afterwards */
     int		first_char = NUL;	/* init for GCC */
 #endif
-#if defined(FEAT_VREPLACE) && (defined(FEAT_LISP) || defined(FEAT_CINDENT))
+#if defined(FEAT_LISP) || defined(FEAT_CINDENT)
     int		vreplace_mode;
 #endif
     int		did_append;		/* appended a new line */
@@ -817,7 +808,6 @@ open_line(
     if (saved_line == NULL)	    /* out of memory! */
 	return FALSE;
 
-#ifdef FEAT_VREPLACE
     if (State & VREPLACE_FLAG)
     {
 	/*
@@ -857,13 +847,8 @@ open_line(
 	}
 	saved_line[curwin->w_cursor.col] = NUL;
     }
-#endif
 
-    if ((State & INSERT)
-#ifdef FEAT_VREPLACE
-	    && !(State & VREPLACE_FLAG)
-#endif
-	    )
+    if ((State & INSERT) && !(State & VREPLACE_FLAG))
     {
 	p_extra = saved_line + curwin->w_cursor.col;
 #ifdef FEAT_SMARTINDENT
@@ -1601,9 +1586,7 @@ open_line(
     old_cursor = curwin->w_cursor;
     if (dir == BACKWARD)
 	--curwin->w_cursor.lnum;
-#ifdef FEAT_VREPLACE
     if (!(State & VREPLACE_FLAG) || old_cursor.lnum >= orig_line_count)
-#endif
     {
 	if (ml_append(curwin->w_cursor.lnum, p_extra, (colnr_T)0, FALSE)
 								      == FAIL)
@@ -1620,7 +1603,6 @@ open_line(
 	    mark_adjust(curwin->w_cursor.lnum + 1, (linenr_T)MAXLNUM, 1L, 0L);
 	did_append = TRUE;
     }
-#ifdef FEAT_VREPLACE
     else
     {
 	/*
@@ -1640,7 +1622,6 @@ open_line(
 	curwin->w_cursor.lnum--;
 	did_append = FALSE;
     }
-#endif
 
     if (newindent
 #ifdef FEAT_SMARTINDENT
@@ -1744,7 +1725,7 @@ open_line(
     curwin->w_cursor.coladd = 0;
 #endif
 
-#if defined(FEAT_VREPLACE) && (defined(FEAT_LISP) || defined(FEAT_CINDENT))
+#if defined(FEAT_LISP) || defined(FEAT_CINDENT)
     /*
      * In VREPLACE mode, we are handling the replace stack ourselves, so stop
      * fixthisline() from doing it (via change_indent()) by telling it we're in
@@ -1791,12 +1772,11 @@ open_line(
 	ai_col = (colnr_T)getwhitecols_curline();
     }
 #endif
-#if defined(FEAT_VREPLACE) && (defined(FEAT_LISP) || defined(FEAT_CINDENT))
+#if defined(FEAT_LISP) || defined(FEAT_CINDENT)
     if (vreplace_mode != 0)
 	State = vreplace_mode;
 #endif
 
-#ifdef FEAT_VREPLACE
     /*
      * Finally, VREPLACE gets the stuff on the new line, then puts back the
      * original line, and inserts the new stuff char by char, pushing old stuff
@@ -1821,7 +1801,6 @@ open_line(
 	vim_free(p_extra);
 	next_line = NULL;
     }
-#endif
 
     retval = OK;		/* success! */
 theend:
@@ -2307,7 +2286,6 @@ plines_m_win(win_T *wp, linenr_T first, linenr_T last)
     return (count);
 }
 
-#if defined(FEAT_VREPLACE) || defined(FEAT_INS_EXPAND) || defined(PROTO)
 /*
  * Insert string "p" at the cursor position.  Stops at a NUL byte.
  * Handles Replace mode and multi-byte characters.
@@ -2317,10 +2295,7 @@ ins_bytes(char_u *p)
 {
     ins_bytes_len(p, (int)STRLEN(p));
 }
-#endif
 
-#if defined(FEAT_VREPLACE) || defined(FEAT_INS_EXPAND) \
-	|| defined(FEAT_COMMENTS) || defined(FEAT_MBYTE) || defined(PROTO)
 /*
  * Insert string "p" with length "len" at the cursor position.
  * Handles Replace mode and multi-byte characters.
@@ -2329,7 +2304,7 @@ ins_bytes(char_u *p)
 ins_bytes_len(char_u *p, int len)
 {
     int		i;
-# ifdef FEAT_MBYTE
+#ifdef FEAT_MBYTE
     int		n;
 
     if (has_mbyte)
@@ -2343,11 +2318,10 @@ ins_bytes_len(char_u *p, int len)
 	    ins_char_bytes(p + i, n);
 	}
     else
-# endif
+#endif
 	for (i = 0; i < len; ++i)
 	    ins_char(p[i]);
 }
-#endif
 
 /*
  * Insert or replace a single character at the cursor position.
@@ -2406,7 +2380,6 @@ ins_char_bytes(char_u *buf, int charlen)
 
     if (State & REPLACE_FLAG)
     {
-#ifdef FEAT_VREPLACE
 	if (State & VREPLACE_FLAG)
 	{
 	    colnr_T	new_vcol = 0;   /* init for GCC */
@@ -2456,7 +2429,6 @@ ins_char_bytes(char_u *buf, int charlen)
 	    curwin->w_p_list = old_list;
 	}
 	else
-#endif
 	    if (oldp[col] != NUL)
 	{
 	    /* normal replace */
@@ -3115,7 +3087,7 @@ changed_lines(
     changed_lines_buf(curbuf, lnum, lnume, xtra);
 
 #ifdef FEAT_DIFF
-    if (xtra == 0 && curwin->w_p_diff)
+    if (xtra == 0 && curwin->w_p_diff && !diff_internal())
     {
 	/* When the number of lines doesn't change then mark_adjust() isn't
 	 * called and other diff buffers still need to be marked for
@@ -3194,6 +3166,11 @@ changed_common(
 
     /* mark the buffer as modified */
     changed();
+
+#ifdef FEAT_DIFF
+    if (curwin->w_p_diff && diff_internal())
+	curtab->tp_diff_update = TRUE;
+#endif
 
     /* set the '. mark */
     if (!cmdmod.keepjumps)
@@ -3769,17 +3746,17 @@ prompt_for_number(int *mouse_used)
     else
 	MSG_PUTS(_("Type number and <Enter> (empty cancels): "));
 
-    /* Set the state such that text can be selected/copied/pasted and we still
-     * get mouse events. */
+    // Set the state such that text can be selected/copied/pasted and we still
+    // get mouse events. redraw_after_callback() will not redraw if cmdline_row
+    // is zero.
     save_cmdline_row = cmdline_row;
     cmdline_row = 0;
     save_State = State;
-    State = ASKMORE;	/* prevents a screen update when using a timer */
+    State = CMDLINE;
 #ifdef FEAT_MOUSE
-    /* May show different mouse shape. */
+    // May show different mouse shape.
     setmouse();
 #endif
-
 
     i = get_number(TRUE, mouse_used);
     if (KeyTyped)
@@ -3795,7 +3772,7 @@ prompt_for_number(int *mouse_used)
 	cmdline_row = save_cmdline_row;
     State = save_State;
 #ifdef FEAT_MOUSE
-    /* May need to restore mouse shape. */
+    // May need to restore mouse shape.
     setmouse();
 #endif
 
@@ -3824,24 +3801,12 @@ msgmore(long n)
 
     if (pn > p_report)
     {
-	if (pn == 1)
-	{
-	    if (n > 0)
-		vim_strncpy(msg_buf, (char_u *)_("1 more line"),
-							     MSG_BUF_LEN - 1);
-	    else
-		vim_strncpy(msg_buf, (char_u *)_("1 line less"),
-							     MSG_BUF_LEN - 1);
-	}
+	if (n > 0)
+	    vim_snprintf((char *)msg_buf, MSG_BUF_LEN,
+		    NGETTEXT("%ld more line", "%ld more lines", pn), pn);
 	else
-	{
-	    if (n > 0)
-		vim_snprintf((char *)msg_buf, MSG_BUF_LEN,
-						     _("%ld more lines"), pn);
-	    else
-		vim_snprintf((char *)msg_buf, MSG_BUF_LEN,
-						    _("%ld fewer lines"), pn);
-	}
+	    vim_snprintf((char *)msg_buf, MSG_BUF_LEN,
+		    NGETTEXT("%ld line less", "%ld fewer lines", pn), pn);
 	if (got_int)
 	    vim_strcat(msg_buf, (char_u *)_(" (Interrupted)"), MSG_BUF_LEN);
 	if (msg(msg_buf))
@@ -3860,7 +3825,7 @@ beep_flush(void)
 {
     if (emsg_silent == 0)
     {
-	flush_buffers(FALSE);
+	flush_buffers(FLUSH_MINIMAL);
 	vim_beep(BO_ERROR);
     }
 }
@@ -4751,6 +4716,25 @@ get_env_name(
 }
 
 /*
+ * Add a user name to the list of users in ga_users.
+ * Do nothing if user name is NULL or empty.
+ */
+    static void
+add_user(char_u *user, int need_copy)
+{
+    char_u	*user_copy = (user != NULL && need_copy)
+						    ? vim_strsave(user) : user;
+
+    if (user_copy == NULL || *user_copy == NUL || ga_grow(&ga_users, 1) == FAIL)
+    {
+	if (need_copy)
+	    vim_free(user);
+	return;
+    }
+    ((char_u **)(ga_users.ga_data))[ga_users.ga_len++] = user_copy;
+}
+
+/*
  * Find all user names for user completion.
  * Done only once and then cached.
  */
@@ -4767,26 +4751,15 @@ init_users(void)
 
 # if defined(HAVE_GETPWENT) && defined(HAVE_PWD_H)
     {
-	char_u*		user;
 	struct passwd*	pw;
 
 	setpwent();
 	while ((pw = getpwent()) != NULL)
-	    /* pw->pw_name shouldn't be NULL but just in case... */
-	    if (pw->pw_name != NULL)
-	    {
-		if (ga_grow(&ga_users, 1) == FAIL)
-		    break;
-		user = vim_strsave((char_u*)pw->pw_name);
-		if (user == NULL)
-		    break;
-		((char_u **)(ga_users.ga_data))[ga_users.ga_len++] = user;
-	    }
+	    add_user((char_u *)pw->pw_name, TRUE);
 	endpwent();
     }
 # elif defined(WIN3264)
     {
-	char_u*		user;
 	DWORD		nusers = 0, ntotal = 0, i;
 	PUSER_INFO_0	uinfo;
 
@@ -4794,16 +4767,41 @@ init_users(void)
 				       &nusers, &ntotal, NULL) == NERR_Success)
 	{
 	    for (i = 0; i < nusers; i++)
-	    {
-		if (ga_grow(&ga_users, 1) == FAIL)
-		    break;
-		user = utf16_to_enc(uinfo[i].usri0_name, NULL);
-		if (user == NULL)
-		    break;
-		((char_u **)(ga_users.ga_data))[ga_users.ga_len++] = user;
-	    }
+		add_user(utf16_to_enc(uinfo[i].usri0_name, NULL), FALSE);
 
 	    NetApiBufferFree(uinfo);
+	}
+    }
+# endif
+# if defined(HAVE_GETPWNAM)
+    {
+	char_u	*user_env = mch_getenv((char_u *)"USER");
+
+	// The $USER environment variable may be a valid remote user name (NIS,
+	// LDAP) not already listed by getpwent(), as getpwent() only lists
+	// local user names.  If $USER is not already listed, check whether it
+	// is a valid remote user name using getpwnam() and if it is, add it to
+	// the list of user names.
+
+	if (user_env != NULL && *user_env != NUL)
+	{
+	    int	i;
+
+	    for (i = 0; i < ga_users.ga_len; i++)
+	    {
+		char_u	*local_user = ((char_u **)ga_users.ga_data)[i];
+
+		if (STRCMP(local_user, user_env) == 0)
+		    break;
+	    }
+
+	    if (i == ga_users.ga_len)
+	    {
+		struct passwd	*pw = getpwnam((char *)user_env);
+
+		if (pw != NULL)
+		    add_user((char_u *)pw->pw_name, TRUE);
+	    }
 	}
     }
 # endif
@@ -5099,8 +5097,6 @@ gettail(char_u *fname)
 }
 
 #if defined(FEAT_SEARCHPATH)
-static char_u *gettail_dir(char_u *fname);
-
 /*
  * Return the end of the directory name, on the first path
  * separator:
@@ -5451,8 +5447,6 @@ FullName_save(
 #if defined(FEAT_CINDENT) || defined(FEAT_SYN_HL)
 
 static char_u	*skip_string(char_u *p);
-static pos_T *ind_find_start_comment(void);
-static pos_T *ind_find_start_CORS(linenr_T *is_raw);
 static pos_T *find_start_rawstring(int ind_maxcomment);
 
 /*
@@ -5676,42 +5670,18 @@ typedef struct {
  * Below "XXX" means that this function may unlock the current line.
  */
 
-static char_u	*cin_skipcomment(char_u *);
-static int	cin_nocode(char_u *);
-static pos_T	*find_line_comment(void);
-static int	cin_has_js_key(char_u *text);
-static int	cin_islabel_skip(char_u **);
 static int	cin_isdefault(char_u *);
-static char_u	*after_label(char_u *l);
-static int	get_indent_nolabel(linenr_T lnum);
-static int	skip_label(linenr_T, char_u **pp);
-static int	cin_first_id_amount(void);
-static int	cin_get_equal_amount(linenr_T lnum);
 static int	cin_ispreproc(char_u *);
 static int	cin_iscomment(char_u *);
 static int	cin_islinecomment(char_u *);
 static int	cin_isterminated(char_u *, int, int);
-static int	cin_isinit(void);
-static int	cin_isfuncdecl(char_u **, linenr_T, linenr_T);
-static int	cin_isif(char_u *);
 static int	cin_iselse(char_u *);
-static int	cin_isdo(char_u *);
-static int	cin_iswhileofdo(char_u *, linenr_T);
-static int	cin_is_if_for_while_before_offset(char_u *line, int *poffset);
-static int	cin_iswhileofdo_end(int terminated);
-static int	cin_isbreak(char_u *);
-static int	cin_is_cpp_baseclass(cpp_baseclass_cache_T *cached);
-static int	get_baseclass_amount(int col);
 static int	cin_ends_in(char_u *, char_u *, char_u *);
 static int	cin_starts_with(char_u *s, char *word);
-static int	cin_skip2pos(pos_T *trypos);
-static pos_T	*find_start_brace(void);
 static pos_T	*find_match_paren(int);
 static pos_T	*find_match_char(int c, int ind_maxparen);
-static int	corr_ind_maxparen(pos_T *startpos);
 static int	find_last_paren(char_u *l, int start, int end);
 static int	find_match(int lookfor, linenr_T ourscope);
-static int	cin_is_cpp_namespace(char_u *);
 
 /*
  * Skip over white space and C comments within the line.
@@ -7024,7 +6994,7 @@ find_match_paren(int ind_maxparen)	/* XXX */
 }
 
     static pos_T *
-find_match_char (int c, int ind_maxparen)	/* XXX */
+find_match_char(int c, int ind_maxparen)	/* XXX */
 {
     pos_T	cursor_save;
     pos_T	*trypos;
@@ -9566,8 +9536,6 @@ get_expr_indent(void)
 
 #if defined(FEAT_LISP) || defined(PROTO)
 
-static int lisp_match(char_u *p);
-
     static int
 lisp_match(char_u *p)
 {
@@ -10387,8 +10355,6 @@ mch_expandpath(
  * Unix style wildcard expansion code.
  * It's here because it's used both for Unix and Mac.
  */
-static int	pstrcmp(const void *, const void *);
-
     static int
 pstrcmp(const void *a, const void *b)
 {
@@ -10620,13 +10586,6 @@ unix_expandpath(
 #endif
 
 #if defined(FEAT_SEARCHPATH)
-static int find_previous_pathsep(char_u *path, char_u **psep);
-static int is_unique(char_u *maybe_unique, garray_T *gap, int i);
-static void expand_path_option(char_u *curdir, garray_T	*gap);
-static char_u *get_path_cutoff(char_u *fname, garray_T *gap);
-static void uniquefy_paths(garray_T *gap, char_u *pattern);
-static int expand_in_path(garray_T *gap, char_u	*pattern, int flags);
-
 /*
  * Moves "*psep" back to the previous path separator in "path".
  * Returns FAIL is "*psep" ends up at the beginning of "path".
@@ -11051,8 +11010,6 @@ remove_duplicates(garray_T *gap)
 }
 #endif
 
-static int has_env_var(char_u *p);
-
 /*
  * Return TRUE if "p" contains what looks like an environment variable.
  * Allowing for escaping.
@@ -11077,8 +11034,6 @@ has_env_var(char_u *p)
 }
 
 #ifdef SPECIAL_WILDCHAR
-static int has_special_wildchar(char_u *p);
-
 /*
  * Return TRUE if "p" contains a special wildcard character, one that Vim
  * cannot expand, requires using a shell.

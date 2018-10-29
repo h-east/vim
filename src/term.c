@@ -74,7 +74,6 @@ struct builtin_term
 /* start of keys that are not directly used by Vim but can be mapped */
 #define BT_EXTRA_KEYS	0x101
 
-static struct builtin_term *find_builtin_term(char_u *name);
 static void parse_builtin_tcap(char_u *s);
 static void gather_termleader(void);
 #ifdef FEAT_TERMRESPONSE
@@ -91,9 +90,6 @@ static int get_bytes_from_buf(char_u *, char_u *, int);
 static void del_termcode_idx(int idx);
 static int term_is_builtin(char_u *name);
 static int term_7to8bit(char_u *p);
-#ifdef FEAT_TERMRESPONSE
-static void switch_to_8bit(void);
-#endif
 
 #ifdef HAVE_TGETENT
 static char_u *tgetent_error(char_u *, char_u *);
@@ -922,6 +918,10 @@ static struct builtin_term builtin_termcaps[] =
 #  endif
     {(int)KS_CBE,	IF_EB("\033[?2004h", ESC_STR "[?2004h")},
     {(int)KS_CBD,	IF_EB("\033[?2004l", ESC_STR "[?2004l")},
+    {(int)KS_CST,	IF_EB("\033[22;2t", ESC_STR "[22;2t")},
+    {(int)KS_CRT,	IF_EB("\033[23;2t", ESC_STR "[23;2t")},
+    {(int)KS_SSI,	IF_EB("\033[22;1t", ESC_STR "[22;1t")},
+    {(int)KS_SRI,	IF_EB("\033[23;1t", ESC_STR "[23;1t")},
 
     {K_UP,		IF_EB("\033O*A", ESC_STR "O*A")},
     {K_DOWN,		IF_EB("\033O*B", ESC_STR "O*B")},
@@ -1471,6 +1471,9 @@ parse_builtin_tcap(char_u *term)
 	    if (term_strings[p->bt_entry] == NULL
 				 || term_strings[p->bt_entry] == empty_option)
 	    {
+#ifdef FEAT_EVAL
+		int opt_idx = -1;
+#endif
 		/* 8bit terminal: use CSI instead of <Esc>[ */
 		if (term_8bit && term_7to8bit((char_u *)p->bt_string) != 0)
 		{
@@ -1486,11 +1489,23 @@ parse_builtin_tcap(char_u *term)
 				STRMOVE(t + 1, t + 2);
 			    }
 			term_strings[p->bt_entry] = s;
-			set_term_option_alloced(&term_strings[p->bt_entry]);
+#ifdef FEAT_EVAL
+			opt_idx =
+#endif
+				  set_term_option_alloced(
+						   &term_strings[p->bt_entry]);
 		    }
 		}
 		else
+		{
 		    term_strings[p->bt_entry] = (char_u *)p->bt_string;
+#ifdef FEAT_EVAL
+		    opt_idx = get_term_opt_idx(&term_strings[p->bt_entry]);
+#endif
+		}
+#ifdef FEAT_EVAL
+		set_term_option_sctx_idx(NULL, opt_idx);
+#endif
 	    }
 	}
 	else
@@ -1600,6 +1615,8 @@ get_term_entries(int *height, int *width)
 			{KS_8F, "8f"}, {KS_8B, "8b"},
 			{KS_CBE, "BE"}, {KS_CBD, "BD"},
 			{KS_CPS, "PS"}, {KS_CPE, "PE"},
+			{KS_CST, "ST"}, {KS_CRT, "RT"},
+			{KS_SSI, "Si"}, {KS_SRI, "Ri"},
 			{(enum SpecialKey)0, NULL}
 		    };
     int		    i;
@@ -1614,7 +1631,12 @@ get_term_entries(int *height, int *width)
     {
 	if (TERM_STR(string_names[i].dest) == NULL
 			     || TERM_STR(string_names[i].dest) == empty_option)
+	{
 	    TERM_STR(string_names[i].dest) = TGETSTR(string_names[i].name, &tp);
+#ifdef FEAT_EVAL
+	    set_term_option_sctx_idx(string_names[i].name, -1);
+#endif
+	}
     }
 
     /* tgetflag() returns 1 if the flag is present, 0 if not and
@@ -1656,7 +1678,12 @@ get_term_entries(int *height, int *width)
      * Get number of colors (if not done already).
      */
     if (TERM_STR(KS_CCO) == NULL || TERM_STR(KS_CCO) == empty_option)
+    {
 	set_color_count(tgetnum("Co"));
+#ifdef FEAT_EVAL
+	set_term_option_sctx_idx("Co", -1);
+#endif
+    }
 
 # ifndef hpux
     BC = (char *)TGETSTR("bc", &tp);
@@ -2423,8 +2450,6 @@ tltoa(unsigned long i)
  * minimal tgoto() implementation.
  * no padding and we only parse for %i %d and %+char
  */
-static char *tgoto(char *, int, int);
-
     static char *
 tgoto(char *cm, int x, int y)
 {
@@ -2974,6 +2999,45 @@ term_settitle(char_u *title)
     out_str(T_FS);			/* set title end */
     out_flush();
 }
+
+/*
+ * Tell the terminal to push (save) the title and/or icon, so that it can be
+ * popped (restored) later.
+ */
+    void
+term_push_title(int which)
+{
+    if ((which & SAVE_RESTORE_TITLE) && *T_CST != NUL)
+    {
+	OUT_STR(T_CST);
+	out_flush();
+    }
+
+    if ((which & SAVE_RESTORE_ICON) && *T_SSI != NUL)
+    {
+	OUT_STR(T_SSI);
+	out_flush();
+    }
+}
+
+/*
+ * Tell the terminal to pop the title and/or icon.
+ */
+    void
+term_pop_title(int which)
+{
+    if ((which & SAVE_RESTORE_TITLE) && *T_CRT != NUL)
+    {
+	OUT_STR(T_CRT);
+	out_flush();
+    }
+
+    if ((which & SAVE_RESTORE_ICON) && *T_SRI != NUL)
+    {
+	OUT_STR(T_SRI);
+	out_flush();
+    }
+}
 #endif
 
 /*
@@ -3101,8 +3165,6 @@ add_long_to_buf(long_u val, char_u *dst)
 	dst[i - 1] = (char_u) ((val >> shift) & 0xff);
     }
 }
-
-static int get_long_from_buf(char_u *buf, long_u *val);
 
 /*
  * Interpret the next string of bytes in buf as a long integer, with the most
@@ -3800,16 +3862,23 @@ scroll_start(void)
 static int cursor_is_off = FALSE;
 
 /*
- * Enable the cursor.
+ * Enable the cursor without checking if it's already enabled.
+ */
+    void
+cursor_on_force(void)
+{
+    out_str(T_VE);
+    cursor_is_off = FALSE;
+}
+
+/*
+ * Enable the cursor if it's currently off.
  */
     void
 cursor_on(void)
 {
     if (cursor_is_off)
-    {
-	out_str(T_VE);
-	cursor_is_off = FALSE;
-    }
+	cursor_on_force();
 }
 
 /*
@@ -6087,7 +6156,7 @@ replace_termcodes(
 	     */
 	    if (STRNICMP(src, "<SID>", 5) == 0)
 	    {
-		if (current_SID <= 0)
+		if (current_sctx.sc_sid <= 0)
 		    EMSG(_(e_usingsid));
 		else
 		{
@@ -6095,7 +6164,8 @@ replace_termcodes(
 		    result[dlen++] = K_SPECIAL;
 		    result[dlen++] = (int)KS_EXTRA;
 		    result[dlen++] = (int)KE_SNR;
-		    sprintf((char *)result + dlen, "%ld", (long)current_SID);
+		    sprintf((char *)result + dlen, "%ld",
+						    (long)current_sctx.sc_sid);
 		    dlen += (int)STRLEN(result + dlen);
 		    result[dlen++] = '_';
 		    continue;
@@ -6701,35 +6771,35 @@ update_tcap(int attr)
 #  define KSSIZE 20
 struct ks_tbl_s
 {
-    int  code;		/* value of KS_ */
-    char *vtp;		/* code in vtp mode */
-    char *vtp2;		/* code in vtp2 mode */
-    char buf[KSSIZE];   /* save buffer in non-vtp mode */
-    char vbuf[KSSIZE];  /* save buffer in vtp mode */
-    char v2buf[KSSIZE]; /* save buffer in vtp2 mode */
-    char arr[KSSIZE];   /* real buffer */
+    int  code;		// value of KS_
+    char *vtp;		// code in vtp mode
+    char *vtp2;		// code in vtp2 mode
+    char buf[KSSIZE];   // save buffer in non-vtp mode
+    char vbuf[KSSIZE];  // save buffer in vtp mode
+    char v2buf[KSSIZE]; // save buffer in vtp2 mode
+    char arr[KSSIZE];   // real buffer
 };
 
 static struct ks_tbl_s ks_tbl[] =
 {
-    {(int)KS_ME,  "\033|0m",  "\033|0m"},   /* normal */
-    {(int)KS_MR,  "\033|7m",  "\033|7m"},   /* reverse */
-    {(int)KS_MD,  "\033|1m",  "\033|1m"},   /* bold */
-    {(int)KS_SO,  "\033|91m", "\033|91m"},  /* standout: bright red text */
-    {(int)KS_SE,  "\033|39m", "\033|39m"},  /* standout end: default color */
-    {(int)KS_CZH, "\033|95m", "\033|95m"},  /* italic: bright magenta text */
-    {(int)KS_CZR, "\033|0m",  "\033|0m"},   /* italic end */
-    {(int)KS_US,  "\033|4m",  "\033|4m"},   /* underscore */
-    {(int)KS_UE,  "\033|24m", "\033|24m"},  /* underscore end */
+    {(int)KS_ME,  "\033|0m",  "\033|0m"},   // normal
+    {(int)KS_MR,  "\033|7m",  "\033|7m"},   // reverse
+    {(int)KS_MD,  "\033|1m",  "\033|1m"},   // bold
+    {(int)KS_SO,  "\033|91m", "\033|91m"},  // standout: bright red text
+    {(int)KS_SE,  "\033|39m", "\033|39m"},  // standout end: default color
+    {(int)KS_CZH, "\033|95m", "\033|95m"},  // italic: bright magenta text
+    {(int)KS_CZR, "\033|0m",  "\033|0m"},   // italic end
+    {(int)KS_US,  "\033|4m",  "\033|4m"},   // underscore
+    {(int)KS_UE,  "\033|24m", "\033|24m"},  // underscore end
 #  ifdef TERMINFO
-    {(int)KS_CAB, "\033|%p1%db", "\033|%p14%dm"}, /* set background color */
-    {(int)KS_CAF, "\033|%p1%df", "\033|%p13%dm"}, /* set foreground color */
+    {(int)KS_CAB, "\033|%p1%db", "\033|%p14%dm"}, // set background color
+    {(int)KS_CAF, "\033|%p1%df", "\033|%p13%dm"}, // set foreground color
 #  else
-    {(int)KS_CAB, "\033|%db", "\033|4%dm"}, /* set background color */
-    {(int)KS_CAF, "\033|%df", "\033|3%dm"}, /* set foreground color */
+    {(int)KS_CAB, "\033|%db", "\033|4%dm"}, // set background color
+    {(int)KS_CAF, "\033|%df", "\033|3%dm"}, // set foreground color
 #  endif
-    {(int)KS_CCO, "16", "256"},     /* colors */
-    {(int)KS_NAME}		    /* terminator */
+    {(int)KS_CCO, "256", "256"},	    // colors
+    {(int)KS_NAME}			    // terminator
 };
 
     static struct builtin_term *
@@ -6971,7 +7041,7 @@ gui_get_color_cmn(char_u *name)
 		size_t	len;
 		int	pos;
 
-		ignoredp = fgets(line, LINE_LEN, fd);
+		vim_ignoredp = fgets(line, LINE_LEN, fd);
 		len = strlen(line);
 
 		if (len <= 1 || line[len - 1] != '\n')

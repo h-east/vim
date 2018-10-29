@@ -75,6 +75,19 @@ typedef struct VimMenu vimmenu_T;
 #endif
 
 /*
+ * SCript ConteXt (SCTX): identifies a script script line.
+ * When sourcing a script "sc_lnum" is zero, "sourcing_lnum" is the current
+ * line number. When executing a user function "sc_lnum" is the line where the
+ * function was defined, "sourcing_lnum" is the line number inside the
+ * function.  When stored with a function, mapping, option, etc. "sc_lnum" is
+ * the line number in the script "sc_sid".
+ */
+typedef struct {
+    scid_T	sc_sid;		// script ID
+    linenr_T	sc_lnum;	// line number
+} sctx_T;
+
+/*
  * Reference to a buffer that stores the value of buf_free_count.
  * bufref_valid() only needs to check "buf" when the count differs.
  */
@@ -278,8 +291,8 @@ typedef struct
 #endif
 
 #ifdef FEAT_EVAL
-    int		wo_scriptID[WV_COUNT];	/* SIDs for window-local options */
-# define w_p_scriptID w_onebuf_opt.wo_scriptID
+    sctx_T	wo_script_ctx[WV_COUNT];	/* SCTXs for window-local options */
+# define w_p_script_ctx w_onebuf_opt.wo_script_ctx
 #endif
 } winopt_T;
 
@@ -541,7 +554,7 @@ typedef struct expand
     int		xp_pattern_len;		/* bytes in xp_pattern before cursor */
 #if defined(FEAT_USR_CMDS) && defined(FEAT_EVAL) && defined(FEAT_CMDL_COMPL)
     char_u	*xp_arg;		/* completion function */
-    int		xp_scriptID;		/* SID for completion function */
+    sctx_T	xp_script_ctx;		/* SCTX for completion function */
 #endif
     int		xp_backslash;		/* one of the XP_BS_ values */
 #ifndef BACKSLASH_IN_FILENAME
@@ -691,9 +704,7 @@ struct signlist
     linenr_T	lnum;		/* line number which has this sign */
     int		typenr;		/* typenr of sign */
     signlist_T	*next;		/* next signlist entry */
-# ifdef FEAT_NETBEANS_INTG
     signlist_T  *prev;		/* previous entry -- for easy reordering */
-# endif
 };
 
 /* type argument for buf_getsigntype() */
@@ -1071,7 +1082,7 @@ struct mapblock
     char	m_nowait;	/* <nowait> used */
 #ifdef FEAT_EVAL
     char	m_expr;		/* <expr> used, m_str is an expression */
-    scid_T	m_script_ID;	/* ID of script where map was defined */
+    sctx_T	m_script_ctx;		/* SCTX where map was defined */
 #endif
 };
 
@@ -1343,7 +1354,7 @@ typedef struct
     int		uf_cleared;	/* func_clear() was already called */
     garray_T	uf_args;	/* arguments */
     garray_T	uf_lines;	/* function lines */
-#ifdef FEAT_PROFILE
+# ifdef FEAT_PROFILE
     int		uf_profiling;	/* TRUE when func is being profiled */
     int		uf_prof_initialized;
     /* profiling the function as a whole */
@@ -1360,8 +1371,8 @@ typedef struct
     proftime_T	uf_tml_wait;	/* start wait time for current line */
     int		uf_tml_idx;	/* index of line being timed; -1 if none */
     int		uf_tml_execed;	/* line being timed was executed */
-#endif
-    scid_T	uf_script_ID;	/* ID of script where function was defined,
+# endif
+    sctx_T	uf_script_ctx;	/* SCTX where function was defined,
 				   used for s: variables */
     int		uf_refcount;	/* reference count, see func_name_refcount() */
     funccall_T	*uf_scoped;	/* l: local variables for closure */
@@ -1418,6 +1429,12 @@ typedef struct
     dictitem_T	*fd_di;		/* Dictionary item used */
 } funcdict_T;
 
+typedef struct funccal_entry funccal_entry_T;
+struct funccal_entry {
+    void	    *top_funccal;
+    funccal_entry_T *next;
+};
+
 #else
 /* dummy typedefs for function prototypes */
 typedef struct
@@ -1428,6 +1445,10 @@ typedef struct
 {
     int	    dummy;
 } funcdict_T;
+typedef struct
+{
+    int	    dummy;
+} funccal_entry_T;
 #endif
 
 struct partial_S
@@ -1651,6 +1672,7 @@ struct channel_S {
     partial_T	*ch_close_partial;
     int		ch_drop_never;
     int		ch_keep_open;	/* do not close on read error */
+    int		ch_nonblock;
 
     job_T	*ch_job;	/* Job that uses this channel; this does not
 				 * count as a reference to avoid a circular
@@ -1729,6 +1751,7 @@ typedef struct
     ch_mode_T	jo_in_mode;
     ch_mode_T	jo_out_mode;
     ch_mode_T	jo_err_mode;
+    int		jo_noblock;
 
     job_io_T	jo_io[4];	/* PART_OUT, PART_ERR, PART_IN */
     char_u	jo_io_name_buf[4][NUMBUFLEN];
@@ -1959,9 +1982,11 @@ struct file_buffer
      * b_fname is the same as b_sfname, unless ":cd" has been done,
      *		then it is the same as b_ffname (NULL for no name).
      */
-    char_u	*b_ffname;	/* full path file name */
-    char_u	*b_sfname;	/* short file name */
-    char_u	*b_fname;	/* current file name */
+    char_u	*b_ffname;	// full path file name, allocated
+    char_u	*b_sfname;	// short file name, allocated, may be equal to
+				// b_ffname
+    char_u	*b_fname;	// current file name, points to b_ffname or
+				// b_sfname
 
 #ifdef UNIX
     int		b_dev_valid;	/* TRUE when b_dev has a valid number */
@@ -2121,7 +2146,7 @@ struct file_buffer
     int		b_p_initialized;	/* set when options initialized */
 
 #ifdef FEAT_EVAL
-    int		b_p_scriptID[BV_COUNT];	/* SIDs for buffer-local options */
+    sctx_T	b_p_script_ctx[BV_COUNT];	/* SCTXs for buffer-local options */
 #endif
 
     int		b_p_ai;		/* 'autoindent' */
@@ -2431,7 +2456,9 @@ struct file_buffer
     term_T	*b_term;	/* When not NULL this buffer is for a terminal
 				 * window. */
 #endif
-
+#ifdef FEAT_DIFF
+    int		b_diff_failed;	// internal diff failed for this buffer
+#endif
 }; /* file_buffer */
 
 
@@ -2494,7 +2521,8 @@ struct tabpage_S
 #ifdef FEAT_DIFF
     diff_T	    *tp_first_diff;
     buf_T	    *(tp_diffbuf[DB_COUNT]);
-    int		    tp_diff_invalid;	/* list of diffs is outdated */
+    int		    tp_diff_invalid;	// list of diffs is outdated
+    int		    tp_diff_update;	// update diffs before redrawing
 #endif
     frame_T	    *(tp_snapshot[SNAP_COUNT]);  /* window layout snapshots */
 #ifdef FEAT_EVAL
@@ -2669,6 +2697,10 @@ struct window_S
     int		w_set_curswant;	    /* If set, then update w_curswant the next
 				       time through cursupdate() to the
 				       current virtual column */
+
+#ifdef FEAT_SYN_HL
+    linenr_T	w_last_cursorline;  // where last time 'cursorline' was drawn
+#endif
 
     /*
      * the next seven are used to update the visual part
@@ -3069,8 +3101,9 @@ typedef struct cursor_entry
 #define MENU_INDEX_OP_PENDING	3
 #define MENU_INDEX_INSERT	4
 #define MENU_INDEX_CMDLINE	5
-#define MENU_INDEX_TIP		6
-#define MENU_MODES		7
+#define MENU_INDEX_TERMINAL	6
+#define MENU_INDEX_TIP		7
+#define MENU_MODES		8
 
 /* Menu modes */
 #define MENU_NORMAL_MODE	(1 << MENU_INDEX_NORMAL)
@@ -3079,6 +3112,7 @@ typedef struct cursor_entry
 #define MENU_OP_PENDING_MODE	(1 << MENU_INDEX_OP_PENDING)
 #define MENU_INSERT_MODE	(1 << MENU_INDEX_INSERT)
 #define MENU_CMDLINE_MODE	(1 << MENU_INDEX_CMDLINE)
+#define MENU_TERMINAL_MODE	(1 << MENU_INDEX_TERMINAL)
 #define MENU_TIP_MODE		(1 << MENU_INDEX_TIP)
 #define MENU_ALL_MODES		((1 << MENU_INDEX_TIP) - 1)
 /*note MENU_INDEX_TIP is not a 'real' mode*/

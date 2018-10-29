@@ -304,9 +304,9 @@ mch_settitle(
 /*
  * Restore the window/icon title.
  * which is one of:
- *  1: Just restore title
- *  2: Just restore icon (which we don't have)
- *  3: Restore title and icon (which we don't have)
+ *  SAVE_RESTORE_TITLE: Just restore title
+ *  SAVE_RESTORE_ICON:  Just restore icon (which we don't have)
+ *  SAVE_RESTORE_BOTH:  Restore title and icon (which we don't have)
  */
     void
 mch_restore_title(int which UNUSED)
@@ -2324,6 +2324,41 @@ enumWindowsGetNames(HWND hwnd, LPARAM lparam)
     return TRUE;
 }
 
+struct enum_windows_s
+{
+    WNDENUMPROC lpEnumFunc;
+    LPARAM      lParam;
+};
+
+    static BOOL CALLBACK
+enum_windows_child(HWND hwnd, LPARAM lParam)
+{
+    struct enum_windows_s *ew = (struct enum_windows_s *)lParam;
+
+    return (ew->lpEnumFunc)(hwnd, ew->lParam);
+}
+
+    static BOOL CALLBACK
+enum_windows_toplevel(HWND hwnd, LPARAM lParam)
+{
+    struct enum_windows_s *ew = (struct enum_windows_s *)lParam;
+
+    if ((ew->lpEnumFunc)(hwnd, ew->lParam))
+	return TRUE;
+    return EnumChildWindows(hwnd, enum_windows_child, lParam);
+}
+
+/* Enumerate all windows including children. */
+    static BOOL
+enum_windows(WNDENUMPROC lpEnumFunc, LPARAM lParam)
+{
+    struct enum_windows_s ew;
+
+    ew.lpEnumFunc = lpEnumFunc;
+    ew.lParam = lParam;
+    return EnumWindows(enum_windows_toplevel, (LPARAM)&ew);
+}
+
     static HWND
 findServer(char_u *name)
 {
@@ -2332,7 +2367,7 @@ findServer(char_u *name)
     id.name = name;
     id.hwnd = 0;
 
-    EnumWindows(enumWindowsGetServer, (LPARAM)(&id));
+    enum_windows(enumWindowsGetServer, (LPARAM)(&id));
 
     return id.hwnd;
 }
@@ -2395,7 +2430,7 @@ serverGetVimNames(void)
 
     ga_init2(&ga, 1, 100);
 
-    EnumWindows(enumWindowsGetNames, (LPARAM)(&ga));
+    enum_windows(enumWindowsGetNames, (LPARAM)(&ga));
     ga_append(&ga, NUL);
 
     return ga.ga_data;
