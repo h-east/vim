@@ -199,7 +199,7 @@ func <SID>GetPage(cmdmods, ...)
     let s:env_has_u = (v:shell_error == 0)
   endif
   let env_cmd = s:env_has_u ? 'env -u MANPAGER' : 'env MANPAGER=cat'
-  if system("locale LC_MESSAGES") =~? 'utf-8'
+  if system("locale LC_MESSAGES") =~? 'utf-8' && executable('grotty')
     let man_cmd = env_cmd . ' man -Tutf8 -Z ' . s:GetCmdArg(sect, page) . ' 2> /dev/null | grotty -cbuo'
   else
     let man_cmd = env_cmd . ' man ' . s:GetCmdArg(sect, page) . ' | col -b'
