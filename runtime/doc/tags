@@ -131,6 +131,10 @@ $VIM_POSIX	vi_diff.txt	/*$VIM_POSIX*
 'cinoptions'	options.txt	/*'cinoptions'*
 'cinw'	options.txt	/*'cinw'*
 'cinwords'	options.txt	/*'cinwords'*
+'clcfu'	options.txt	/*'clcfu'*
+'clcompletefunc'	options.txt	/*'clcompletefunc'*
+'clcompleteopt'	options.txt	/*'clcompleteopt'*
+'clcot'	options.txt	/*'clcot'*
 'clipboard'	options.txt	/*'clipboard'*
 'cm'	options.txt	/*'cm'*
 'cmdheight'	options.txt	/*'cmdheight'*
@@ -1252,6 +1256,7 @@ $VIM_POSIX	vi_diff.txt	/*$VIM_POSIX*
 +cindent	various.txt	/*+cindent*
 +clientserver	various.txt	/*+clientserver*
 +clipboard	various.txt	/*+clipboard*
++clpum	various.txt	/*+clpum*
 +cmd	editing.txt	/*+cmd*
 +cmdline_compl	various.txt	/*+cmdline_compl*
 +cmdline_hist	various.txt	/*+cmdline_hist*
@@ -4652,6 +4657,7 @@ E958	eval.txt	/*E958*
 E96	diff.txt	/*E96*
 E960	options.txt	/*E960*
 E961	cmdline.txt	/*E961*
+E962	eval.txt	/*E962*
 E97	diff.txt	/*E97*
 E98	diff.txt	/*E98*
 E99	diff.txt	/*E99*
@@ -6692,6 +6698,7 @@ getscript-start	pi_getscript.txt	/*getscript-start*
 gettabinfo()	eval.txt	/*gettabinfo()*
 gettabvar()	eval.txt	/*gettabvar()*
 gettabwinvar()	eval.txt	/*gettabwinvar()*
+gettagstack()	eval.txt	/*gettagstack()*
 getwininfo()	eval.txt	/*getwininfo()*
 getwinpos()	eval.txt	/*getwinpos()*
 getwinposx()	eval.txt	/*getwinposx()*
@@ -8435,6 +8442,7 @@ setqflist-examples	quickfix.txt	/*setqflist-examples*
 setreg()	eval.txt	/*setreg()*
 settabvar()	eval.txt	/*settabvar()*
 settabwinvar()	eval.txt	/*settabwinvar()*
+settagstack()	eval.txt	/*settagstack()*
 setting-guifont	gui.txt	/*setting-guifont*
 setting-guitablabel	tabpage.txt	/*setting-guitablabel*
 setting-tabline	tabpage.txt	/*setting-tabline*
