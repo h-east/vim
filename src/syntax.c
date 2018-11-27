@@ -6875,15 +6875,17 @@ static char *(highlight_init_both[]) = {
 	 "TabLineSel term=bold cterm=bold gui=bold"),
     CENT("TabLineFill term=reverse cterm=reverse",
 	 "TabLineFill term=reverse cterm=reverse gui=reverse"),
-#ifdef FEAT_CLPUM
-    CENT("ClPmenuSbar ctermbg=Grey",
-	 "ClPmenuSbar ctermbg=Grey guibg=Grey"),
-#endif
 #ifdef FEAT_GUI
     "Cursor guibg=fg guifg=bg",
     "lCursor guibg=fg guifg=bg", /* should be different, but what? */
 #endif
     "default link QuickFixLine Search",
+#ifdef FEAT_CLPUM
+    "default link ClPmenuSbar PmenuSbar",
+    "default link ClPmenuThumb PmenuThumb",
+    "default link ClPmenu Pmenu",
+    "default link ClPmenuSel PmenuSel",
+#endif
     NULL
 };
 
@@ -6918,14 +6920,6 @@ static char *(highlight_init_light[]) = {
 	 "Pmenu ctermbg=LightMagenta ctermfg=Black guibg=LightMagenta"),
     CENT("PmenuSel ctermbg=LightGrey ctermfg=Black",
 	 "PmenuSel ctermbg=LightGrey ctermfg=Black guibg=Grey"),
-#endif
-#ifdef FEAT_CLPUM
-    CENT("ClPmenuThumb ctermbg=Black",
-	 "ClPmenuThumb ctermbg=Black guibg=Black"),
-    CENT("ClPmenu ctermbg=LightGreen ctermfg=Black",
-	 "ClPmenu ctermbg=LightGreen ctermfg=Black guibg=LightGreen"),
-    CENT("ClPmenuSel ctermbg=LightGrey ctermfg=Black",
-	 "ClPmenuSel ctermbg=LightGrey ctermfg=Black guibg=Grey"),
 #endif
     CENT("SpecialKey term=bold ctermfg=DarkBlue",
 	 "SpecialKey term=bold ctermfg=DarkBlue guifg=Blue"),
@@ -7024,14 +7018,6 @@ static char *(highlight_init_dark[]) = {
 	 "Pmenu ctermbg=Magenta ctermfg=Black guibg=Magenta"),
     CENT("PmenuSel ctermbg=Black ctermfg=DarkGrey",
 	 "PmenuSel ctermbg=Black ctermfg=DarkGrey guibg=DarkGrey"),
-#endif
-#ifdef FEAT_CLPUM
-    CENT("ClPmenuThumb ctermbg=White",
-	 "ClPmenuThumb ctermbg=White guibg=White"),
-    CENT("ClPmenu ctermbg=Green ctermfg=Black",
-	 "ClPmenu ctermbg=Green ctermfg=Black guibg=Green"),
-    CENT("ClPmenuSel ctermbg=Black ctermfg=DarkGrey",
-	 "ClPmenuSel ctermbg=Black ctermfg=DarkGrey guibg=DarkGrey"),
 #endif
     CENT("Title term=bold ctermfg=LightMagenta",
 	 "Title term=bold ctermfg=LightMagenta gui=bold guifg=Magenta"),

@@ -490,14 +490,17 @@ func Test_terminal_cwd_failure()
   call assert_fails("call term_start(&shell, {'cwd': 'Xdir'})", 'E475:')
 
   " Case 3: Directory exists but is not accessible.
-  call mkdir('Xdir', '', '0600')
-  " return early if the directory permissions could not be set properly
-  if getfperm('Xdir')[2] == 'x'
-    call delete('Xdir', 'rf')
-    return
+  " Skip this for root, it will be accessible anyway.
+  if $USER != 'root'
+    call mkdir('XdirNoAccess', '', '0600')
+    " return early if the directory permissions could not be set properly
+    if getfperm('XdirNoAccess')[2] == 'x'
+      call delete('XdirNoAccess', 'rf')
+      return
+    endif
+    call assert_fails("call term_start(&shell, {'cwd': 'XdirNoAccess'})", 'E475:')
+    call delete('XdirNoAccess', 'rf')
   endif
-  call assert_fails("call term_start(&shell, {'cwd': 'Xdir'})", 'E475:')
-  call delete('Xdir', 'rf')
 endfunc
 
 func Test_terminal_servername()
@@ -1654,4 +1657,29 @@ func Test_terminal_hidden_and_close()
   call assert_equal('terminal', getbufvar(bnr, '&buftype'))
   call WaitForAssert({-> assert_false(bufexists(bnr))})
   call assert_equal(1, winnr('$'))
+endfunc
+
+func Test_terminal_does_not_truncate_last_newlines()
+  let contents = [
+  \   [ 'One', '', 'X' ],
+  \   [ 'Two', '', '' ],
+  \   [ 'Three' ] + repeat([''], 30)
+  \ ]
+
+  for c in contents
+    call writefile(c, 'Xfile')
+    if has('win32')
+      term cmd /c type Xfile
+    else
+      term cat Xfile
+    endif
+    let bnr = bufnr('$')
+    call assert_equal('terminal', getbufvar(bnr, '&buftype'))
+    call WaitForAssert({-> assert_equal('finished', term_getstatus(bnr))})
+    sleep 100m
+    call assert_equal(c, getline(1, line('$')))
+    quit
+  endfor
+
+  call delete('Xfile')
 endfunc

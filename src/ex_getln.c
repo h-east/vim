@@ -1619,6 +1619,7 @@ getcmdline_int(
 			    redrawcmd();
 			    goto cmdline_changed;
 			}
+			vim_free(p);
 		    }
 		}
 		beep_flush();
@@ -1780,7 +1781,7 @@ getcmdline_int(
 		    if (got_int)
 		    {
 			(void)vpeekc();	/* remove <C-C> from input stream */
-			got_int = FALSE;	/* don't abandon the command line */
+			got_int = FALSE;/* don't abandon the command line */
 			(void)ExpandOne(&xpc, NULL, NULL, 0, WILD_FREE);
 #ifdef FEAT_WILDMENU
 			xpc.xp_context = EXPAND_NOTHING;
@@ -1789,12 +1790,12 @@ getcmdline_int(
 		    }
 
 		    /* when more than one match, and 'wildmode' first contains
-		    * "list", or no change and 'wildmode' contains "longest,list",
-		    * list all matches */
+		     * "list", or no change and 'wildmode' contains
+		     * "longest,list", list all matches */
 		    if (res == OK && xpc.xp_numfiles > 1)
 		    {
-			/* a "longest" that didn't do anything is skipped (but not
-			* "list:longest") */
+			/* a "longest" that didn't do anything is skipped (but
+			 * not "list:longest") */
 			if (wim_flags[0] == WIM_LONGEST && ccline.cmdpos == j)
 			    wim_index = 1;
 #ifdef FEAT_CLPUM
@@ -1866,6 +1867,17 @@ getcmdline_int(
 #endif
 	    c == K_S_TAB && KeyTyped)
 	{
+#ifdef FEAT_CLPUM
+	    if ((wim_flags[0] & WIM_POPUP) && p_wmnu)
+	    {
+		clpum_compl_busy = TRUE;
+		res = clpum_complete(Ctrl_P);
+		clpum_compl_busy = FALSE;
+		if (res == OK)
+		    goto cmdline_changed;
+	    }
+	    else
+#endif
 	    if (nextwild(&xpc, WILD_EXPAND_KEEP, 0, firstc != '@') == OK
 		    && nextwild(&xpc, WILD_PREV, 0, firstc != '@') == OK
 		    && nextwild(&xpc, WILD_PREV, 0, firstc != '@') == OK)
