@@ -44,6 +44,9 @@ func Test_modeline_syntax()
 endfunc
 
 func Test_modeline_keymap()
+  if !has('keymap')
+    return
+  endif
   call writefile(['vim: set keymap=greek :', 'nothing'], 'Xmodeline_keymap')
   let modeline = &modeline
   set modeline
@@ -84,5 +87,8 @@ func Test_modeline_syntax_fails()
 endfunc
 
 func Test_modeline_keymap_fails()
+  if !has('keymap')
+    return
+  endif
   call s:modeline_fails('keymap', 'keymap=evil$CMD')
 endfunc
