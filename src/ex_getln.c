@@ -577,6 +577,7 @@ may_do_incsearch_highlighting(
     int		use_last_pat;
 
     // Parsing range may already set the last search pattern.
+    // NOTE: must call restore_last_search_pattern() before returning!
     save_last_search_pattern();
 
     if (!do_incsearch_highlighting(firstc, is_state, &skiplen, &patlen))
@@ -748,6 +749,7 @@ may_adjust_incsearch_highlighting(
     int	    save;
 
     // Parsing range may already set the last search pattern.
+    // NOTE: must call restore_last_search_pattern() before returning!
     save_last_search_pattern();
 
     if (!do_incsearch_highlighting(firstc, is_state, &skiplen, &patlen))
@@ -850,6 +852,7 @@ may_add_char_to_search(int firstc, int *c, incsearch_state_T *is_state)
     int		skiplen, patlen;
 
     // Parsing range may already set the last search pattern.
+    // NOTE: must call restore_last_search_pattern() before returning!
     save_last_search_pattern();
 
     if (!do_incsearch_highlighting(firstc, is_state, &skiplen, &patlen))
@@ -857,6 +860,7 @@ may_add_char_to_search(int firstc, int *c, incsearch_state_T *is_state)
 	restore_last_search_pattern();
 	return FAIL;
     }
+    restore_last_search_pattern();
 
     // Add a character from under the cursor for 'incsearch'.
     if (is_state->did_incsearch)
@@ -2754,26 +2758,38 @@ cmdline_changed:
 	may_do_incsearch_highlighting(firstc, count, &is_state);
 #endif
 
-#ifdef FEAT_RIGHTLEFT
-	if (cmdmsg_rl
-# ifdef FEAT_ARABIC
-		|| (p_arshape && !p_tbidi && enc_utf8)
-# endif
-		)
-	    /* Always redraw the whole command line to fix shaping and
-	     * right-left typing.  Not efficient, but it works.
-	     * Do it only when there are no characters left to read
-	     * to avoid useless intermediate redraws. */
-	    if (vpeekc() == NUL)
-		redrawcmd();
-#endif
 #ifdef FEAT_CLPUM
 	if (clpum_compl_started)
 	{
+	    int cmdline_row_save = cmdline_row;
+
 	    redrawcmd();
+	    if (cmdline_row_save != cmdline_row)
+	    {
+		win_redraw_last_status(topframe);
+		redraw_statuslines();
+		clpum_compl_upd_pum();
+		redrawcmd();
+	    }
 	    showmode();
 	}
+	else
 #endif
+	{
+#ifdef FEAT_RIGHTLEFT
+	    if (cmdmsg_rl
+# ifdef FEAT_ARABIC
+		    || (p_arshape && !p_tbidi && enc_utf8)
+# endif
+	       )
+		/* Always redraw the whole command line to fix shaping and
+		 * right-left typing.  Not efficient, but it works.
+		 * Do it only when there are no characters left to read
+		 * to avoid useless intermediate redraws. */
+		if (vpeekc() == NUL)
+		    redrawcmd();
+#endif
+	}
     }
 
 returncmd:
@@ -4176,6 +4192,12 @@ redrawcmd(void)
     void
 compute_cmdrow(void)
 {
+    if (State == CMDLINE)
+	return;
+#ifdef FEAT_CLPUM
+    if (clpum_compl_started)
+	return;
+#endif
     if (exmode_active || msg_scrolled != 0)
 	cmdline_row = Rows - 1;
     else
@@ -8884,8 +8906,8 @@ clpum_compl_addfrommatch(void)
 }
 
 /*
- * Prepare for Insert mode completion, or stop it.
- * Called just after typing a character in Insert mode.
+ * Prepare for Command-line mode completion, or stop it.
+ * Called just after typing a character in Command-line mode.
  * Returns TRUE when the character is not to be inserted;
  */
     static int
