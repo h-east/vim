@@ -136,6 +136,8 @@ $VIM_POSIX	vi_diff.txt	/*$VIM_POSIX*
 'clcompleteopt'	options.txt	/*'clcompleteopt'*
 'clcot'	options.txt	/*'clcot'*
 'clipboard'	options.txt	/*'clipboard'*
+'clph'	options.txt	/*'clph'*
+'clpumheight'	options.txt	/*'clpumheight'*
 'cm'	options.txt	/*'cm'*
 'cmdheight'	options.txt	/*'cmdheight'*
 'cmdwinheight'	options.txt	/*'cmdwinheight'*
@@ -2924,6 +2926,7 @@ $VIM_POSIX	vi_diff.txt	/*$VIM_POSIX*
 :scl	change.txt	/*:scl*
 :scp	change.txt	/*:scp*
 :scr	repeat.txt	/*:scr*
+:script	repeat.txt	/*:script*
 :scripte	repeat.txt	/*:scripte*
 :scriptencoding	repeat.txt	/*:scriptencoding*
 :scriptnames	repeat.txt	/*:scriptnames*
@@ -4658,6 +4661,7 @@ E96	diff.txt	/*E96*
 E960	options.txt	/*E960*
 E961	cmdline.txt	/*E961*
 E962	eval.txt	/*E962*
+E963	eval.txt	/*E963*
 E97	diff.txt	/*E97*
 E98	diff.txt	/*E98*
 E99	diff.txt	/*E99*
@@ -5574,6 +5578,7 @@ cmdbang-variable	eval.txt	/*cmdbang-variable*
 cmdline-arguments	vi_diff.txt	/*cmdline-arguments*
 cmdline-changed	version5.txt	/*cmdline-changed*
 cmdline-completion	cmdline.txt	/*cmdline-completion*
+cmdline-completion-menu	cmdline.txt	/*cmdline-completion-menu*
 cmdline-editing	cmdline.txt	/*cmdline-editing*
 cmdline-history	cmdline.txt	/*cmdline-history*
 cmdline-lines	cmdline.txt	/*cmdline-lines*
@@ -8119,6 +8124,7 @@ prompt-buffer	channel.txt	/*prompt-buffer*
 prompt_setcallback()	eval.txt	/*prompt_setcallback()*
 prompt_setinterrupt()	eval.txt	/*prompt_setinterrupt()*
 prompt_setprompt()	eval.txt	/*prompt_setprompt()*
+promptbuffer-functions	usr_41.txt	/*promptbuffer-functions*
 pronounce	intro.txt	/*pronounce*
 psql	ft_sql.txt	/*psql*
 ptcap.vim	syntax.txt	/*ptcap.vim*
@@ -8941,6 +8947,7 @@ tag-binary-search	tagsrch.txt	/*tag-binary-search*
 tag-blocks	motion.txt	/*tag-blocks*
 tag-commands	tagsrch.txt	/*tag-commands*
 tag-details	tagsrch.txt	/*tag-details*
+tag-functions	usr_41.txt	/*tag-functions*
 tag-highlight	syntax.txt	/*tag-highlight*
 tag-matchlist	tagsrch.txt	/*tag-matchlist*
 tag-old-static	tagsrch.txt	/*tag-old-static*
