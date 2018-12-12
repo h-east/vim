@@ -33,7 +33,6 @@ static int clpum_do_redraw = FALSE;	/* do redraw anyway */
 static int clpum_set_selected(int n, int repeat);
 
 #define CLPUM_DEF_HEIGHT 10
-#define CLPUM_DEF_WIDTH  15
 
 /*
  * Show the popup menu with items "array[size]".
@@ -60,7 +59,7 @@ clpum_display(
     int		redo_count = 0;
 
 redo:
-    def_width = CLPUM_DEF_WIDTH;
+    def_width = p_clpw;
     max_width = 0;
     kind_width = 0;
     extra_width = 0;
@@ -141,7 +140,7 @@ redo:
     if (def_width < max_width)
 	def_width = max_width;
 
-    if (col < Columns - CLPUM_DEF_WIDTH || col < Columns - max_width)
+    if (col < Columns - p_clpw || col < Columns - max_width)
     {
 	/* align pum column with "col" */
 	clpum_col = col;
@@ -149,11 +148,11 @@ redo:
 	clpum_width = Columns - clpum_col - clpum_scrollbar;
 
 	if (clpum_width > max_width + kind_width + extra_width + 1
-					    && clpum_width > CLPUM_DEF_WIDTH)
+					    && clpum_width > p_clpw)
 	{
 	    clpum_width = max_width + kind_width + extra_width + 1;
-	    if (clpum_width < CLPUM_DEF_WIDTH)
-		clpum_width = CLPUM_DEF_WIDTH;
+	    if (clpum_width < p_clpw)
+		clpum_width = p_clpw;
 	}
     }
     else if (Columns < def_width)
@@ -164,8 +163,8 @@ redo:
     }
     else
     {
-	if (max_width > CLPUM_DEF_WIDTH)
-	    max_width = CLPUM_DEF_WIDTH;	/* truncate */
+	if (max_width > p_clpw)
+	    max_width = p_clpw;	/* truncate */
 	clpum_col = Columns - max_width;
 	clpum_width = max_width - clpum_scrollbar;
     }

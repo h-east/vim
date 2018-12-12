@@ -422,6 +422,7 @@ EXTERN char_u	*p_cb;		/* 'clipboard' */
 EXTERN char_u	*p_clcfu;	/* 'clcompletefunc' */
 EXTERN char_u	*p_clcot;	/* 'clcompleteopt' */
 EXTERN long	p_clph;		/* 'clpumheight' */
+EXTERN long	p_clpw;		/* 'clpumwidth' */
 #endif
 EXTERN long	p_ch;		/* 'cmdheight' */
 #if defined(FEAT_GUI_DIALOG) || defined(FEAT_CON_DIALOG)

@@ -844,6 +844,14 @@ static struct vimoption options[] =
 #endif
 			    {(char_u *)0L, (char_u *)0L}
 			    SCTX_INIT},
+    {"clpumwidth", "clpw",  P_NUM|P_VI_DEF,
+#ifdef FEAT_CLPUM
+			    (char_u *)&p_clpw, PV_NONE,
+#else
+			    (char_u *)NULL, PV_NONE,
+#endif
+			    {(char_u *)15L, (char_u *)15L}
+			    SCTX_INIT},
     {"cmdheight",   "ch",   P_NUM|P_VI_DEF|P_RALL,
 			    (char_u *)&p_ch, PV_NONE,
 			    {(char_u *)1L, (char_u *)0L} SCTX_INIT},
