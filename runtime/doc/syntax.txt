@@ -5036,13 +5036,21 @@ NonText		'@' at the end of the window, characters from 'showbreak'
 							*hl-Normal*
 Normal		normal text
 							*hl-Pmenu*
-Pmenu		Popup menu: normal item.
+Pmenu		Insert mode popup menu: normal item.
 							*hl-PmenuSel*
-PmenuSel	Popup menu: selected item.
+PmenuSel	Insert mode popup menu: selected item.
 							*hl-PmenuSbar*
-PmenuSbar	Popup menu: scrollbar.
+PmenuSbar	Insert mode popup menu: scrollbar.
 							*hl-PmenuThumb*
-PmenuThumb	Popup menu: Thumb of the scrollbar.
+PmenuThumb	Insert mode popup menu: Thumb of the scrollbar.
+							*hl-ClPmenu*
+ClPmenu		Command-line mode popup menu: normal item.
+							*hl-ClPmenuSel*
+ClPmenuSel	Command-line mode popup menu: selected item.
+							*hl-ClPmenuSbar*
+ClPmenuSbar	Command-line mode popup menu: scrollbar.
+							*hl-ClPmenuThumb*
+ClPmenuThumb	Command-line mode popup menu: Thumb of the scrollbar.
 							*hl-Question*
 Question	|hit-enter| prompt and yes/no questions
 							*hl-QuickFixLine*

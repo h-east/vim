@@ -6902,6 +6902,10 @@ hit-enter-prompt	message.txt	/*hit-enter-prompt*
 hit-return	message.txt	/*hit-return*
 hitest.vim	syntax.txt	/*hitest.vim*
 hjkl	usr_02.txt	/*hjkl*
+hl-ClPmenu	syntax.txt	/*hl-ClPmenu*
+hl-ClPmenuSbar	syntax.txt	/*hl-ClPmenuSbar*
+hl-ClPmenuSel	syntax.txt	/*hl-ClPmenuSel*
+hl-ClPmenuThumb	syntax.txt	/*hl-ClPmenuThumb*
 hl-ColorColumn	syntax.txt	/*hl-ColorColumn*
 hl-Conceal	syntax.txt	/*hl-Conceal*
 hl-Cursor	syntax.txt	/*hl-Cursor*
