@@ -1735,6 +1735,16 @@ A jump table for the options with a short description can be found at |Q_op|.
 	used.
 	|cmdline-completion-menu|.
 
+						*'clpumwidth'* *'clpw'*
+'clpumwidth' 'clpw'		number	(default 15)
+			global
+			{not available when compiled without the
+			|+cmdline_compl| feature}
+			{not in Vi}
+	Determines the minimum width to use for the popup menu for
+	Command-line mode completion.
+	|cmdline-completion-menu|.
+
 						*'cmdheight'* *'ch'*
 'cmdheight' 'ch'	number	(default 1)
 			global

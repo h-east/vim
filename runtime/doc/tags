@@ -138,6 +138,8 @@ $VIM_POSIX	vi_diff.txt	/*$VIM_POSIX*
 'clipboard'	options.txt	/*'clipboard'*
 'clph'	options.txt	/*'clph'*
 'clpumheight'	options.txt	/*'clpumheight'*
+'clpumwidth'	options.txt	/*'clpumwidth'*
+'clpw'	options.txt	/*'clpw'*
 'cm'	options.txt	/*'cm'*
 'cmdheight'	options.txt	/*'cmdheight'*
 'cmdwinheight'	options.txt	/*'cmdwinheight'*

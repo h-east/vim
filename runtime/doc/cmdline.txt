@@ -536,7 +536,7 @@ The menu is used when:
 The 'clpumheight' option can be used to set a maximum height.  The default is
 to use all space available.
 The 'clpumwidth' option can be used to set a minimum width.  The default is 15
-characters.  note: 'clpumwidth' IS NOT IMPLEMENT YET.
+characters.
 
 ==============================================================================
 3. Ex command-lines					*cmdline-lines*
