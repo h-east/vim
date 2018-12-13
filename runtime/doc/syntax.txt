@@ -4973,6 +4973,22 @@ These are the default highlighting groups.  These groups are used by the
 'highlight' option default.  Note that the highlighting depends on the value
 of 'background'.  You can see the current settings with the ":highlight"
 command.
+							*hl-ClPmenu*
+ClPmenu		Command-line mode popup menu: normal item.
+		|cmdline-completion-menu|
+		By default, this is highlighted like |hl-Pmenu|.
+							*hl-ClPmenuSel*
+ClPmenuSel	Command-line mode popup menu: selected item.
+		|cmdline-completion-menu|
+		By default, this is highlighted like |hl-PmenuSel|.
+							*hl-ClPmenuSbar*
+ClPmenuSbar	Command-line mode popup menu: scrollbar.
+		|cmdline-completion-menu|
+		By default, this is highlighted like |hl-PmenuSbar|.
+							*hl-ClPmenuThumb*
+ClPmenuThumb	Command-line mode popup menu: Thumb of the scrollbar.
+		|cmdline-completion-menu|
+		By default, this is highlighted like |hl-PmenuThumb|.
 							*hl-ColorColumn*
 ColorColumn	used for the columns set with 'colorcolumn'
 							*hl-Conceal*
@@ -5043,14 +5059,6 @@ PmenuSel	Insert mode popup menu: selected item.
 PmenuSbar	Insert mode popup menu: scrollbar.
 							*hl-PmenuThumb*
 PmenuThumb	Insert mode popup menu: Thumb of the scrollbar.
-							*hl-ClPmenu*
-ClPmenu		Command-line mode popup menu: normal item.
-							*hl-ClPmenuSel*
-ClPmenuSel	Command-line mode popup menu: selected item.
-							*hl-ClPmenuSbar*
-ClPmenuSbar	Command-line mode popup menu: scrollbar.
-							*hl-ClPmenuThumb*
-ClPmenuThumb	Command-line mode popup menu: Thumb of the scrollbar.
 							*hl-Question*
 Question	|hit-enter| prompt and yes/no questions
 							*hl-QuickFixLine*
