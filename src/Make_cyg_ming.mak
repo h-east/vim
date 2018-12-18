@@ -752,6 +752,7 @@ OBJ = \
 	$(OUTDIR)/syntax.o \
 	$(OUTDIR)/tag.o \
 	$(OUTDIR)/term.o \
+	$(OUTDIR)/textprop.o \
 	$(OUTDIR)/ui.o \
 	$(OUTDIR)/undo.o \
 	$(OUTDIR)/userfunc.o \
@@ -1090,6 +1091,9 @@ $(OUTDIR)/regexp.o:	regexp.c regexp_nfa.c $(INCL)
 
 $(OUTDIR)/terminal.o:	terminal.c $(INCL) $(TERM_DEPS)
 	$(CC) -c $(CFLAGS) terminal.c -o $(OUTDIR)/terminal.o
+
+$(OUTDIR)/textprop.o:	textprop.c $(INCL)
+	$(CC) -c $(CFLAGS) textprop.c -o $(OUTDIR)/textprop.o
 
 
 CCCTERM = $(CC) -c $(CFLAGS) -Ilibvterm/include -DINLINE="" \

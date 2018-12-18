@@ -778,6 +778,17 @@ static struct fst
     {"prompt_setinterrupt", 2, 2, f_prompt_setinterrupt},
     {"prompt_setprompt", 2, 2, f_prompt_setprompt},
 #endif
+#ifdef FEAT_TEXT_PROP
+    {"prop_add",	3, 3, f_prop_add},
+    {"prop_clear",	1, 3, f_prop_clear},
+    {"prop_list",	1, 2, f_prop_list},
+    {"prop_remove",	2, 3, f_prop_remove},
+    {"prop_type_add",	2, 2, f_prop_type_add},
+    {"prop_type_change", 2, 2, f_prop_type_change},
+    {"prop_type_delete", 1, 2, f_prop_type_delete},
+    {"prop_type_get",	1, 2, f_prop_type_get},
+    {"prop_type_list",	0, 1, f_prop_type_list},
+#endif
     {"pumvisible",	0, 0, f_pumvisible},
 #ifdef FEAT_PYTHON3
     {"py3eval",		1, 1, f_py3eval},
@@ -6501,6 +6512,9 @@ f_has(typval_T *argvars, typval_T *rettv)
 #ifdef FEAT_TEXTOBJ
 	"textobjects",
 #endif
+#ifdef FEAT_TEXT_PROP
+	"textprop",
+#endif
 #ifdef HAVE_TGETENT
 	"tgetent",
 #endif
@@ -8081,7 +8095,7 @@ matchadd_dict_arg(typval_T *tv, char_u **conceal_char, win_T **win)
     }
 
     if (dict_find(tv->vval.v_dict, (char_u *)"conceal", -1) != NULL)
-	*conceal_char = get_dict_string(tv->vval.v_dict,
+	*conceal_char = dict_get_string(tv->vval.v_dict,
 						   (char_u *)"conceal", FALSE);
 
     if ((di = dict_find(tv->vval.v_dict, (char_u *)"window", -1)) != NULL)
@@ -10677,7 +10691,7 @@ f_setcharsearch(typval_T *argvars, typval_T *rettv UNUSED)
 
     if ((d = argvars[0].vval.v_dict) != NULL)
     {
-	csearch = get_dict_string(d, (char_u *)"char", FALSE);
+	csearch = dict_get_string(d, (char_u *)"char", FALSE);
 	if (csearch != NULL)
 	{
 #ifdef FEAT_MBYTE
@@ -10931,16 +10945,16 @@ f_setmatches(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
 		}
 	    }
 
-	    group = get_dict_string(d, (char_u *)"group", TRUE);
-	    priority = (int)get_dict_number(d, (char_u *)"priority");
-	    id = (int)get_dict_number(d, (char_u *)"id");
+	    group = dict_get_string(d, (char_u *)"group", TRUE);
+	    priority = (int)dict_get_number(d, (char_u *)"priority");
+	    id = (int)dict_get_number(d, (char_u *)"id");
 	    conceal = dict_find(d, (char_u *)"conceal", -1) != NULL
-			      ? get_dict_string(d, (char_u *)"conceal", TRUE)
+			      ? dict_get_string(d, (char_u *)"conceal", TRUE)
 			      : NULL;
 	    if (i == 0)
 	    {
 		match_add(curwin, group,
-		    get_dict_string(d, (char_u *)"pattern", FALSE),
+		    dict_get_string(d, (char_u *)"pattern", FALSE),
 		    priority, id, NULL, conceal);
 	    }
 	    else
@@ -13538,7 +13552,7 @@ f_timer_start(typval_T *argvars, typval_T *rettv)
 	    return;
 	}
 	if (dict_find(dict, (char_u *)"repeat", -1) != NULL)
-	    repeat = get_dict_number(dict, (char_u *)"repeat");
+	    repeat = dict_get_number(dict, (char_u *)"repeat");
     }
 
     callback = get_callback(&argvars[1], &partial);
@@ -14089,29 +14103,29 @@ f_winrestview(typval_T *argvars, typval_T *rettv UNUSED)
     else
     {
 	if (dict_find(dict, (char_u *)"lnum", -1) != NULL)
-	    curwin->w_cursor.lnum = (linenr_T)get_dict_number(dict, (char_u *)"lnum");
+	    curwin->w_cursor.lnum = (linenr_T)dict_get_number(dict, (char_u *)"lnum");
 	if (dict_find(dict, (char_u *)"col", -1) != NULL)
-	    curwin->w_cursor.col = (colnr_T)get_dict_number(dict, (char_u *)"col");
+	    curwin->w_cursor.col = (colnr_T)dict_get_number(dict, (char_u *)"col");
 #ifdef FEAT_VIRTUALEDIT
 	if (dict_find(dict, (char_u *)"coladd", -1) != NULL)
-	    curwin->w_cursor.coladd = (colnr_T)get_dict_number(dict, (char_u *)"coladd");
+	    curwin->w_cursor.coladd = (colnr_T)dict_get_number(dict, (char_u *)"coladd");
 #endif
 	if (dict_find(dict, (char_u *)"curswant", -1) != NULL)
 	{
-	    curwin->w_curswant = (colnr_T)get_dict_number(dict, (char_u *)"curswant");
+	    curwin->w_curswant = (colnr_T)dict_get_number(dict, (char_u *)"curswant");
 	    curwin->w_set_curswant = FALSE;
 	}
 
 	if (dict_find(dict, (char_u *)"topline", -1) != NULL)
-	    set_topline(curwin, (linenr_T)get_dict_number(dict, (char_u *)"topline"));
+	    set_topline(curwin, (linenr_T)dict_get_number(dict, (char_u *)"topline"));
 #ifdef FEAT_DIFF
 	if (dict_find(dict, (char_u *)"topfill", -1) != NULL)
-	    curwin->w_topfill = (int)get_dict_number(dict, (char_u *)"topfill");
+	    curwin->w_topfill = (int)dict_get_number(dict, (char_u *)"topfill");
 #endif
 	if (dict_find(dict, (char_u *)"leftcol", -1) != NULL)
-	    curwin->w_leftcol = (colnr_T)get_dict_number(dict, (char_u *)"leftcol");
+	    curwin->w_leftcol = (colnr_T)dict_get_number(dict, (char_u *)"leftcol");
 	if (dict_find(dict, (char_u *)"skipcol", -1) != NULL)
-	    curwin->w_skipcol = (colnr_T)get_dict_number(dict, (char_u *)"skipcol");
+	    curwin->w_skipcol = (colnr_T)dict_get_number(dict, (char_u *)"skipcol");
 
 	check_cursor();
 	win_new_height(curwin, curwin->w_height);
