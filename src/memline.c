@@ -2055,21 +2055,16 @@ get_b0_dict(char_u *fname, dict_T *d)
 	if (read_eintr(fd, &b0, sizeof(b0)) == sizeof(b0))
 	{
 	    if (ml_check_b0_id(&b0) == FAIL)
-		dict_add_string(d, "error",
-			       vim_strsave((char_u *)"Not a swap file"));
+		dict_add_string(d, "error", (char_u *)"Not a swap file");
 	    else if (b0_magic_wrong(&b0))
-		dict_add_string(d, "error",
-			       vim_strsave((char_u *)"Magic number mismatch"));
+		dict_add_string(d, "error", (char_u *)"Magic number mismatch");
 	    else
 	    {
 		/* we have swap information */
-		dict_add_string(d, "version", vim_strnsave(b0.b0_version, 10));
-		dict_add_string(d, "user",
-				     vim_strnsave(b0.b0_uname, B0_UNAME_SIZE));
-		dict_add_string(d, "host",
-				     vim_strnsave(b0.b0_hname, B0_HNAME_SIZE));
-		dict_add_string(d, "fname",
-				 vim_strnsave(b0.b0_fname, B0_FNAME_SIZE_ORG));
+		dict_add_string_len(d, "version", b0.b0_version, 10);
+		dict_add_string_len(d, "user", b0.b0_uname, B0_UNAME_SIZE);
+		dict_add_string_len(d, "host", b0.b0_hname, B0_HNAME_SIZE);
+		dict_add_string_len(d, "fname", b0.b0_fname, B0_FNAME_SIZE_ORG);
 
 		dict_add_number(d, "pid", char_to_long(b0.b0_pid));
 		dict_add_number(d, "mtime", char_to_long(b0.b0_mtime));
@@ -2080,12 +2075,11 @@ get_b0_dict(char_u *fname, dict_T *d)
 	    }
 	}
 	else
-	    dict_add_string(d, "error",
-				    vim_strsave((char_u *)"Cannot read file"));
+	    dict_add_string(d, "error", (char_u *)"Cannot read file");
 	close(fd);
     }
     else
-	dict_add_string(d, "error", vim_strsave((char_u *)"Cannot open file"));
+	dict_add_string(d, "error", (char_u *)"Cannot open file");
 }
 #endif
 
@@ -3179,14 +3173,14 @@ ml_replace_len(linenr_T lnum, char_u *line_arg, colnr_T len_arg, int copy)
 	curbuf->b_ml.ml_flags &= ~ML_LINE_DIRTY;
 
 #ifdef FEAT_TEXT_PROP
-	if (has_any_text_properties(curbuf))
+	if (curbuf->b_has_textprop)
 	    // Need to fetch the old line to copy over any text properties.
 	    ml_get_buf(curbuf, lnum, TRUE);
 #endif
     }
 
 #ifdef FEAT_TEXT_PROP
-    if (has_any_text_properties(curbuf))
+    if (curbuf->b_has_textprop)
     {
 	size_t	oldtextlen = STRLEN(curbuf->b_ml.ml_line_ptr) + 1;
 
@@ -5131,6 +5125,7 @@ ml_updatechunk(
 	{
 	    int	    count;	    /* number of entries in block */
 	    int	    idx;
+	    int	    end_idx;
 	    int	    text_end;
 	    int	    linecnt;
 
@@ -5154,23 +5149,39 @@ ml_updatechunk(
 			(long)(buf->b_ml.ml_locked_low) + 1;
 		idx = curline - buf->b_ml.ml_locked_low;
 		curline = buf->b_ml.ml_locked_high + 1;
-		if (idx == 0)/* first line in block, text at the end */
-		    text_end = dp->db_txt_end;
-		else
-		    text_end = ((dp->db_index[idx - 1]) & DB_INDEX_MASK);
-		/* Compute index of last line to use in this MEMLINE */
+
+		// compute index of last line to use in this MEMLINE
 		rest = count - idx;
 		if (linecnt + rest > MLCS_MINL)
 		{
-		    idx += MLCS_MINL - linecnt - 1;
+		    end_idx = idx + MLCS_MINL - linecnt - 1;
 		    linecnt = MLCS_MINL;
 		}
 		else
 		{
-		    idx = count - 1;
+		    end_idx = count - 1;
 		    linecnt += rest;
 		}
-		size += text_end - ((dp->db_index[idx]) & DB_INDEX_MASK);
+#ifdef FEAT_TEXT_PROP
+		if (buf->b_has_textprop)
+		{
+		    int i;
+
+		    // We cannot use the text pointers to get the text length,
+		    // the text prop info would also be counted.  Go over the
+		    // lines.
+		    for (i = end_idx; i < idx; ++i)
+			size += STRLEN((char_u *)dp + (dp->db_index[i] & DB_INDEX_MASK)) + 1;
+		}
+		else
+#endif
+		{
+		    if (idx == 0)/* first line in block, text at the end */
+			text_end = dp->db_txt_end;
+		    else
+			text_end = ((dp->db_index[idx - 1]) & DB_INDEX_MASK);
+		    size += text_end - ((dp->db_index[end_idx]) & DB_INDEX_MASK);
+		}
 	    }
 	    buf->b_ml.ml_chunksize[curix].mlcs_numlines = linecnt;
 	    buf->b_ml.ml_chunksize[curix + 1].mlcs_numlines -= linecnt;
@@ -5360,7 +5371,20 @@ ml_find_line_or_offset(buf_T *buf, linenr_T lnum, long *offp)
 		idx++;
 	    }
 	}
-	len = text_end - ((dp->db_index[idx]) & DB_INDEX_MASK);
+#ifdef FEAT_TEXT_PROP
+	if (buf->b_has_textprop)
+	{
+	    int i;
+
+	    // cannot use the db_index pointer, need to get the actual text
+	    // lengths.
+	    len = 0;
+	    for (i = start_idx; i <= idx; ++i)
+		len += STRLEN((char_u *)dp + ((dp->db_index[i]) & DB_INDEX_MASK)) + 1;
+	}
+	else
+#endif
+	    len = text_end - ((dp->db_index[idx]) & DB_INDEX_MASK);
 	size += len;
 	if (offset != 0 && size >= offset)
 	{

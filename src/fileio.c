@@ -9018,6 +9018,7 @@ aucmd_prepbuf(
 
     aco->save_curwin = curwin;
     aco->save_curbuf = curbuf;
+    aco->save_prevwin = prevwin;
     if (win != NULL)
     {
 	/* There is a window for "buf" in the current tab page, make it the
@@ -9128,6 +9129,8 @@ win_found:
 	else
 	    /* Hmm, original window disappeared.  Just use the first one. */
 	    curwin = firstwin;
+	if (win_valid(aco->save_prevwin))
+	    prevwin = aco->save_prevwin;
 #ifdef FEAT_EVAL
 	vars_clear(&aucmd_win->w_vars->dv_hashtab);  /* free all w: variables */
 	hash_init(&aucmd_win->w_vars->dv_hashtab);   /* re-use the hashtab */
@@ -9178,6 +9181,8 @@ win_found:
 
 	    curwin = aco->save_curwin;
 	    curbuf = curwin->w_buffer;
+	    if (win_valid(aco->save_prevwin))
+		prevwin = aco->save_prevwin;
 	    /* In case the autocommand move the cursor to a position that that
 	     * not exist in curbuf. */
 	    check_cursor();

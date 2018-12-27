@@ -895,6 +895,19 @@ alloc_clear(unsigned size)
 }
 
 /*
+ * Same as alloc_clear() but with allocation id for testing
+ */
+    char_u *
+alloc_clear_id(unsigned size, alloc_id_T id UNUSED)
+{
+#ifdef FEAT_EVAL
+    if (alloc_fail_id == id && alloc_does_fail((long_u)size))
+	return NULL;
+#endif
+    return alloc_clear(size);
+}
+
+/*
  * alloc() with check for maximum line length
  */
     char_u *
@@ -6580,7 +6593,7 @@ build_argv_from_list(list_T *l, char ***argv, int *argc)
     *argc = 0;
     for (li = l->lv_first; li != NULL; li = li->li_next)
     {
-	s = get_tv_string_chk(&li->li_tv);
+	s = tv_get_string_chk(&li->li_tv);
 	if (s == NULL)
 	{
 	    int i;
