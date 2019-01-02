@@ -70,6 +70,7 @@ SRC =	arabic.c						\
 	screen.c						\
 	search.c						\
 	sha256.c						\
+	sign.c							\
 	spell.c							\
 	spellfile.c						\
 	syntax.c						\

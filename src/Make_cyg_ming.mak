@@ -747,6 +747,7 @@ OBJ = \
 	$(OUTDIR)/screen.o \
 	$(OUTDIR)/search.o \
 	$(OUTDIR)/sha256.o \
+	$(OUTDIR)/sign.o \
 	$(OUTDIR)/spell.o \
 	$(OUTDIR)/spellfile.o \
 	$(OUTDIR)/syntax.o \

@@ -17,14 +17,12 @@
  * Text properties have a type, which can be used to specify highlighting.
  *
  * TODO:
- * - mismatch in column 1 being the first column
- * - Let props overrule syntax HL.
- * - When deleting a line where a prop ended, adjust flag of previous line.
- * - When deleting a line where a prop started, adjust flag of next line.
- * - When inserting a line add props that continue from previous line.
- * - Adjust property column and length when text is inserted/deleted
- * - Add an arrray for global_proptypes, to quickly lookup a proptype by ID
- * - Add an arrray for b_proptypes, to quickly lookup a proptype by ID
+ * - Adjust text property column and length when text is inserted/deleted.
+ * - Perhaps we only need TP_FLAG_CONT_NEXT and can drop TP_FLAG_CONT_PREV?
+ * - Add an arrray for global_proptypes, to quickly lookup a prop type by ID
+ * - Add an arrray for b_proptypes, to quickly lookup a prop type by ID
+ * - Checking the text length to detect text properties is slow.  Use a flag in
+ *   the index, like DB_MARKED?
  * - Also test line2byte() with many lines, so that ml_updatechunk() is taken
  *   into account.
  * - add mechanism to keep track of changed lines.
@@ -200,12 +198,12 @@ f_prop_add(typval_T *argvars, typval_T *rettv UNUSED)
     {
 	long length = dict_get_number(dict, (char_u *)"length");
 
-	if (length < 1 || end_lnum > start_lnum)
+	if (length < 0 || end_lnum > start_lnum)
 	{
 	    EMSG2(_(e_invargval), "length");
 	    return;
 	}
-	end_col = start_col + length - 1;
+	end_col = start_col + length;
     }
     else if (dict_find(dict, (char_u *)"end_col", -1) != NULL)
     {
@@ -262,13 +260,13 @@ f_prop_add(typval_T *argvars, typval_T *rettv UNUSED)
 	}
 
 	if (lnum == end_lnum)
-	    length = end_col - col + 1;
+	    length = end_col - col;
 	else
 	    length = textlen - col + 1;
 	if (length > (long)textlen)
-	    length = textlen;  // can include the end-of-line
-	if (length < 1)
-	    length = 1;
+	    length = textlen;	// can include the end-of-line
+	if (length < 0)
+	    length = 0;		// zero-width property
 
 	// Allocate the new line with space for the new proprety.
 	newtext = alloc(buf->b_ml.ml_line_len + sizeof(textprop_T));
@@ -912,6 +910,52 @@ clear_buf_prop_types(buf_T *buf)
 {
     clear_ht_prop_types(buf->b_proptypes);
     buf->b_proptypes = NULL;
+}
+
+/*
+ * Adjust the columns of text properties in line "lnum" after position "col" to
+ * shift by "bytes_added" (can be negative).
+ * Note that "col" is zero-based, while tp_col is one-based.
+ * Only for the current buffer.
+ * Called is expected to check b_has_textprop and "bytes_added" being non-zero.
+ */
+    void
+adjust_prop_columns(linenr_T lnum, colnr_T col, int bytes_added)
+{
+    int		proplen;
+    char_u	*props;
+    textprop_T	tmp_prop;
+    proptype_T  *pt;
+    int		dirty = FALSE;
+    int		i;
+
+    proplen = get_text_props(curbuf, lnum, &props, TRUE);
+    if (proplen == 0)
+	return;
+
+    for (i = 0; i < proplen; ++i)
+    {
+	mch_memmove(&tmp_prop, props + i * sizeof(textprop_T),
+							   sizeof(textprop_T));
+	pt = text_prop_type_by_id(curbuf, tmp_prop.tp_type);
+
+	if (tmp_prop.tp_col >= col + (pt != NULL && (pt->pt_flags & PT_FLAG_INS_START_INCL) ? 2 : 1))
+	{
+	    tmp_prop.tp_col += bytes_added;
+	    dirty = TRUE;
+	}
+	else if (tmp_prop.tp_col + tmp_prop.tp_len > col + (pt != NULL && (pt->pt_flags & PT_FLAG_INS_END_INCL) ? 0 : 1))
+	{
+	    tmp_prop.tp_len += bytes_added;
+	    dirty = TRUE;
+	}
+	if (dirty)
+	{
+	    curbuf->b_ml.ml_flags |= ML_LINE_DIRTY;
+	    mch_memmove(props + i * sizeof(textprop_T), &tmp_prop,
+							   sizeof(textprop_T));
+	}
+    }
 }
 
 #endif // FEAT_TEXT_PROP

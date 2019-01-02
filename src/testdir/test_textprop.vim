@@ -5,6 +5,10 @@ if !has('textprop')
   finish
 endif
 
+source screendump.vim
+
+" test length zero
+
 func Test_proptype_global()
   call prop_type_add('comment', {'highlight': 'Directory', 'priority': 123, 'start_incl': 1, 'end_incl': 1})
   let proptypes = prop_type_list()
@@ -110,6 +114,12 @@ func Test_prop_add()
   1del
   call assert_equal(s:expected_props, prop_list(1))
 
+  " Prop without length or end column is zero length
+  call prop_clear(1)
+  call prop_add(1, 5, {'type': 'two'})
+  let expected = [{'col': 5, 'length': 0, 'type': 'two', 'id': 0, 'start': 1, 'end': 1}]
+  call assert_equal(expected, prop_list(1))
+
   call DeletePropTypes()
   bwipe!
 endfunc
@@ -197,6 +207,16 @@ func Test_prop_clear_buf()
   bwipe!
 endfunc
 
+" Setup a three line prop in lines 2 - 4.
+" Add short props in line 1 and 5.
+func Setup_three_line_prop()
+  new
+  call setline(1, ['one', 'twotwo', 'three', 'fourfour', 'five'])
+  call prop_add(1, 2, {'length': 1, 'type': 'comment'})
+  call prop_add(2, 4, {'end_lnum': 4, 'end_col': 5, 'type': 'comment'})
+  call prop_add(5, 2, {'length': 1, 'type': 'comment'})
+endfunc
+
 func Test_prop_multiline()
   call prop_type_add('comment', {'highlight': 'Directory'})
   new
@@ -208,7 +228,7 @@ func Test_prop_multiline()
   call assert_equal([expect1], prop_list(1))
   let expect2 = {'col': 1, 'length': 10, 'type': 'comment', 'start': 0, 'end': 0, 'id': 0}
   call assert_equal([expect2], prop_list(2))
-  let expect3 = {'col': 1, 'length': 5, 'type': 'comment', 'start': 0, 'end': 1, 'id': 0}
+  let expect3 = {'col': 1, 'length': 4, 'type': 'comment', 'start': 0, 'end': 1, 'id': 0}
   call assert_equal([expect3], prop_list(3))
   call prop_clear(1, 3)
 
@@ -223,6 +243,41 @@ func Test_prop_multiline()
   call prop_clear(1, 3)
 
   bwipe!
+
+  " Test deleting the first line of a multi-line prop.
+  call Setup_three_line_prop()
+  let expect_short = {'col': 2, 'length': 1, 'type': 'comment', 'start': 1, 'end': 1, 'id': 0}
+  call assert_equal([expect_short], prop_list(1))
+  let expect2 = {'col': 4, 'length': 4, 'type': 'comment', 'start': 1, 'end': 0, 'id': 0}
+  call assert_equal([expect2], prop_list(2))
+  2del
+  call assert_equal([expect_short], prop_list(1))
+  let expect2 = {'col': 1, 'length': 6, 'type': 'comment', 'start': 1, 'end': 0, 'id': 0}
+  call assert_equal([expect2], prop_list(2))
+  bwipe!
+
+  " Test deleting the last line of a multi-line prop.
+  call Setup_three_line_prop()
+  let expect3 = {'col': 1, 'length': 6, 'type': 'comment', 'start': 0, 'end': 0, 'id': 0}
+  call assert_equal([expect3], prop_list(3))
+  let expect4 = {'col': 1, 'length': 4, 'type': 'comment', 'start': 0, 'end': 1, 'id': 0}
+  call assert_equal([expect4], prop_list(4))
+  4del
+  let expect3.end = 1
+  call assert_equal([expect3], prop_list(3))
+  call assert_equal([expect_short], prop_list(4))
+  bwipe!
+
+  " Test appending a line below the multi-line text prop start.
+  call Setup_three_line_prop()
+  let expect2 = {'col': 4, 'length': 4, 'type': 'comment', 'start': 1, 'end': 0, 'id': 0}
+  call assert_equal([expect2], prop_list(2))
+  call append(2, "new line")
+  call assert_equal([expect2], prop_list(2))
+  let expect3 = {'col': 1, 'length': 9, 'type': 'comment', 'start': 0, 'end': 0, 'id': 0}
+  call assert_equal([expect3], prop_list(3))
+  bwipe!
+
   call prop_type_delete('comment')
 endfunc
 
@@ -239,5 +294,36 @@ func Test_prop_byteoff()
   call prop_type_delete('comment')
 endfunc
 
+" screenshot test with textprop highlighting
+funct Test_textprop_screenshots()
+  if !CanRunVimInTerminal() || &encoding != 'utf-8'
+    return
+  endif
+  call writefile([
+	\ "call setline(1, ['One two', 'Numbér 123 änd thœn 4¾7.', '--aa--bb--cc--dd--'])",
+	\ "hi NumberProp ctermfg=blue",
+	\ "hi LongProp ctermbg=yellow",
+	\ "call prop_type_add('number', {'highlight': 'NumberProp'})",
+	\ "call prop_type_add('long', {'highlight': 'LongProp'})",
+	\ "call prop_type_add('start', {'highlight': 'NumberProp', 'start_incl': 1})",
+	\ "call prop_type_add('end', {'highlight': 'NumberProp', 'end_incl': 1})",
+	\ "call prop_type_add('both', {'highlight': 'NumberProp', 'start_incl': 1, 'end_incl': 1})",
+	\ "call prop_add(1, 4, {'end_lnum': 3, 'end_col': 3, 'type': 'long'})",
+	\ "call prop_add(2, 9, {'length': 3, 'type': 'number'})",
+	\ "call prop_add(2, 24, {'length': 4, 'type': 'number'})",
+	\ "call prop_add(3, 3, {'length': 2, 'type': 'number'})",
+	\ "call prop_add(3, 7, {'length': 2, 'type': 'start'})",
+	\ "call prop_add(3, 11, {'length': 2, 'type': 'end'})",
+	\ "call prop_add(3, 15, {'length': 2, 'type': 'both'})",
+	\ "set number",
+	\ "hi clear SpellBad",
+	\ "set spell",
+	\ "normal 3G0llix\<Esc>lllix\<Esc>lllix\<Esc>lllix\<Esc>lllix\<Esc>lllix\<Esc>lllix\<Esc>lllix\<Esc>",
+	\], 'XtestProp')
+  let buf = RunVimInTerminal('-S XtestProp', {'rows': 6})
+  call VerifyScreenDump(buf, 'Test_textprop_01', {})
 
-" TODO: screenshot test with highlighting
+  " clean up
+  call StopVimInTerminal(buf)
+  call delete('XtestProp')
+endfunc

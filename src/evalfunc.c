@@ -4444,24 +4444,6 @@ f_get(typval_T *argvars, typval_T *rettv)
 	copy_tv(tv, rettv);
 }
 
-#ifdef FEAT_SIGNS
-/*
- * Returns information about signs placed in a buffer as list of dicts.
- */
-    static void
-get_buffer_signs(buf_T *buf, list_T *l)
-{
-    signlist_T	*sign;
-    dict_T	*d;
-
-    FOR_ALL_SIGNS_IN_BUF(buf, sign)
-    {
-	if ((d = sign_get_info(sign)) != NULL)
-	    list_append_dict(l, d);
-    }
-}
-#endif
-
 /*
  * Returns buffer options, variables and other attributes in a dictionary.
  */
@@ -8529,7 +8511,11 @@ f_mode(typval_T *argvars, typval_T *rettv)
     {
 	buf[0] = 'n';
 	if (finish_op)
+	{
 	    buf[1] = 'o';
+	    // to be able to detect force-linewise/blockwise/characterwise operations
+	    buf[2] = motion_force;
+	}
 	else if (restart_edit == 'I' || restart_edit == 'R'
 							|| restart_edit == 'V')
 	{
@@ -11597,7 +11583,7 @@ f_sign_unplace(typval_T *argvars, typval_T *rettv)
 	if (argvars[1].v_type != VAR_DICT)
 	{
 	    EMSG(_(e_dictreq));
-	    return;
+	    goto cleanup;
 	}
 	dict = argvars[1].vval.v_dict;
 
@@ -11608,7 +11594,7 @@ f_sign_unplace(typval_T *argvars, typval_T *rettv)
 	    {
 		EMSG2(_("E158: Invalid buffer name: %s"),
 						tv_get_string(&di->di_tv));
-		return;
+		goto cleanup;
 	    }
 	}
 	if (dict_find(dict, (char_u *)"id", -1) != NULL)
@@ -11619,14 +11605,16 @@ f_sign_unplace(typval_T *argvars, typval_T *rettv)
     {
 	// Delete the sign in all the buffers
 	FOR_ALL_BUFFERS(buf)
-	    if (sign_unplace(sign_id, group, buf) == OK)
+	    if (sign_unplace(sign_id, group, buf, 0) == OK)
 		rettv->vval.v_number = 0;
     }
     else
     {
-	if (sign_unplace(sign_id, group, buf) == OK)
+	if (sign_unplace(sign_id, group, buf, 0) == OK)
 	    rettv->vval.v_number = 0;
     }
+
+cleanup:
     vim_free(group);
 }
 #endif
