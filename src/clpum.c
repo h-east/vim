@@ -394,7 +394,7 @@ clpum_undisplay(void)
     //FreeWild(clpum_size, clpum_array);
     clpum_array = NULL;
     //clpum_size = -1;
-    redraw_all_later(SOME_VALID);
+    redraw_all_later(NOT_VALID);
 #ifdef FEAT_WINDOWS
     redraw_tabline = TRUE;
 #endif
