@@ -238,6 +238,9 @@ redraw_all_later(int type)
     {
 	redraw_win_later(wp, type);
     }
+    // This may be needed when switching tabs.
+    if (must_redraw < type)
+	must_redraw = type;
 }
 
 /*
@@ -4166,7 +4169,11 @@ win_line(
 	    break;
 	}
 
-	if (draw_state == WL_LINE && area_highlighting)
+	if (draw_state == WL_LINE && (area_highlighting
+#ifdef FEAT_SPELL
+		|| has_spell
+#endif
+	   ))
 	{
 	    /* handle Visual or match highlighting in this line */
 	    if (vcol == fromcol
