@@ -1,5 +1,6 @@
 title: Vim-CLPUM
 description: CLPUM (Command-Line mode PopUp Menu) for Vim
+repository_url: https://github.com/h-east/vim/tree/clpum
 google_analytics: UA-6869027-4
 show_downloads: false
 theme: jekyll-theme-cayman
