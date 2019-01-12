@@ -1,0 +1,8 @@
+title: Vim-CLPUM
+description: CLPUM (Command-Line mode PopUp Menu) for Vim
+google_analytics: UA-6869027-4
+show_downloads: true
+theme: jekyll-theme-cayman
+
+gems:
+  - jekyll-mentions
