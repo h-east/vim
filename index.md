@@ -73,11 +73,12 @@ NOTE:
 
 ***
 ### Progress
+
 Phase | %
 --- | ---
 Implement | 100
 Debug and refactor | 70
-Write documents | 5
+Write documents | 25
 Write tests | 0
 Send patch | -
 Included this patch to Vim | -
@@ -85,7 +86,7 @@ Included this patch to Vim | -
 ***
 ### How to get the patch
 ```bash
-$ curl -L https://github.com/h-east/vim/compare/master...h-east:clpum.patch > clpum.patch
+$ curl -L -k https://github.com/h-east/vim/compare/master...h-east:clpum.patch > clpum.patch
 ```
 
 ***
