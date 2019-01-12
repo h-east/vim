@@ -78,7 +78,7 @@ Phase | %
 --- | ---
 Implement | 100
 Debug and refactor | 70
-Write documents | 25
+Write documents | 26
 Write tests | 0
 Send patch | -
 Included this patch to Vim | -
