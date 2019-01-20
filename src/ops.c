@@ -302,7 +302,7 @@ op_shift(oparg_T *oap, int curs_top, int amount)
 	vim_snprintf((char *)IObuff, IOSIZE,
 		NGETTEXT(msg_line_single, msg_line_plural, oap->line_count),
 		oap->line_count, op, amount);
-	msg(IObuff);
+	msg((char *)IObuff);
     }
 
     /*
@@ -1112,7 +1112,7 @@ do_record(int c)
 	 * adds the escaping back later.
 	 */
 	reg_recording = 0;
-	MSG("");
+	msg("");
 	p = get_recorded();
 	if (p == NULL)
 	    retval = FAIL;
@@ -3049,7 +3049,7 @@ free_yank(long n)
 	VIM_CLEAR(y_current->y_array);
 #ifdef AMIGA
 	if (n >= 1000)
-	    MSG("");
+	    msg("");
 #endif
     }
 }
@@ -4285,7 +4285,7 @@ ex_display(exarg_T *eap)
     attr = HL_ATTR(HLF_8);
 
     /* Highlight title */
-    MSG_PUTS_TITLE(_("\n--- Registers ---"));
+    msg_puts_title(_("\n--- Registers ---"));
     for (i = -1; i < NUM_REGISTERS && !got_int; ++i)
     {
 	name = get_register_name(i);
@@ -4327,14 +4327,14 @@ ex_display(exarg_T *eap)
 	    msg_putchar('\n');
 	    msg_putchar('"');
 	    msg_putchar(name);
-	    MSG_PUTS("   ");
+	    msg_puts("   ");
 
 	    n = (int)Columns - 6;
 	    for (j = 0; j < yb->y_size && n > 1; ++j)
 	    {
 		if (j)
 		{
-		    MSG_PUTS_ATTR("^J", attr);
+		    msg_puts_attr("^J", attr);
 		    n -= 2;
 		}
 		for (p = yb->y_array[j]; *p && (n -= ptr2cells(p)) >= 0; ++p)
@@ -4349,7 +4349,7 @@ ex_display(exarg_T *eap)
 		}
 	    }
 	    if (n > 1 && yb->y_type == MLINE)
-		MSG_PUTS_ATTR("^J", attr);
+		msg_puts_attr("^J", attr);
 	    out_flush();		    /* show one line at a time */
 	}
 	ui_breakcheck();
@@ -4361,7 +4361,7 @@ ex_display(exarg_T *eap)
     if ((p = get_last_insert()) != NULL
 		 && (arg == NULL || vim_strchr(arg, '.') != NULL) && !got_int)
     {
-	MSG_PUTS("\n\".   ");
+	msg_puts("\n\".   ");
 	dis_msg(p, TRUE);
     }
 
@@ -4371,7 +4371,7 @@ ex_display(exarg_T *eap)
     if (last_cmdline != NULL && (arg == NULL || vim_strchr(arg, ':') != NULL)
 								  && !got_int)
     {
-	MSG_PUTS("\n\":   ");
+	msg_puts("\n\":   ");
 	dis_msg(last_cmdline, FALSE);
     }
 
@@ -4381,7 +4381,7 @@ ex_display(exarg_T *eap)
     if (curbuf->b_fname != NULL
 	    && (arg == NULL || vim_strchr(arg, '%') != NULL) && !got_int)
     {
-	MSG_PUTS("\n\"%   ");
+	msg_puts("\n\"%   ");
 	dis_msg(curbuf->b_fname, FALSE);
     }
 
@@ -4395,7 +4395,7 @@ ex_display(exarg_T *eap)
 
 	if (buflist_name_nr(0, &fname, &dummy) != FAIL)
 	{
-	    MSG_PUTS("\n\"#   ");
+	    msg_puts("\n\"#   ");
 	    dis_msg(fname, FALSE);
 	}
     }
@@ -4406,7 +4406,7 @@ ex_display(exarg_T *eap)
     if (last_search_pat() != NULL
 		 && (arg == NULL || vim_strchr(arg, '/') != NULL) && !got_int)
     {
-	MSG_PUTS("\n\"/   ");
+	msg_puts("\n\"/   ");
 	dis_msg(last_search_pat(), FALSE);
     }
 
@@ -4417,7 +4417,7 @@ ex_display(exarg_T *eap)
     if (expr_line != NULL && (arg == NULL || vim_strchr(arg, '=') != NULL)
 								  && !got_int)
     {
-	MSG_PUTS("\n\"=   ");
+	msg_puts("\n\"=   ");
 	dis_msg(expr_line, FALSE);
     }
 #endif
@@ -6036,16 +6036,16 @@ do_addsub(
 	}
 	else if (pre == 0)
 	    vim_snprintf((char *)buf2, NUMBUFLEN, "%llu",
-							(long long unsigned)n);
+							(long_long_u_T)n);
 	else if (pre == '0')
 	    vim_snprintf((char *)buf2, NUMBUFLEN, "%llo",
-							(long long unsigned)n);
+							(long_long_u_T)n);
 	else if (pre && hexupper)
 	    vim_snprintf((char *)buf2, NUMBUFLEN, "%llX",
-							(long long unsigned)n);
+							(long_long_u_T)n);
 	else
 	    vim_snprintf((char *)buf2, NUMBUFLEN, "%llx",
-							(long long unsigned)n);
+							(long_long_u_T)n);
 	length -= (int)STRLEN(buf2);
 
 	/*
@@ -7401,7 +7401,7 @@ cursor_pos_info(dict_T *dict)
     {
 	if (dict == NULL)
 	{
-	    MSG(_(no_lines_msg));
+	    msg(_(no_lines_msg));
 	    return;
 	}
     }
@@ -7558,21 +7558,21 @@ cursor_pos_info(dict_T *dict)
 			    _("Selected %s%ld of %ld Lines; %lld of %lld Words; %lld of %lld Bytes"),
 			    buf1, line_count_selected,
 			    (long)curbuf->b_ml.ml_line_count,
-			    (long long)word_count_cursor,
-			    (long long)word_count,
-			    (long long)byte_count_cursor,
-			    (long long)byte_count);
+			    (long_long_T)word_count_cursor,
+			    (long_long_T)word_count,
+			    (long_long_T)byte_count_cursor,
+			    (long_long_T)byte_count);
 		else
 		    vim_snprintf((char *)IObuff, IOSIZE,
 			    _("Selected %s%ld of %ld Lines; %lld of %lld Words; %lld of %lld Chars; %lld of %lld Bytes"),
 			    buf1, line_count_selected,
 			    (long)curbuf->b_ml.ml_line_count,
-			    (long long)word_count_cursor,
-			    (long long)word_count,
-			    (long long)char_count_cursor,
-			    (long long)char_count,
-			    (long long)byte_count_cursor,
-			    (long long)byte_count);
+			    (long_long_T)word_count_cursor,
+			    (long_long_T)word_count,
+			    (long_long_T)char_count_cursor,
+			    (long_long_T)char_count,
+			    (long_long_T)byte_count_cursor,
+			    (long_long_T)byte_count);
 	    }
 	    else
 	    {
@@ -7590,17 +7590,17 @@ cursor_pos_info(dict_T *dict)
 			(char *)buf1, (char *)buf2,
 			(long)curwin->w_cursor.lnum,
 			(long)curbuf->b_ml.ml_line_count,
-			(long long)word_count_cursor, (long long)word_count,
-			(long long)byte_count_cursor, (long long)byte_count);
+			(long_long_T)word_count_cursor, (long_long_T)word_count,
+			(long_long_T)byte_count_cursor, (long_long_T)byte_count);
 		else
 		    vim_snprintf((char *)IObuff, IOSIZE,
 			_("Col %s of %s; Line %ld of %ld; Word %lld of %lld; Char %lld of %lld; Byte %lld of %lld"),
 			(char *)buf1, (char *)buf2,
 			(long)curwin->w_cursor.lnum,
 			(long)curbuf->b_ml.ml_line_count,
-			(long long)word_count_cursor, (long long)word_count,
-			(long long)char_count_cursor, (long long)char_count,
-			(long long)byte_count_cursor, (long long)byte_count);
+			(long_long_T)word_count_cursor, (long_long_T)word_count,
+			(long_long_T)char_count_cursor, (long_long_T)char_count,
+			(long_long_T)byte_count_cursor, (long_long_T)byte_count);
 	    }
 	}
 
@@ -7608,14 +7608,14 @@ cursor_pos_info(dict_T *dict)
 	bom_count = bomb_size();
 	if (bom_count > 0)
 	    vim_snprintf((char *)IObuff + STRLEN(IObuff), IOSIZE,
-				   _("(+%lld for BOM)"), (long long)bom_count);
+				   _("(+%lld for BOM)"), (long_long_T)bom_count);
 #endif
 	if (dict == NULL)
 	{
 	    /* Don't shorten this message, the user asked for it. */
 	    p = p_shm;
 	    p_shm = (char_u *)"";
-	    msg(IObuff);
+	    msg((char *)IObuff);
 	    p_shm = p;
 	}
     }

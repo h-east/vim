@@ -22,15 +22,19 @@
 #include <X11/cursorfont.h>
 
 /*
- * For Workshop XpmP.h is preferred, because it makes the signs drawn with a
- * transparent background instead of black.
+ * XpmP.h is preferred, because it makes the signs drawn with a transparent
+ * background instead of black.
  */
 #if defined(HAVE_XM_XPMP_H) && defined(FEAT_GUI_MOTIF) \
-	&& (!defined(HAVE_X11_XPM_H) || defined(FEAT_SUN_WORKSHOP))
+	&& !defined(HAVE_X11_XPM_H)
 # include <Xm/XpmP.h>
 #else
 # ifdef HAVE_X11_XPM_H
-#  include <X11/xpm.h>
+#  ifdef VMS
+#   include <xpm.h>
+#  else
+#   include <X11/xpm.h>
+#  endif
 # endif
 #endif
 
@@ -469,7 +473,7 @@ static XtResource vim_resources[] =
 	XtRString,
 	DFLT_TOOLTIP_FONT
     },
-    /* This one isn't really needed, keep for Sun Workshop? */
+    /* This one may not be really needed? */
     {
 	"balloonEvalFontSet",
 	XtCFontSet,
@@ -636,8 +640,7 @@ gui_x11_expose_cb(
     gui_mch_update();
 }
 
-#if ((defined(FEAT_NETBEANS_INTG) || defined(FEAT_SUN_WORKSHOP)) \
-	&& defined(FEAT_GUI_MOTIF)) || defined(PROTO)
+#if (defined(FEAT_NETBEANS_INTG) && defined(FEAT_GUI_MOTIF)) || defined(PROTO)
 /*
  * This function fills in the XRectangle object with the current x,y
  * coordinates and height, width so that an XtVaSetValues to the same shell of
@@ -701,15 +704,6 @@ gui_x11_resize_window_cb(
 #endif
 		     );
     }
-#ifdef FEAT_SUN_WORKSHOP
-    if (usingSunWorkShop)
-    {
-	XRectangle  rec;
-
-	shellRectangle(w, &rec);
-	workshop_frame_moved(rec.x, rec.y, rec.width, rec.height);
-    }
-#endif
 #if defined(FEAT_NETBEANS_INTG) && defined(FEAT_GUI_MOTIF)
     if (netbeans_active())
     {
@@ -1224,22 +1218,6 @@ gui_mch_prepare(int *argc, char **argv)
 	    argv[*argc] = NULL;
 	}
 	else
-#ifdef FEAT_SUN_WORKSHOP
-	    if (strcmp("-ws", argv[arg]) == 0)
-	{
-	    usingSunWorkShop++;
-	    p_acd = TRUE;
-	    gui.dofork = FALSE;	/* don't fork() when starting GUI */
-	    mch_memmove(&argv[arg], &argv[arg + 1],
-					    (--*argc - arg) * sizeof(char *));
-	    argv[*argc] = NULL;
-# ifdef WSDEBUG
-	    wsdebug_wait(WT_ENV | WT_WAIT | WT_STOP, "SPRO_GVIM_WAIT", 20);
-	    wsdebug_log_init("SPRO_GVIM_DEBUG", "SPRO_GVIM_DLEVEL");
-# endif
-	}
-	else
-#endif
 #ifdef FEAT_NETBEANS_INTG
 	    if (strncmp("-nb", argv[arg], 3) == 0)
 	{
@@ -1543,11 +1521,6 @@ gui_mch_init(void)
     if (gui.color_approx)
 	emsg(_("Vim E458: Cannot allocate colormap entry, some colors may be incorrect"));
 
-#ifdef FEAT_SUN_WORKSHOP
-    if (usingSunWorkShop)
-	workshop_connect(app_context);
-#endif
-
 #ifdef FEAT_BEVAL_GUI
     gui_init_tooltip_font();
 #endif
@@ -1680,9 +1653,6 @@ gui_mch_open(void)
 #endif
 #ifdef FEAT_XIM
     xim_init();
-#endif
-#ifdef FEAT_SUN_WORKSHOP
-    workshop_postinit();
 #endif
 
     return OK;
@@ -2209,10 +2179,11 @@ check_fontset_sanity(XFontSet fs)
 	{
 	    semsg(_("E253: Fontset name: %s"), base_name);
 	    semsg(_("Font0: %s"), font_name[min_font_idx]);
-	    semsg(_("Font1: %s"), font_name[i]);
-	    semsg(_("Font%ld width is not twice that of font0"), i);
-	    semsg(_("Font0 width: %ld"), xfs[min_font_idx]->max_bounds.width);
-	    semsg(_("Font1 width: %ld"), xfs[i]->max_bounds.width);
+	    semsg(_("Font%d: %s"), i, font_name[i]);
+	    semsg(_("Font%d width is not twice that of font0"), i);
+	    semsg(_("Font0 width: %d"),
+				     (int)xfs[min_font_idx]->max_bounds.width);
+	    semsg(_("Font%d width: %d"), i, (int)xfs[i]->max_bounds.width);
 	    return FAIL;
 	}
     }
@@ -2747,12 +2718,7 @@ gui_mch_wait_for_chars(long wtime)
 #endif
 
     focus = gui.in_focus;
-#ifdef ALT_X_INPUT
-    if (suppress_alternate_input)
-	desired = (XtIMXEvent | XtIMTimer);
-    else
-#endif
-	desired = (XtIMAll);
+    desired = (XtIMAll);
     while (!timed_out)
     {
 	/* Stop or start blinking when focus changes */

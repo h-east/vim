@@ -109,19 +109,31 @@ int
 #  ifdef __BORLANDC__
 _RTLENTRYF
 #  endif
-smsg(const char *, ...);
+smsg(const char *, ...)
+#ifdef USE_PRINTF_FORMAT_ATTRIBUTE
+    __attribute__((format(printf, 1, 0)))
+#endif
+    ;
 
 int
 #  ifdef __BORLANDC__
 _RTLENTRYF
 #  endif
-smsg_attr(int, const char *, ...);
+smsg_attr(int, const char *, ...)
+#ifdef USE_PRINTF_FORMAT_ATTRIBUTE
+    __attribute__((format(printf, 2, 3)))
+#endif
+    ;
 
 int
 #  ifdef __BORLANDC__
 _RTLENTRYF
 #  endif
-smsg_attr_keep(int, const char *, ...);
+smsg_attr_keep(int, const char *, ...)
+#ifdef USE_PRINTF_FORMAT_ATTRIBUTE
+    __attribute__((format(printf, 2, 3)))
+#endif
+    ;
 
 int
 #  ifdef __BORLANDC__
@@ -283,9 +295,6 @@ extern char *vim_SelFile(Widget toplevel, char *prompt, char *init_path, int (*s
 #  endif
 #  ifdef FEAT_GUI_PHOTON
 #   include "gui_photon.pro"
-#  endif
-#  ifdef FEAT_SUN_WORKSHOP
-#   include "workshop.pro"
 #  endif
 # endif	/* FEAT_GUI */
 

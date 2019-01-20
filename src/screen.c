@@ -183,7 +183,7 @@ static int screen_char_attr = 0;
 /*
  * Redraw the current window later, with update_screen(type).
  * Set must_redraw only if not already set to a higher value.
- * e.g. if must_redraw is CLEAR, type NOT_VALID will do nothing.
+ * E.g. if must_redraw is CLEAR, type NOT_VALID will do nothing.
  */
     void
 redraw_later(int type)
@@ -3054,6 +3054,7 @@ win_line(
     char_u	*p_extra = NULL;	/* string of extra chars, plus NUL */
     char_u	*p_extra_free = NULL;   /* p_extra needs to be freed */
     int		c_extra = NUL;		/* extra chars, all the same */
+    int		c_final = NUL;		/* final char, mandatory if set */
     int		extra_attr = 0;		/* attributes when n_extra != 0 */
     static char_u *at_end_str = (char_u *)""; /* used for p_extra when
 					   displaying lcs_eol at end-of-line */
@@ -3064,6 +3065,7 @@ win_line(
     int		saved_n_extra = 0;
     char_u	*saved_p_extra = NULL;
     int		saved_c_extra = 0;
+    int		saved_c_final = 0;
     int		saved_char_attr = 0;
 
     int		n_attr = 0;		/* chars with special attr */
@@ -3819,6 +3821,7 @@ win_line(
 		    /* Draw the cmdline character. */
 		    n_extra = 1;
 		    c_extra = cmdwin_type;
+		    c_final = NUL;
 		    char_attr = HL_ATTR(HLF_AT);
 		}
 	    }
@@ -3844,6 +3847,7 @@ win_line(
 			p_extra_free[n_extra] = NUL;
 			p_extra = p_extra_free;
 			c_extra = NUL;
+			c_final = NUL;
 			char_attr = HL_ATTR(HLF_FC);
 		    }
 		}
@@ -3865,6 +3869,7 @@ win_line(
 
 		    /* Draw two cells with the sign value or blank. */
 		    c_extra = ' ';
+		    c_final = NUL;
 		    char_attr = HL_ATTR(HLF_SC);
 		    n_extra = 2;
 
@@ -3883,9 +3888,13 @@ win_line(
 			{
 			    /* Use the image in this position. */
 			    c_extra = SIGN_BYTE;
+			    c_final = NUL;
 #  ifdef FEAT_NETBEANS_INTG
 			    if (buf_signcount(wp->w_buffer, lnum) > 1)
+			    {
 				c_extra = MULTISIGN_BYTE;
+				c_final = NUL;
+			    }
 #  endif
 			    char_attr = icon_sign;
 			}
@@ -3897,6 +3906,7 @@ win_line(
 			    if (p_extra != NULL)
 			    {
 				c_extra = NUL;
+				c_final = NUL;
 				n_extra = (int)STRLEN(p_extra);
 			    }
 			    char_attr = sign_get_attr(text_sign, FALSE);
@@ -3954,9 +3964,13 @@ win_line(
 #endif
 			p_extra = extra;
 			c_extra = NUL;
+			c_final = NUL;
 		    }
 		    else
+		    {
 			c_extra = ' ';
+			c_final = NUL;
+		    }
 		    n_extra = number_width(wp) + 1;
 		    char_attr = HL_ATTR(HLF_N);
 #ifdef FEAT_SYN_HL
@@ -4025,9 +4039,15 @@ win_line(
 		{
 		    /* Draw "deleted" diff line(s). */
 		    if (char2cells(fill_diff) > 1)
+		    {
 			c_extra = '-';
+			c_final = NUL;
+		    }
 		    else
+		    {
 			c_extra = fill_diff;
+			c_final = NUL;
+		    }
 #  ifdef FEAT_RIGHTLEFT
 		    if (wp->w_p_rl)
 			n_extra = col + 1;
@@ -4043,6 +4063,7 @@ win_line(
 		    /* Draw 'showbreak' at the start of each broken line. */
 		    p_extra = p_sbr;
 		    c_extra = NUL;
+		    c_final = NUL;
 		    n_extra = (int)STRLEN(p_sbr);
 		    char_attr = HL_ATTR(HLF_AT);
 		    need_showbreak = FALSE;
@@ -4070,6 +4091,7 @@ win_line(
 		    /* Continue item from end of wrapped line. */
 		    n_extra = saved_n_extra;
 		    c_extra = saved_c_extra;
+		    c_final = saved_c_final;
 		    p_extra = saved_p_extra;
 		    char_attr = saved_char_attr;
 		}
@@ -4369,15 +4391,16 @@ win_line(
 	 * The "p_extra" points to the extra stuff that is inserted to
 	 * represent special characters (non-printable stuff) and other
 	 * things.  When all characters are the same, c_extra is used.
+	 * If c_final is set, it will compulsorily be used at the end.
 	 * "p_extra" must end in a NUL to avoid mb_ptr2len() reads past
 	 * "p_extra[n_extra]".
 	 * For the '$' of the 'list' option, n_extra == 1, p_extra == "".
 	 */
 	if (n_extra > 0)
 	{
-	    if (c_extra != NUL)
+	    if (c_extra != NUL || (n_extra == 1 && c_final != NUL))
 	    {
-		c = c_extra;
+		c = (n_extra == 1 && c_final != NUL) ? c_final : c_extra;
 #ifdef FEAT_MBYTE
 		mb_c = c;	/* doesn't handle non-utf-8 multi-byte! */
 		if (enc_utf8 && utf_char2len(c) > 1)
@@ -4542,6 +4565,7 @@ win_line(
 			mb_utf8 = (c >= 0x80);
 			n_extra = (int)STRLEN(p_extra);
 			c_extra = NUL;
+			c_final = NUL;
 			if (area_attr == 0 && search_attr == 0)
 			{
 			    n_attr = n_extra + 1;
@@ -4610,6 +4634,7 @@ win_line(
 			    p_extra = extra;
 			    n_extra = (int)STRLEN(extra) - 1;
 			    c_extra = NUL;
+			    c_final = NUL;
 			    c = *p_extra++;
 			    if (area_attr == 0 && search_attr == 0)
 			    {
@@ -4650,6 +4675,7 @@ win_line(
 		{
 		    n_extra = 1;
 		    c_extra = MB_FILLER_CHAR;
+		    c_final = NUL;
 		    c = ' ';
 		    if (area_attr == 0 && search_attr == 0)
 		    {
@@ -4861,6 +4887,7 @@ win_line(
 # else
 		    c_extra = ' ';
 # endif
+		    c_final = NUL;
 		    if (VIM_ISWHITE(c))
 		    {
 #ifdef FEAT_CONCEAL
@@ -5045,13 +5072,14 @@ win_line(
 #endif
 		    if (wp->w_p_list)
 		    {
-			c = lcs_tab1;
+			c = (n_extra == 0 && lcs_tab3) ? lcs_tab3 : lcs_tab1;
 #ifdef FEAT_LINEBREAK
 			if (wp->w_p_lbr)
 			    c_extra = NUL; /* using p_extra from above */
 			else
 #endif
 			    c_extra = lcs_tab2;
+			c_final = lcs_tab3;
 			n_attr = tab_len + 1;
 			extra_attr = HL_ATTR(HLF_8);
 			saved_attr2 = char_attr; /* save current attr */
@@ -5067,6 +5095,7 @@ win_line(
 		    }
 		    else
 		    {
+			c_final = NUL;
 			c_extra = ' ';
 			c = ' ';
 		    }
@@ -5116,6 +5145,7 @@ win_line(
 			    p_extra = at_end_str;
 			    n_extra = 1;
 			    c_extra = NUL;
+			    c_final = NUL;
 			}
 		    }
 		    if (wp->w_p_list && lcs_eol > 0)
@@ -5151,6 +5181,7 @@ win_line(
 			rl_mirror(p_extra);	/* reverse "<12>" */
 #endif
 		    c_extra = NUL;
+		    c_final = NUL;
 #ifdef FEAT_LINEBREAK
 		    if (wp->w_p_lbr)
 		    {
@@ -5412,6 +5443,7 @@ win_line(
 		/* Double-width character being overwritten by the "precedes"
 		 * character, need to fill up half the character. */
 		c_extra = MB_FILLER_CHAR;
+		c_final = NUL;
 		n_extra = 1;
 		n_attr = 2;
 		extra_attr = HL_ATTR(HLF_AT);
@@ -6069,6 +6101,7 @@ win_line(
 	    saved_n_extra = n_extra;
 	    saved_p_extra = p_extra;
 	    saved_c_extra = c_extra;
+	    saved_c_final = c_final;
 	    saved_char_attr = char_attr;
 	    n_extra = 0;
 	    lcs_prec_todo = lcs_prec;
@@ -8452,6 +8485,10 @@ screen_char(unsigned off, int row, int col)
     if (row >= screen_Rows || col >= screen_Columns)
 	return;
 
+#ifdef FEAT_INS_EXPAND
+    if (pum_under_menu(row, col))
+	return;
+#endif
     /* Outputting a character in the last cell on the screen may scroll the
      * screen up.  Only do it when the "xn" termcap property is set, otherwise
      * mark the character invalid (update it when scrolled up). */
@@ -10416,7 +10453,7 @@ showmode(void)
 	attr = HL_ATTR(HLF_CM);			/* Highlight mode */
 	if (do_mode)
 	{
-	    MSG_PUTS_ATTR("--", attr);
+	    msg_puts_attr("--", attr);
 #if defined(FEAT_XIM)
 	    if (
 # ifdef FEAT_GUI_GTK
@@ -10426,9 +10463,9 @@ showmode(void)
 # endif
 	       )
 # ifdef FEAT_GUI_GTK /* most of the time, it's not XIM being used */
-		MSG_PUTS_ATTR(" IM", attr);
+		msg_puts_attr(" IM", attr);
 # else
-		MSG_PUTS_ATTR(" XIM", attr);
+		msg_puts_attr(" XIM", attr);
 # endif
 #endif
 #if defined(FEAT_HANGULIN) && defined(FEAT_GUI)
@@ -10438,9 +10475,9 @@ showmode(void)
 		{
 		    /* HANGUL */
 		    if (enc_utf8)
-			MSG_PUTS_ATTR(" \355\225\234\352\270\200", attr);
+			msg_puts_attr(" \355\225\234\352\270\200", attr);
 		    else
-			MSG_PUTS_ATTR(" \307\321\261\333", attr);
+			msg_puts_attr(" \307\321\261\333", attr);
 		}
 	    }
 #endif
@@ -10460,17 +10497,17 @@ showmode(void)
 		    if (length - vim_strsize(edit_submode) > 0)
 		    {
 			if (edit_submode_pre != NULL)
-			    msg_puts_attr(edit_submode_pre, attr);
-			msg_puts_attr(edit_submode, attr);
+			    msg_puts_attr((char *)edit_submode_pre, attr);
+			msg_puts_attr((char *)edit_submode, attr);
 		    }
 		    if (edit_submode_extra != NULL)
 		    {
-			MSG_PUTS_ATTR(" ", attr);  /* add a space in between */
+			msg_puts_attr(" ", attr);  /* add a space in between */
 			if ((int)edit_submode_highl < (int)HLF_COUNT)
 			    sub_attr = HL_ATTR(edit_submode_highl);
 			else
 			    sub_attr = attr;
-			msg_puts_attr(edit_submode_extra, sub_attr);
+			msg_puts_attr((char *)edit_submode_extra, sub_attr);
 		    }
 		}
 	    }
@@ -10478,29 +10515,29 @@ showmode(void)
 #endif
 	    {
 		if (State & VREPLACE_FLAG)
-		    MSG_PUTS_ATTR(_(" VREPLACE"), attr);
+		    msg_puts_attr(_(" VREPLACE"), attr);
 		else if (State & REPLACE_FLAG)
-		    MSG_PUTS_ATTR(_(" REPLACE"), attr);
+		    msg_puts_attr(_(" REPLACE"), attr);
 		else if (State & INSERT)
 		{
 #ifdef FEAT_RIGHTLEFT
 		    if (p_ri)
-			MSG_PUTS_ATTR(_(" REVERSE"), attr);
+			msg_puts_attr(_(" REVERSE"), attr);
 #endif
-		    MSG_PUTS_ATTR(_(" INSERT"), attr);
+		    msg_puts_attr(_(" INSERT"), attr);
 		}
 		else if (restart_edit == 'I' || restart_edit == 'A')
-		    MSG_PUTS_ATTR(_(" (insert)"), attr);
+		    msg_puts_attr(_(" (insert)"), attr);
 		else if (restart_edit == 'R')
-		    MSG_PUTS_ATTR(_(" (replace)"), attr);
+		    msg_puts_attr(_(" (replace)"), attr);
 		else if (restart_edit == 'V')
-		    MSG_PUTS_ATTR(_(" (vreplace)"), attr);
+		    msg_puts_attr(_(" (vreplace)"), attr);
 #ifdef FEAT_RIGHTLEFT
 		if (p_hkmap)
-		    MSG_PUTS_ATTR(_(" Hebrew"), attr);
+		    msg_puts_attr(_(" Hebrew"), attr);
 # ifdef FEAT_FKMAP
 		if (p_fkmap)
-		    MSG_PUTS_ATTR(farsi_text_5, attr);
+		    msg_puts_attr(farsi_text_5, attr);
 # endif
 #endif
 #ifdef FEAT_KEYMAP
@@ -10508,16 +10545,16 @@ showmode(void)
 		{
 # ifdef FEAT_ARABIC
 		    if (curwin->w_p_arab)
-			MSG_PUTS_ATTR(_(" Arabic"), attr);
+			msg_puts_attr(_(" Arabic"), attr);
 		    else
 # endif
 			if (get_keymap_str(curwin, (char_u *)" (%s)",
 							   NameBuff, MAXPATHL))
-			    MSG_PUTS_ATTR(NameBuff, attr);
+			    msg_puts_attr((char *)NameBuff, attr);
 		}
 #endif
 		if ((State & INSERT) && p_paste)
-		    MSG_PUTS_ATTR(_(" (paste)"), attr);
+		    msg_puts_attr(_(" (paste)"), attr);
 
 		if (VIsual_active)
 		{
@@ -10536,9 +10573,9 @@ showmode(void)
 			case 5: p = N_(" SELECT LINE"); break;
 			default: p = N_(" SELECT BLOCK"); break;
 		    }
-		    MSG_PUTS_ATTR(_(p), attr);
+		    msg_puts_attr(_(p), attr);
 		}
-		MSG_PUTS_ATTR(" --", attr);
+		msg_puts_attr(" --", attr);
 	    }
 
 	    need_clear = TRUE;
@@ -10629,12 +10666,13 @@ clearmode(void)
     static void
 recording_mode(int attr)
 {
-    MSG_PUTS_ATTR(_("recording"), attr);
+    msg_puts_attr(_("recording"), attr);
     if (!shortmess(SHM_RECORDING))
     {
-	char_u s[4];
-	sprintf((char *)s, " @%c", reg_recording);
-	MSG_PUTS_ATTR(s, attr);
+	char s[4];
+
+	sprintf(s, " @%c", reg_recording);
+	msg_puts_attr(s, attr);
     }
 }
 

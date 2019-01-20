@@ -411,9 +411,6 @@ static void	ex_folddo(exarg_T *eap);
 #ifndef FEAT_SIGNS
 # define ex_sign		ex_ni
 #endif
-#ifndef FEAT_SUN_WORKSHOP
-# define ex_wsverb		ex_ni
-#endif
 #ifndef FEAT_NETBEANS_INTG
 # define ex_nbclose		ex_ni
 # define ex_nbkey		ex_ni
@@ -565,7 +562,7 @@ do_exmode(
     ++hold_gui_events;
 #endif
 
-    MSG(_("Entering Ex mode.  Type \"visual\" to go to Normal mode."));
+    msg(_("Entering Ex mode.  Type \"visual\" to go to Normal mode."));
     while (exmode_active)
     {
 	/* Check for a ":normal" command and no more characters left. */
@@ -1022,7 +1019,7 @@ do_cmdline(
 	    smsg(_("line %ld: %s"),
 					   (long)sourcing_lnum, cmdline_copy);
 	    if (msg_silent == 0)
-		msg_puts((char_u *)"\n");   /* don't overwrite this */
+		msg_puts("\n");   /* don't overwrite this */
 
 	    verbose_leave_scroll();
 	    --no_wait_return;
@@ -1347,7 +1344,7 @@ do_cmdline(
 	    }
 	    else if (p != NULL)
 	    {
-		semsg(p);
+		emsg(p);
 		vim_free(p);
 	    }
 	    vim_free(sourcing_name);
@@ -2290,7 +2287,7 @@ do_one_cmd(
 	/* check these explicitly for a more specific error message */
 	if (*ea.arg == '*' || *ea.arg == '+')
 	{
-	    errormsg = (char_u *)_(e_invalidreg);
+	    errormsg = _(e_invalidreg);
 	    goto doend;
 	}
 #endif
@@ -5788,8 +5785,8 @@ check_more(
 		return FAIL;
 	    }
 #endif
-	    semsg(NGETTEXT("E173: %ld more file to edit",
-			"E173: %ld more files to edit", n), n);
+	    semsg(NGETTEXT("E173: %d more file to edit",
+			"E173: %d more files to edit", n), n);
 	    quitmore = 2;	    /* next try to quit is allowed */
 	}
 	return FAIL;
@@ -6046,7 +6043,7 @@ uc_list(char_u *name, size_t name_len)
 
 	    /* Put out the title first time */
 	    if (!found)
-		MSG_PUTS_TITLE(_("\n    Name        Args       Address   Complete  Definition"));
+		msg_puts_title(_("\n    Name        Args       Address   Complete  Definition"));
 	    found = TRUE;
 	    msg_putchar('\n');
 	    if (got_int)
@@ -6153,7 +6150,7 @@ uc_list(char_u *name, size_t name_len)
     }
 
     if (!found)
-	MSG(_("No user-defined commands found"));
+	msg(_("No user-defined commands found"));
 }
 
     static char *
@@ -6958,7 +6955,7 @@ do_ucmd(exarg_T *eap)
 		}
 	    }
 
-	    /* break if there no <item> is found */
+	    /* break if no <item> is found */
 	    if (start == NULL || end == NULL)
 		break;
 
@@ -7242,13 +7239,13 @@ ex_colorscheme(exarg_T *eap)
 	}
 	if (p != NULL)
 	{
-	    MSG(p);
+	    msg((char *)p);
 	    vim_free(p);
 	}
 	else
-	    MSG("default");
+	    msg("default");
 #else
-	MSG(_("unknown"));
+	msg(_("unknown"));
 #endif
     }
     else if (load_colors(eap->arg) == FAIL)
@@ -7259,7 +7256,7 @@ ex_colorscheme(exarg_T *eap)
 ex_highlight(exarg_T *eap)
 {
     if (*eap->arg == NUL && eap->cmd[2] == '!')
-	MSG(_("Greetings, Vim user!"));
+	msg(_("Greetings, Vim user!"));
     do_highlight(eap->arg, eap->forceit, FALSE);
 }
 
@@ -7675,7 +7672,7 @@ ex_tabonly(exarg_T *eap)
     else
 # endif
 	if (first_tabpage->tp_next == NULL)
-	    MSG(_("Already only one tab page"));
+	    msg(_("Already only one tab page"));
 	else
 	{
 	    tab_number = get_tabpage_arg(eap);
@@ -8022,7 +8019,7 @@ handle_drop_internal(void)
 /*
  * Handle a file drop. The code is here because a drop is *nearly* like an
  * :args command, but not quite (we have a list of exact filenames, so we
- * don't want to (a) parse a command line, or (b) expand wildcards. So the
+ * don't want to (a) parse a command line, or (b) expand wildcards). So the
  * code is very similar to :args and hence needs access to a lot of the static
  * functions in this file.
  *
@@ -8924,9 +8921,9 @@ ex_popup(exarg_T *eap)
 ex_swapname(exarg_T *eap UNUSED)
 {
     if (curbuf->b_ml.ml_mfp == NULL || curbuf->b_ml.ml_mfp->mf_fname == NULL)
-	MSG(_("No swap file"));
+	msg(_("No swap file"));
     else
-	msg(curbuf->b_ml.ml_mfp->mf_fname);
+	msg((char *)curbuf->b_ml.ml_mfp->mf_fname);
 }
 
 /*
@@ -9224,7 +9221,7 @@ ex_pwd(exarg_T *eap UNUSED)
 #ifdef BACKSLASH_IN_FILENAME
 	slash_adjust(NameBuff);
 #endif
-	msg(NameBuff);
+	msg((char *)NameBuff);
     }
     else
 	emsg(_("E187: Unknown"));
@@ -9405,7 +9402,7 @@ ex_winpos(exarg_T *eap)
 #  endif
 	{
 	    sprintf((char *)IObuff, _("Window position: X %d, Y %d"), x, y);
-	    msg(IObuff);
+	    msg((char *)IObuff);
 	}
 	else
 # endif
@@ -10942,7 +10939,7 @@ eval_vars(
 			return NULL;
 		    }
 #else
-		    *errormsg = (char_u *)_("E809: #< is not available without the +eval feature");
+		    *errormsg = _("E809: #< is not available without the +eval feature");
 		    return NULL;
 #endif
 		}

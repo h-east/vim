@@ -1003,7 +1003,7 @@ EXTERN char_u	*IObuff;		/* sprintf's are done in this buffer,
 					   size is IOSIZE */
 EXTERN char_u	*NameBuff;		/* file names are expanded in this
 					 * buffer, size is MAXPATHL */
-EXTERN char_u	msg_buf[MSG_BUF_LEN];	/* small buffer for messages */
+EXTERN char	msg_buf[MSG_BUF_LEN];	/* small buffer for messages */
 
 /* When non-zero, postpone redrawing. */
 EXTERN int	RedrawingDisabled INIT(= 0);
@@ -1177,6 +1177,7 @@ EXTERN int	lcs_nbsp INIT(= NUL);
 EXTERN int	lcs_space INIT(= NUL);
 EXTERN int	lcs_tab1 INIT(= NUL);
 EXTERN int	lcs_tab2 INIT(= NUL);
+EXTERN int	lcs_tab3 INIT(= NUL);
 EXTERN int	lcs_trail INIT(= NUL);
 #ifdef FEAT_CONCEAL
 EXTERN int	lcs_conceal INIT(= ' ');
@@ -1231,10 +1232,9 @@ EXTERN int	no_hlsearch INIT(= FALSE);
 #if defined(FEAT_BEVAL) && !defined(NO_X11_INCLUDES)
 EXTERN BalloonEval	*balloonEval INIT(= NULL);
 EXTERN int		balloonEvalForTerm INIT(= FALSE);
-# if defined(FEAT_NETBEANS_INTG) || defined(FEAT_SUN_WORKSHOP)
+# if defined(FEAT_NETBEANS_INTG)
 EXTERN int bevalServers INIT(= 0);
 #  define BEVAL_NETBEANS		0x01
-#  define BEVAL_WORKSHOP		0x02
 # endif
 #endif
 
@@ -1374,14 +1374,6 @@ EXTERN linenr_T		spell_redraw_lnum INIT(= 0);
 #ifdef FEAT_CONCEAL
 /* Set when the cursor line needs to be redrawn. */
 EXTERN int		need_cursor_line_redraw INIT(= FALSE);
-#endif
-
-#ifdef ALT_X_INPUT
-/* we need to be able to go into the dispatch loop while processing a command
- * received via alternate input. However, we don't want to process another
- * command until the first is completed.
- */
-EXTERN int	suppress_alternate_input INIT(= FALSE);
 #endif
 
 #ifdef USE_MCH_ERRMSG

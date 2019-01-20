@@ -80,11 +80,23 @@ fd_read(sock_T fd, char *buf, size_t len)
     static int
 fd_write(sock_T fd, char *buf, size_t len)
 {
-    HANDLE h = (HANDLE)fd;
-    DWORD nwrite;
+    HANDLE	h = (HANDLE)fd;
+    DWORD	nwrite;
+    OVERLAPPED	ov;
 
-    if (!WriteFile(h, buf, (DWORD)len, &nwrite, NULL))
-	return -1;
+    // If the pipe overflows while the job does not read the data, WriteFile
+    // will block forever. This abandons the write.
+    memset(&ov, 0, sizeof(ov));
+    if (!WriteFile(h, buf, (DWORD)len, &nwrite, &ov))
+    {
+	DWORD err = GetLastError();
+
+	if (err != ERROR_IO_PENDING)
+	    return -1;
+	if (!GetOverlappedResult(h, &ov, &nwrite, FALSE))
+	    return -1;
+	FlushFileBuffers(h);
+    }
     return (int)nwrite;
 }
 
@@ -3168,20 +3180,7 @@ channel_wait(channel_T *channel, sock_T fd, int timeout)
 	    if (r && nread > 0)
 		return CW_READY;
 	    if (r == 0)
-	    {
-		DWORD err = GetLastError();
-
-		if (err != ERROR_BAD_PIPE && err != ERROR_BROKEN_PIPE)
-		    return CW_ERROR;
-
-		if (channel->ch_named_pipe)
-		{
-		    DisconnectNamedPipe((HANDLE)fd);
-		    ConnectNamedPipe((HANDLE)fd, NULL);
-		}
-		else
-		    return CW_ERROR;
-	    }
+		return CW_ERROR;
 
 	    /* perhaps write some buffer lines */
 	    channel_write_any_lines();
@@ -3812,17 +3811,7 @@ channel_send(
 	if (part == PART_SOCK)
 	    res = sock_write(fd, (char *)buf, len);
 	else
-	{
 	    res = fd_write(fd, (char *)buf, len);
-#ifdef WIN32
-	    if (channel->ch_named_pipe && res < 0)
-	    {
-		DisconnectNamedPipe((HANDLE)fd);
-		ConnectNamedPipe((HANDLE)fd, NULL);
-	    }
-#endif
-
-	}
 	if (res < 0 && (errno == EWOULDBLOCK
 #ifdef EAGAIN
 			|| errno == EAGAIN
@@ -4064,7 +4053,7 @@ ch_raw_common(typval_T *argvars, typval_T *rettv, int eval)
     else
     {
 	text = tv_get_string_buf(&argvars[1], buf);
-	len = STRLEN(text);
+	len = (int)STRLEN(text);
     }
     channel = send_common(argvars, text, len, 0, eval, &opt,
 			      eval ? "ch_evalraw" : "ch_sendraw", &part_read);
@@ -4290,7 +4279,7 @@ channel_parse_messages(void)
     int		r;
     ch_part_T	part = PART_SOCK;
 #ifdef ELAPSED_FUNC
-    ELAPSED_TYPE  start_tv;
+    elapsed_T	start_tv;
 
     ELAPSED_INIT(start_tv);
 #endif

@@ -4428,10 +4428,15 @@ f_get(typval_T *argvars, typval_T *rettv)
 	if (!error)
 	{
 	    rettv->v_type = VAR_NUMBER;
-	    if (idx >= blob_len(argvars[0].vval.v_blob))
-		semsg(_(e_blobidx), idx);
+	    if (idx < 0)
+		idx = blob_len(argvars[0].vval.v_blob) + idx;
+	    if (idx < 0 || idx >= blob_len(argvars[0].vval.v_blob))
+		rettv->vval.v_number = -1;
 	    else
+	    {
 		rettv->vval.v_number = blob_get(argvars[0].vval.v_blob, idx);
+		tv = rettv;
+	    }
 	}
     }
     else if (argvars[0].v_type == VAR_LIST)
@@ -6530,9 +6535,6 @@ f_has(typval_T *argvars, typval_T *rettv)
 #ifdef FEAT_STL_OPT
 	"statusline",
 #endif
-#ifdef FEAT_SUN_WORKSHOP
-	"sun_workshop",
-#endif
 #ifdef FEAT_NETBEANS_INTG
 	"netbeans_intg",
 #endif
@@ -7190,7 +7192,7 @@ f_inputlist(typval_T *argvars, typval_T *rettv)
 
     for (li = argvars[0].vval.v_list->lv_first; li != NULL; li = li->li_next)
     {
-	msg_puts(tv_get_string(&li->li_tv));
+	msg_puts((char *)tv_get_string(&li->li_tv));
 	msg_putchar('\n');
     }
 
@@ -7219,7 +7221,7 @@ f_inputrestore(typval_T *argvars UNUSED, typval_T *rettv)
     }
     else if (p_verbose > 1)
     {
-	verb_msg((char_u *)_("called inputrestore() more often than inputsave()"));
+	verb_msg(_("called inputrestore() more often than inputsave()"));
 	rettv->vval.v_number = 1; /* Failed */
     }
 }
@@ -8279,7 +8281,7 @@ f_matchadd(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
 	return;
     if (id >= 1 && id <= 3)
     {
-	semsg(_("E798: ID is reserved for \":match\": %ld"), id);
+	semsg(_("E798: ID is reserved for \":match\": %d"), id);
 	return;
     }
 
@@ -8337,7 +8339,7 @@ f_matchaddpos(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
     /* id == 3 is ok because matchaddpos() is supposed to substitute :3match */
     if (id == 1 || id == 2)
     {
-	semsg(_("E798: ID is reserved for \":match\": %ld"), id);
+	semsg(_("E798: ID is reserved for \":match\": %d"), id);
 	return;
     }
 

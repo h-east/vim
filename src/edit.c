@@ -2387,8 +2387,8 @@ has_compl_option(int dict_opt)
     {
 	ctrl_x_mode = CTRL_X_NORMAL;
 	edit_submode = NULL;
-	msg_attr(dict_opt ? (char_u *)_("'dictionary' option is empty")
-			  : (char_u *)_("'thesaurus' option is empty"),
+	msg_attr(dict_opt ? _("'dictionary' option is empty")
+			  : _("'thesaurus' option is empty"),
 							      HL_ATTR(HLF_E));
 	if (emsg_silent == 0)
 	{
@@ -3020,7 +3020,8 @@ ins_compl_upd_pum(void)
     if (compl_match_array != NULL)
     {
 	h = curwin->w_cline_height;
-	update_screen(0);
+	// Update the screen later, before drawing the popup menu over it.
+	pum_call_update_screen();
 	if (h != curwin->w_cline_height)
 	    ins_compl_del_pum();
     }
@@ -3110,8 +3111,8 @@ ins_compl_show_pum(void)
     do_cmdline_cmd((char_u *)"if exists('g:loaded_matchparen')|3match none|endif");
 #endif
 
-    /* Update the screen before drawing the popup menu over it. */
-    update_screen(0);
+    // Update the screen later, before drawing the popup menu over it.
+    pum_call_update_screen();
 
     if (compl_match_array == NULL)
     {
@@ -3384,7 +3385,7 @@ ins_compl_files(
 	{
 	    vim_snprintf((char *)IObuff, IOSIZE,
 			      _("Scanning dictionary: %s"), (char *)files[i]);
-	    (void)msg_trunc_attr(IObuff, TRUE, HL_ATTR(HLF_R));
+	    (void)msg_trunc_attr((char *)IObuff, TRUE, HL_ATTR(HLF_R));
 	}
 
 	if (fp != NULL)
@@ -3668,11 +3669,11 @@ ins_compl_new_leader(void)
 	spell_bad_len = 0;	/* need to redetect bad word */
 #endif
 	/*
-	 * Matches were cleared, need to search for them now.  First display
-	 * the changed text before the cursor.  Set "compl_restarting" to
-	 * avoid that the first match is inserted.
+	 * Matches were cleared, need to search for them now.  Befor drawing
+	 * the popup menu display the changed text before the cursor.  Set
+	 * "compl_restarting" to avoid that the first match is inserted.
 	 */
-	update_screen(0);
+	pum_call_update_screen();
 #ifdef FEAT_GUI
 	if (gui.in_use)
 	{
@@ -4499,7 +4500,7 @@ ins_compl_get_exp(pos_T *ini)
 			    : ins_buf->b_sfname == NULL
 				? ins_buf->b_fname
 				: ins_buf->b_sfname);
-		(void)msg_trunc_attr(IObuff, TRUE, HL_ATTR(HLF_R));
+		(void)msg_trunc_attr((char *)IObuff, TRUE, HL_ATTR(HLF_R));
 	    }
 	    else if (*e_cpt == NUL)
 		break;
@@ -4529,7 +4530,7 @@ ins_compl_get_exp(pos_T *ini)
 		{
 		    type = CTRL_X_TAGS;
 		    vim_snprintf((char *)IObuff, IOSIZE, _("Scanning tags."));
-		    (void)msg_trunc_attr(IObuff, TRUE, HL_ATTR(HLF_R));
+		    (void)msg_trunc_attr((char *)IObuff, TRUE, HL_ATTR(HLF_R));
 		}
 		else
 		    type = -1;
@@ -5077,8 +5078,9 @@ ins_compl_next(
 	/* may undisplay the popup menu first */
 	ins_compl_upd_pum();
 
-	/* redraw to show the user what was inserted */
-	update_screen(0);
+	// Redraw before showing the popup menu to show the user what was
+	// inserted.
+	pum_call_update_screen();
 
 	/* display the updated popup menu */
 	ins_compl_show_pum();
@@ -5130,7 +5132,7 @@ ins_compl_next(
 	    }
 	    vim_snprintf((char *)IObuff, IOSIZE, "%s %s%s", lead,
 				s > compl_shown_match->cp_fname ? "<" : "", s);
-	    msg(IObuff);
+	    msg((char *)IObuff);
 	    redraw_cmdline = FALSE;	    /* don't overwrite! */
 	}
     }
@@ -5876,7 +5878,7 @@ ins_complete(int c, int enable_pum)
 	    if (edit_submode_extra != NULL)
 	    {
 		if (!p_smd)
-		    msg_attr(edit_submode_extra,
+		    msg_attr((char *)edit_submode_extra,
 			    edit_submode_highl < HLF_COUNT
 			    ? HL_ATTR(edit_submode_highl) : 0);
 	    }
@@ -8854,7 +8856,7 @@ ins_esc(
     if (reg_recording != 0 || restart_edit != NUL)
 	showmode();
     else if (p_smd)
-	MSG("");
+	msg("");
 
     return TRUE;	    /* exit Insert mode */
 }

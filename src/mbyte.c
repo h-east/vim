@@ -560,7 +560,7 @@ mb_init(void)
 	else if (GetLastError() == ERROR_INVALID_PARAMETER)
 	{
 codepage_invalid:
-	    return (char_u *)N_("E543: Not a valid codepage");
+	    return N_("E543: Not a valid codepage");
 	}
     }
 #endif
@@ -3745,7 +3745,7 @@ show_utf8(void)
     len = utfc_ptr2len(line);
     if (len == 0)
     {
-	MSG("NUL");
+	msg("NUL");
 	return;
     }
 
@@ -3770,7 +3770,7 @@ show_utf8(void)
 	    break;
     }
 
-    msg(IObuff);
+    msg((char *)IObuff);
 }
 
 /*

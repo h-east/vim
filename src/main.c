@@ -628,10 +628,7 @@ vim_main2(void)
      */
     if (gui.in_use)
     {
-# ifdef FEAT_SUN_WORKSHOP
-	if (!usingSunWorkShop)
-# endif
-	    gui_wait_for_chars(50L, typebuf.tb_change_cnt);
+	gui_wait_for_chars(50L, typebuf.tb_change_cnt);
 	TIME_MSG("GUI delay");
     }
 #endif
@@ -983,9 +980,6 @@ common_init(mparm_T *paramp)
      */
     early_arg_scan(paramp);
 
-#ifdef FEAT_SUN_WORKSHOP
-    findYourself(paramp->argv[0]);
-#endif
 #if defined(FEAT_GUI)
     /* Prepare for possibly starting GUI sometime */
     gui_prepare(&paramp->argc, paramp->argv);
@@ -1170,6 +1164,10 @@ main_loop(
 	    // locked, this would be a good time to handle the drop.
 	    handle_any_postponed_drop();
 #endif
+#ifdef FEAT_CONCEAL
+	    if (curwin->w_p_cole == 0)
+		conceal_update_lines = FALSE;
+#endif
 
 	    /* Trigger CursorMoved if the cursor moved. */
 	    if (!finish_op && (
@@ -1201,6 +1199,7 @@ main_loop(
 			|| need_cursor_line_redraw))
 	    {
 		if (conceal_old_cursor_line != conceal_new_cursor_line
+			&& conceal_old_cursor_line != 0
 			&& conceal_old_cursor_line
 						<= curbuf->b_ml.ml_line_count)
 		    redrawWinline(curwin, conceal_old_cursor_line);
@@ -1289,7 +1288,7 @@ main_loop(
 		 * string here. Don't reset keep_msg, msg_attr_keep() uses it
 		 * to check for duplicates. */
 		p = keep_msg;
-		msg_attr(p, keep_msg_attr);
+		msg_attr((char *)p, keep_msg_attr);
 		vim_free(p);
 	    }
 	    if (need_fileinfo)		/* show file info after redraw */
