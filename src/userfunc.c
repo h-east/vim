@@ -651,6 +651,7 @@ cleanup_function_call(funccall_T *fc)
 	listitem_T	*li;
 	int		todo;
 	dictitem_T	*v;
+	static int	made_copy = 0;
 
 	/* "fc" is still in use.  This can happen when returning "a:000",
 	 * assigning "l:" to a global variable or defining a closure.
@@ -673,6 +674,16 @@ cleanup_function_call(funccall_T *fc)
 	/* Make a copy of the a:000 items, since we didn't do that above. */
 	for (li = fc->l_varlist.lv_first; li != NULL; li = li->li_next)
 	    copy_tv(&li->li_tv, &li->li_tv);
+
+	if (++made_copy == 10000)
+	{
+	    // We have made a lot of copies.  This can happen when
+	    // repetitively calling a function that creates a reference to
+	    // itself somehow.  Call the garbage collector here to avoid using
+	    // too much memory.
+	    made_copy = 0;
+	    (void)garbage_collect(FALSE);
+	}
     }
 }
 
@@ -723,6 +734,8 @@ call_user_func(
     line_breakcheck();		/* check for CTRL-C hit */
 
     fc = (funccall_T *)alloc(sizeof(funccall_T));
+    if (fc == NULL)
+	return;
     fc->caller = current_funccal;
     current_funccal = fc;
     fc->func = fp;
@@ -2560,6 +2573,7 @@ function_exists(char_u *name, int no_deref)
     return n;
 }
 
+#if defined(FEAT_PYTHON) || defined(FEAT_PYTHON3) || defined(PROTO)
     char_u *
 get_expanded_name(char_u *name, int check)
 {
@@ -2575,6 +2589,7 @@ get_expanded_name(char_u *name, int check)
     vim_free(p);
     return NULL;
 }
+#endif
 
 #if defined(FEAT_PROFILE) || defined(PROTO)
 /*

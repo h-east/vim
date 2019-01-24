@@ -980,7 +980,12 @@ sig_alarm SIGDEFARG(sigarg)
 }
 #endif
 
-#if defined(HAVE_SETJMP_H) || defined(PROTO)
+#if (defined(HAVE_SETJMP_H) \
+	&& ((defined(FEAT_X11) && defined(FEAT_XCLIPBOARD)) \
+	    || defined(FEAT_LIBCALL))) \
+    || defined(PROTO)
+# define USING_SETJMP 1
+
 // argument to SETJMP()
 static JMP_BUF lc_jump_env;
 
@@ -1016,22 +1021,22 @@ static volatile sig_atomic_t lc_active INIT(= FALSE);
  * Returns OK for normal return, FAIL when the protected code caused a
  * problem and LONGJMP() was used.
  */
-    void
+    static void
 mch_startjmp(void)
 {
-#ifdef SIGHASARG
+# ifdef SIGHASARG
     lc_signal = 0;
-#endif
+# endif
     lc_active = TRUE;
 }
 
-    void
+    static void
 mch_endjmp(void)
 {
     lc_active = FALSE;
 }
 
-    void
+    static void
 mch_didjmp(void)
 {
 # if defined(HAVE_SIGALTSTACK) || defined(HAVE_SIGSTACK)
@@ -1059,7 +1064,7 @@ deathtrap SIGDEFARG(sigarg)
     int		i;
 #endif
 
-#if defined(HAVE_SETJMP_H)
+#if defined(USING_SETJMP)
     /*
      * Catch a crash in protected code.
      * Restores the environment saved in lc_jump_env, which looks like
@@ -1704,7 +1709,7 @@ x_connect_to_server(void)
 }
 
 #if defined(FEAT_X11) && defined(FEAT_XCLIPBOARD)
-# if defined(HAVE_SETJMP_H)
+# if defined(USING_SETJMP)
 /*
  * An X IO Error handler, used to catch error while opening the display.
  */
@@ -1930,7 +1935,7 @@ get_x11_windis(void)
 	alarm(0);
 	signal(SIGALRM, (RETSIGTYPE (*)())sig_save);
 	if (p_verbose > 0 && sig_alarm_called)
-	    verb_msg((char_u *)_("Opening the X display timed out"));
+	    verb_msg(_("Opening the X display timed out"));
 #endif
 	if (x11_display != NULL)
 	{
@@ -2049,19 +2054,12 @@ get_x11_thing(
 	    retval = TRUE;
 	    if (!test_only)
 	    {
-#if defined(FEAT_XFONTSET) || defined(FEAT_MBYTE)
-		if (text_prop.encoding == XA_STRING
-# ifdef FEAT_MBYTE
-			&& !has_mbyte
-# endif
-			)
+		if (text_prop.encoding == XA_STRING && !has_mbyte)
 		{
-#endif
 		    if (get_title)
 			oldtitle = vim_strsave((char_u *)text_prop.value);
 		    else
 			oldicon = vim_strsave((char_u *)text_prop.value);
-#if defined(FEAT_XFONTSET) || defined(FEAT_MBYTE)
 		}
 		else
 		{
@@ -2088,7 +2086,6 @@ get_x11_thing(
 			    oldicon = vim_strsave((char_u *)text_prop.value);
 		    }
 		}
-#endif
 	    }
 	    XFree((void *)text_prop.value);
 	}
@@ -2096,11 +2093,11 @@ get_x11_thing(
     return retval;
 }
 
-/* Xutf8 functions are not avaialble on older systems. Note that on some
+/* Xutf8 functions are not available on older systems. Note that on some
  * systems X_HAVE_UTF8_STRING may be defined in a header file but
  * Xutf8SetWMProperties() is not in the X11 library.  Configure checks for
  * that and defines HAVE_XUTF8SETWMPROPERTIES. */
-#if defined(X_HAVE_UTF8_STRING) && defined(FEAT_MBYTE)
+#if defined(X_HAVE_UTF8_STRING)
 # if X_HAVE_UTF8_STRING && HAVE_XUTF8SETWMPROPERTIES
 #  define USE_UTF8_STRING
 # endif
@@ -2949,7 +2946,7 @@ mch_copy_sec(char_u *from_file, char_u *to_file)
 		case ENOTSUP:
 		    /* extended attributes aren't supported or enabled */
 		    /* should a message be echoed? not sure... */
-		    return; /* leave because it isn't usefull to continue */
+		    return; /* leave because it isn't useful to continue */
 
 		case ERANGE:
 		default:
@@ -4818,9 +4815,7 @@ mch_call_shell_fork(
 	    {
 # define BUFLEN 100		/* length for buffer, pseudo tty limit is 128 */
 		char_u	    buffer[BUFLEN + 1];
-# ifdef FEAT_MBYTE
 		int	    buffer_off = 0;	/* valid bytes in buffer[] */
-# endif
 		char_u	    ta_buf[BUFLEN + 1];	/* TypeAHead */
 		int	    ta_len = 0;		/* valid bytes in ta_buf[] */
 		int	    len;
@@ -5026,11 +5021,9 @@ mch_call_shell_fork(
 			    }
 			    else if (ta_buf[i] == '\r')
 				ta_buf[i] = '\n';
-# ifdef FEAT_MBYTE
 			    if (has_mbyte)
 				i += (*mb_ptr2len_len)(ta_buf + i,
 							ta_len + len - i) - 1;
-# endif
 			}
 
 			/*
@@ -5043,7 +5036,6 @@ mch_call_shell_fork(
 			    {
 				if (ta_buf[i] == '\n' || ta_buf[i] == '\b')
 				    msg_putchar(ta_buf[i]);
-# ifdef FEAT_MBYTE
 				else if (has_mbyte)
 				{
 				    int l = (*mb_ptr2len)(ta_buf + i);
@@ -5051,7 +5043,6 @@ mch_call_shell_fork(
 				    msg_outtrans_len(ta_buf + i, l);
 				    i += l - 1;
 				}
-# endif
 				else
 				    msg_outtrans_len(ta_buf + i, 1);
 			    }
@@ -5109,11 +5100,7 @@ mch_call_shell_fork(
 		    while (RealWaitForChar(fromshell_fd, 10L, NULL, NULL))
 		    {
 			len = read_eintr(fromshell_fd, buffer
-# ifdef FEAT_MBYTE
 				+ buffer_off, (size_t)(BUFLEN - buffer_off)
-# else
-				, (size_t)BUFLEN
-# endif
 				);
 			if (len <= 0)		    /* end of file or error */
 			    goto finished;
@@ -5133,7 +5120,6 @@ mch_call_shell_fork(
 				    ga_append(&ga, buffer[i]);
 			    }
 			}
-# ifdef FEAT_MBYTE
 			else if (has_mbyte)
 			{
 			    int		l;
@@ -5176,7 +5162,6 @@ mch_call_shell_fork(
 			    }
 			    buffer_off = 0;
 			}
-# endif /* FEAT_MBYTE */
 			else
 			{
 			    buffer[len] = NUL;
@@ -7356,7 +7341,7 @@ mch_libcall(
     /* If the handle is valid, try to get the function address. */
     if (hinstLib != NULL)
     {
-# ifdef HAVE_SETJMP_H
+# ifdef USING_SETJMP
 	/*
 	 * Catch a crash when calling the library function.  For example when
 	 * using a number where a string pointer is expected.
@@ -7431,7 +7416,7 @@ mch_libcall(
 		*string_result = vim_strsave(retval_str);
 	}
 
-# ifdef HAVE_SETJMP_H
+# ifdef USING_SETJMP
 	mch_endjmp();
 #  ifdef SIGHASARG
 	if (lc_signal != 0)
@@ -7490,9 +7475,9 @@ setup_term_clip(void)
     if (app_context != NULL && xterm_Shell == (Widget)0)
     {
 	int (*oldhandler)();
-#if defined(HAVE_SETJMP_H)
+# if defined(USING_SETJMP)
 	int (*oldIOhandler)();
-#endif
+# endif
 # ifdef ELAPSED_FUNC
 	elapsed_T start_tv;
 
@@ -7503,7 +7488,7 @@ setup_term_clip(void)
 	/* Ignore X errors while opening the display */
 	oldhandler = XSetErrorHandler(x_error_check);
 
-#if defined(HAVE_SETJMP_H)
+# if defined(USING_SETJMP)
 	/* Ignore X IO errors while opening the display */
 	oldIOhandler = XSetIOErrorHandler(x_IOerror_check);
 	mch_startjmp();
@@ -7513,21 +7498,21 @@ setup_term_clip(void)
 	    xterm_dpy = NULL;
 	}
 	else
-#endif
+# endif
 	{
 	    xterm_dpy = XtOpenDisplay(app_context, xterm_display,
 		    "vim_xterm", "Vim_xterm", NULL, 0, &z, &strp);
 	    if (xterm_dpy != NULL)
 		xterm_dpy_retry_count = 0;
-#if defined(HAVE_SETJMP_H)
+# if defined(USING_SETJMP)
 	    mch_endjmp();
-#endif
+# endif
 	}
 
-#if defined(HAVE_SETJMP_H)
+# if defined(USING_SETJMP)
 	/* Now handle X IO errors normally. */
 	(void)XSetIOErrorHandler(oldIOhandler);
-#endif
+# endif
 	/* Now handle X errors normally. */
 	(void)XSetErrorHandler(oldhandler);
 

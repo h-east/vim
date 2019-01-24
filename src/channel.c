@@ -2750,6 +2750,7 @@ may_invoke_callback(channel_T *channel, ch_part_T part)
     return TRUE;
 }
 
+#if defined(FEAT_NETBEANS_INTG) || defined(PROTO)
 /*
  * Return TRUE when channel "channel" is open for writing to.
  * Also returns FALSE or invalid "channel".
@@ -2760,6 +2761,7 @@ channel_can_write_to(channel_T *channel)
     return channel != NULL && (channel->CH_SOCK_FD != INVALID_FD
 			  || channel->CH_IN_FD != INVALID_FD);
 }
+#endif
 
 /*
  * Return TRUE when channel "channel" is open for reading or writing.
@@ -3179,7 +3181,13 @@ channel_wait(channel_T *channel, sock_T fd, int timeout)
 
 	    if (r && nread > 0)
 		return CW_READY;
-	    if (r == 0)
+
+	    if (channel->ch_named_pipe)
+	    {
+		DisconnectNamedPipe((HANDLE)fd);
+		ConnectNamedPipe((HANDLE)fd, NULL);
+	    }
+	    else if (r == 0)
 		return CW_ERROR;
 
 	    /* perhaps write some buffer lines */
@@ -3811,7 +3819,16 @@ channel_send(
 	if (part == PART_SOCK)
 	    res = sock_write(fd, (char *)buf, len);
 	else
+	{
 	    res = fd_write(fd, (char *)buf, len);
+#ifdef WIN32
+	    if (channel->ch_named_pipe && res < 0)
+	    {
+		DisconnectNamedPipe((HANDLE)fd);
+		ConnectNamedPipe((HANDLE)fd, NULL);
+	    }
+#endif
+	}
 	if (res < 0 && (errno == EWOULDBLOCK
 #ifdef EAGAIN
 			|| errno == EAGAIN
