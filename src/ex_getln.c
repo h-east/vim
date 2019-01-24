@@ -7966,7 +7966,6 @@ clpum_compl_add_infercase(
 	/* Infer case of completed part. */
 
 	/* Find actual length of completion. */
-#ifdef FEAT_MBYTE
 	if (has_mbyte)
 	{
 	    p = str;
@@ -7978,11 +7977,9 @@ clpum_compl_add_infercase(
 	    }
 	}
 	else
-#endif
 	    actual_len = len;
 
 	/* Find actual length of original text. */
-#ifdef FEAT_MBYTE
 	if (has_mbyte)
 	{
 	    p = clpum_compl_orig_text;
@@ -7994,7 +7991,6 @@ clpum_compl_add_infercase(
 	    }
 	}
 	else
-#endif
 	    actual_compl_length = clpum_compl_length;
 
 	/* "actual_len" may be smaller than "actual_compl_length" when using
@@ -8008,22 +8004,18 @@ clpum_compl_add_infercase(
 	{
 	    p = str;
 	    for (i = 0; i < actual_len; ++i)
-#ifdef FEAT_MBYTE
 		if (has_mbyte)
 		    wca[i] = mb_ptr2char_adv(&p);
 		else
-#endif
 		    wca[i] = *(p++);
 
 	    /* Rule 1: Were any chars converted to lower? */
 	    p = clpum_compl_orig_text;
 	    for (i = 0; i < min_len; ++i)
 	    {
-#ifdef FEAT_MBYTE
 		if (has_mbyte)
 		    c = mb_ptr2char_adv(&p);
 		else
-#endif
 		    c = *(p++);
 		if (MB_ISLOWER(c))
 		{
@@ -8047,11 +8039,9 @@ clpum_compl_add_infercase(
 		p = clpum_compl_orig_text;
 		for (i = 0; i < min_len; ++i)
 		{
-#ifdef FEAT_MBYTE
 		    if (has_mbyte)
 			c = mb_ptr2char_adv(&p);
 		    else
-#endif
 			c = *(p++);
 		    if (was_letter && MB_ISUPPER(c) && MB_ISLOWER(wca[i]))
 		    {
@@ -8068,11 +8058,9 @@ clpum_compl_add_infercase(
 	    p = clpum_compl_orig_text;
 	    for (i = 0; i < min_len; ++i)
 	    {
-#ifdef FEAT_MBYTE
 		if (has_mbyte)
 		    c = mb_ptr2char_adv(&p);
 		else
-#endif
 		    c = *(p++);
 		if (MB_ISLOWER(c))
 		    wca[i] = MB_TOLOWER(wca[i]);
@@ -8089,11 +8077,9 @@ clpum_compl_add_infercase(
 	    p = IObuff;
 	    i = 0;
 	    while (i < actual_len && (p - IObuff + 6) < IOSIZE)
-#ifdef FEAT_MBYTE
 		if (has_mbyte)
 		    p += (*mb_char2bytes)(wca[i++], p);
 		else
-#endif
 		    *(p++) = wca[i++];
 	    *p = NUL;
 
@@ -8737,7 +8723,6 @@ clpum_compl_len(void)
     static void
 clpum_compl_addleader(int c)
 {
-#ifdef FEAT_MBYTE
     int		cc;
 
     if (has_mbyte && (cc = (*mb_char2len)(c)) > 1)
@@ -8749,7 +8734,6 @@ clpum_compl_addleader(int c)
 	put_on_cmdline(buf, -1, TRUE);
     }
     else
-#endif
     {
 	char_u buf[2];
 
