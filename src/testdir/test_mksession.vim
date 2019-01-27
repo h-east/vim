@@ -127,6 +127,10 @@ func Test_mksession_large_winheight()
 endfunc
 
 func Test_mksession_rtp()
+  if has('win32')
+    " TODO: fix problem with backslashes
+    return
+  endif
   new
   let _rtp=&rtp
   " Make a real long (invalid) runtimepath value,
@@ -219,6 +223,29 @@ func Test_mksession_blank_tabs()
   call assert_equal(4, tabpagenr('$'), 'session restore should restore number of tabs')
   call assert_equal(3, tabpagenr(), 'session restore should restore the active tab')
   call delete('Xtest_mks.out')
+endfunc
+
+func Test_mksession_buffer_count()
+  set hidden
+
+  " Edit exactly three files in the current session.
+  %bwipe!
+  e Xfoo | tabe Xbar | tabe Xbaz
+  tabdo write
+  mksession! Xtest_mks.out
+
+  " Verify that loading the session does not create additional buffers.
+  %bwipe!
+  source Xtest_mks.out
+  call assert_equal(3, len(getbufinfo()))
+
+  " Clean up.
+  call delete('Xfoo')
+  call delete('Xbar')
+  call delete('Xbaz')
+  call delete('Xtest_mks.out')
+  %bwipe!
+  set hidden&
 endfunc
 
 if has('extra_search')

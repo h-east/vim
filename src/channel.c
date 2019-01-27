@@ -80,24 +80,34 @@ fd_read(sock_T fd, char *buf, size_t len)
     static int
 fd_write(sock_T fd, char *buf, size_t len)
 {
+    size_t	todo = len;
     HANDLE	h = (HANDLE)fd;
-    DWORD	nwrite;
+    DWORD	nwrite, size, done = 0;
     OVERLAPPED	ov;
 
-    // If the pipe overflows while the job does not read the data, WriteFile
-    // will block forever. This abandons the write.
-    memset(&ov, 0, sizeof(ov));
-    if (!WriteFile(h, buf, (DWORD)len, &nwrite, &ov))
+    while (todo > 0)
     {
-	DWORD err = GetLastError();
+	if (todo > MAX_NAMED_PIPE_SIZE)
+	    size = MAX_NAMED_PIPE_SIZE;
+	else
+	    size = todo;
+	// If the pipe overflows while the job does not read the data, WriteFile
+	// will block forever. This abandons the write.
+	memset(&ov, 0, sizeof(ov));
+	if (!WriteFile(h, buf + done, size, &nwrite, &ov))
+	{
+	    DWORD err = GetLastError();
 
-	if (err != ERROR_IO_PENDING)
-	    return -1;
-	if (!GetOverlappedResult(h, &ov, &nwrite, FALSE))
-	    return -1;
-	FlushFileBuffers(h);
+	    if (err != ERROR_IO_PENDING)
+		return -1;
+	    if (!GetOverlappedResult(h, &ov, &nwrite, FALSE))
+		return -1;
+	    FlushFileBuffers(h);
+	}
+	todo -= nwrite;
+	done += nwrite;
     }
-    return (int)nwrite;
+    return (int)done;
 }
 
     static void
@@ -1038,7 +1048,7 @@ channel_set_pipes(channel_T *channel, sock_T in, sock_T out, sock_T err)
 # if defined(UNIX)
 	/* Do not end the job when all output channels are closed, wait until
 	 * the job ended. */
-	if (isatty(in))
+	if (mch_isatty(in))
 	    channel->ch_to_be_closed |= (1U << PART_IN);
 # endif
     }

@@ -1627,14 +1627,14 @@ win_update(win_T *wp)
 	    if (VIsual_mode == Ctrl_V)
 	    {
 		colnr_T	    fromc, toc;
-#if defined(FEAT_VIRTUALEDIT) && defined(FEAT_LINEBREAK)
+#if defined(FEAT_LINEBREAK)
 		int	    save_ve_flags = ve_flags;
 
 		if (curwin->w_p_lbr)
 		    ve_flags = VE_ALL;
 #endif
 		getvcols(wp, &VIsual, &curwin->w_cursor, &fromc, &toc);
-#if defined(FEAT_VIRTUALEDIT) && defined(FEAT_LINEBREAK)
+#if defined(FEAT_LINEBREAK)
 		ve_flags = save_ve_flags;
 #endif
 		++toc;
@@ -3347,11 +3347,7 @@ win_line(
 		}
 		if (VIsual_mode != 'V' && lnum == bot->lnum)
 		{
-		    if (*p_sel == 'e' && bot->col == 0
-#ifdef FEAT_VIRTUALEDIT
-			    && bot->coladd == 0
-#endif
-		       )
+		    if (*p_sel == 'e' && bot->col == 0 && bot->coladd == 0)
 		    {
 			fromcol = -10;
 			tocol = MAXCOL;
@@ -3550,9 +3546,7 @@ win_line(
 #ifdef FEAT_SYN_HL
 	     wp->w_p_cuc || draw_color_col ||
 #endif
-#ifdef FEAT_VIRTUALEDIT
 	     virtual_active() ||
-#endif
 	     (VIsual_active && wp->w_buffer == curwin->w_buffer)))
 	{
 	    vcol = v;
@@ -5038,14 +5032,12 @@ win_line(
 		       )
 #endif
 		    {
-#ifdef FEAT_VIRTUALEDIT
 			/* In virtualedit, visual selections may extend
 			 * beyond end of line. */
 			if (area_highlighting && virtual_active()
 				&& tocol != MAXCOL && vcol < tocol)
 			    n_extra = 0;
 			else
-#endif
 			{
 			    p_extra = at_end_str;
 			    n_extra = 1;
@@ -5112,7 +5104,6 @@ win_line(
 		    }
 		    mb_utf8 = FALSE;	/* don't draw as UTF-8 */
 		}
-#ifdef FEAT_VIRTUALEDIT
 		else if (VIsual_active
 			 && (VIsual_mode == Ctrl_V
 			     || VIsual_mode == 'v')
@@ -5120,15 +5111,14 @@ win_line(
 			 && tocol != MAXCOL
 			 && vcol < tocol
 			 && (
-# ifdef FEAT_RIGHTLEFT
+#ifdef FEAT_RIGHTLEFT
 			    wp->w_p_rl ? (col >= 0) :
-# endif
+#endif
 			    (col < wp->w_width)))
 		{
 		    c = ' ';
 		    --ptr;	    /* put it back at the NUL */
 		}
-#endif
 #if defined(LINE_ATTR)
 		else if ((
 # ifdef FEAT_DIFF
@@ -10120,6 +10110,26 @@ screen_del_lines(
 }
 
 /*
+ * Return TRUE when postponing displaying the mode message: when not redrawing
+ * or inside a mapping.
+ */
+    int
+skip_showmode()
+{
+    // Call char_avail() only when we are going to show something, because it
+    // takes a bit of time.  redrawing() may also call char_avail_avail().
+    if (global_busy
+	    || msg_silent != 0
+	    || !redrawing()
+	    || (char_avail() && !KeyTyped))
+    {
+	redraw_cmdline = TRUE;		// show mode later
+	return TRUE;
+    }
+    return FALSE;
+}
+
+/*
  * Show the current mode and ruler.
  *
  * If clear_cmdline is TRUE, clear the rest of the cmdline.
@@ -10150,16 +10160,8 @@ showmode(void)
 		));
     if (do_mode || reg_recording != 0)
     {
-	/*
-	 * Don't show mode right now, when not redrawing or inside a mapping.
-	 * Call char_avail() only when we are going to show something, because
-	 * it takes a bit of time.
-	 */
-	if (!redrawing() || (char_avail() && !KeyTyped) || msg_silent != 0)
-	{
-	    redraw_cmdline = TRUE;		/* show mode later */
-	    return 0;
-	}
+	if (skip_showmode())
+	    return 0;		// show mode later
 
 	nwr_save = need_wait_return;
 
@@ -10880,9 +10882,7 @@ win_redr_ruler(win_T *wp, int always, int ignore_pum)
 	    || wp->w_cursor.lnum != wp->w_ru_cursor.lnum
 	    || wp->w_cursor.col != wp->w_ru_cursor.col
 	    || wp->w_virtcol != wp->w_ru_virtcol
-#ifdef FEAT_VIRTUALEDIT
 	    || wp->w_cursor.coladd != wp->w_ru_cursor.coladd
-#endif
 	    || wp->w_topline != wp->w_ru_topline
 	    || wp->w_buffer->b_ml.ml_line_count != wp->w_ru_line_count
 #ifdef FEAT_DIFF

@@ -700,11 +700,7 @@ static char *(features[]) =
 	"-vartabs",
 #endif
 	"+vertsplit",
-#ifdef FEAT_VIRTUALEDIT
 	"+virtualedit",
-#else
-	"-virtualedit",
-#endif
 	"+visual",
 	"+visualextra",
 #ifdef FEAT_VIMINFO
@@ -792,6 +788,34 @@ static char *(features[]) =
 
 static int included_patches[] =
 {   /* Add new patch number below this line */
+/**/
+    829,
+/**/
+    828,
+/**/
+    827,
+/**/
+    826,
+/**/
+    825,
+/**/
+    824,
+/**/
+    823,
+/**/
+    822,
+/**/
+    821,
+/**/
+    820,
+/**/
+    819,
+/**/
+    818,
+/**/
+    817,
+/**/
+    816,
 /**/
     815,
 /**/

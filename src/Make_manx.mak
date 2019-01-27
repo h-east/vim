@@ -37,6 +37,7 @@ REN = $(SHELL) -c mv -f
 DEL = $(SHELL) -c rm -f
 
 SRC =	arabic.c \
+	autocmd.c \
 	blowfish.c \
 	buffer.c \
 	charset.c \
@@ -97,6 +98,7 @@ SRC =	arabic.c \
 INCL = vim.h feature.h keymap.h macros.h ascii.h term.h structs.h os_amiga.h
 
 OBJ =	obj/arabic.o \
+	obj/autocmd.o \
 	obj/blowfish.o \
 	obj/buffer.o \
 	obj/charset.o \
@@ -155,6 +157,7 @@ OBJ =	obj/arabic.o \
 	$(TERMLIB)
 
 PRO =	proto/arabic.pro \
+	proto/autocmd.pro \
 	proto/blowfish.pro \
 	proto/buffer.pro \
 	proto/charset.pro \
@@ -258,6 +261,9 @@ $(OBJ): $(SYMS)
 
 obj/arabic.o:	arabic.c
 	$(CCSYM) $@ arabic.c
+
+obj/autocmd.o:	autocmd.c
+	$(CCSYM) $@ autocmd.c
 
 obj/blowfish.o:	blowfish.c
 	$(CCSYM) $@ blowfish.c

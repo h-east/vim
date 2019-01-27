@@ -2142,12 +2142,6 @@ typedef enum {
 
 #include "globals.h"	    /* global variables and messages */
 
-#ifndef FEAT_VIRTUALEDIT
-# define getvvcol(w, p, s, c, e) getvcol((w), (p), (s), (c), (e))
-# define virtual_active() FALSE
-# define virtual_op FALSE
-#endif
-
 /*
  * If console dialog not supported, but GUI dialog is, use the GUI one.
  */
@@ -2471,6 +2465,10 @@ typedef enum {
 # define MAX_OPEN_CHANNELS 10
 #else
 # define MAX_OPEN_CHANNELS 0
+#endif
+
+#if defined(WIN32)
+# define MAX_NAMED_PIPE_SIZE 65535
 #endif
 
 /* Options for json_encode() and json_decode. */
