@@ -3717,6 +3717,7 @@ win_line(
     {
 	line_attr = HL_ATTR(HLF_CUL);
 	area_highlighting = TRUE;
+	wp->w_last_cursorline = wp->w_cursor.lnum;
     }
 #endif
 
