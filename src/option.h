@@ -1119,6 +1119,7 @@ enum
 #ifdef FEAT_TERMINAL
     , WV_TWK
     , WV_TWS
+    , WV_TMOD
 #endif
     , WV_CRBIND
 #ifdef FEAT_LINEBREAK
@@ -1159,6 +1160,8 @@ enum
 #endif
     , WV_SCBIND
     , WV_SCROLL
+    , WV_SISO
+    , WV_SO
 #ifdef FEAT_SPELL
     , WV_SPELL
 #endif
