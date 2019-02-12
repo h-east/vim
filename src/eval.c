@@ -1199,6 +1199,9 @@ eval_foldexpr(char_u *arg, int *cp)
  * ":let var = expr"		assignment command.
  * ":let var += expr"		assignment command.
  * ":let var -= expr"		assignment command.
+ * ":let var *= expr"		assignment command.
+ * ":let var /= expr"		assignment command.
+ * ":let var %= expr"		assignment command.
  * ":let var .= expr"		assignment command.
  * ":let [var1, var2] = expr"	unpack list.
  */
@@ -1218,10 +1221,10 @@ ex_let(exarg_T *eap)
     argend = skip_var_list(arg, &var_count, &semicolon);
     if (argend == NULL)
 	return;
-    if (argend > arg && argend[-1] == '.')  /* for var.='str' */
+    if (argend > arg && argend[-1] == '.')  // for var.='str'
 	--argend;
     expr = skipwhite(argend);
-    if (*expr != '=' && !(vim_strchr((char_u *)"+-.", *expr) != NULL
+    if (*expr != '=' && !(vim_strchr((char_u *)"+-*/%.", *expr) != NULL
 			  && expr[1] == '='))
     {
 	/*
@@ -1251,8 +1254,8 @@ ex_let(exarg_T *eap)
 	op[1] = NUL;
 	if (*expr != '=')
 	{
-	    if (vim_strchr((char_u *)"+-.", *expr) != NULL)
-		op[0] = *expr;   /* +=, -= or .= */
+	    if (vim_strchr((char_u *)"+-*/%.", *expr) != NULL)
+		op[0] = *expr;   // +=, -=, *=, /=, %= or .=
 	    expr = skipwhite(expr + 2);
 	}
 	else
@@ -1673,7 +1676,7 @@ ex_let_one(
 	    semsg(_(e_invarg2), name - 1);
 	else
 	{
-	    if (op != NULL && (*op == '+' || *op == '-'))
+	    if (op != NULL && vim_strchr((char_u *)"+-*/%", *op) != NULL)
 		semsg(_(e_letwrong), op);
 	    else if (endchars != NULL
 			     && vim_strchr(endchars, *skipwhite(arg)) == NULL)
@@ -1746,18 +1749,22 @@ ex_let_one(
 			|| (opt_type == 0 && *op != '.'))
 		{
 		    semsg(_(e_letwrong), op);
-		    s = NULL;  /* don't set the value */
+		    s = NULL;  // don't set the value
 		}
 		else
 		{
-		    if (opt_type == 1)  /* number */
+		    if (opt_type == 1)  // number
 		    {
-			if (*op == '+')
-			    n = numval + n;
-			else
-			    n = numval - n;
+			switch (*op)
+			{
+			    case '+': n = numval + n; break;
+			    case '-': n = numval - n; break;
+			    case '*': n = numval * n; break;
+			    case '/': n = numval / n; break;
+			    case '%': n = numval % n; break;
+			}
 		    }
-		    else if (opt_type == 0 && stringval != NULL) /* string */
+		    else if (opt_type == 0 && stringval != NULL) // string
 		    {
 			s = concat_str(stringval, s);
 			vim_free(stringval);
@@ -1781,7 +1788,7 @@ ex_let_one(
     else if (*arg == '@')
     {
 	++arg;
-	if (op != NULL && (*op == '+' || *op == '-'))
+	if (op != NULL && vim_strchr((char_u *)"+-*/%", *op) != NULL)
 	    semsg(_(e_letwrong), op);
 	else if (endchars != NULL
 			 && vim_strchr(endchars, *skipwhite(arg + 1)) == NULL)
@@ -2256,7 +2263,8 @@ clear_lval(lval_T *lp)
 /*
  * Set a variable that was parsed by get_lval() to "rettv".
  * "endp" points to just after the parsed name.
- * "op" is NULL, "+" for "+=", "-" for "-=", "." for ".=" or "=" for "=".
+ * "op" is NULL, "+" for "+=", "-" for "-=", "*" for "*=", "/" for "/=",
+ * "%" for "%=", "." for ".=" or "=" for "=".
  */
     static void
 set_var_lval(
@@ -2329,7 +2337,7 @@ set_var_lval(
 	{
 	    typval_T tv;
 
-	    /* handle +=, -= and .= */
+	    // handle +=, -=, *=, /=, %= and .=
 	    di = NULL;
 	    if (get_var_tv(lp->ll_name, (int)STRLEN(lp->ll_name),
 					     &tv, &di, TRUE, FALSE) == OK)
@@ -2450,7 +2458,8 @@ set_var_lval(
 }
 
 /*
- * Handle "tv1 += tv2", "tv1 -= tv2" and "tv1 .= tv2"
+ * Handle "tv1 += tv2", "tv1 -= tv2", "tv1 *= tv2", "tv1 /= tv2", "tv1 %= tv2"
+ * and "tv1 .= tv2"
  * Returns OK or FAIL.
  */
     static int
@@ -2492,7 +2501,7 @@ tv_op(typval_T *tv1, typval_T *tv2, char_u *op)
 	    case VAR_LIST:
 		if (*op != '+' || tv2->v_type != VAR_LIST)
 		    break;
-		/* List += List */
+		// List += List
 		if (tv1->vval.v_list != NULL && tv2->vval.v_list != NULL)
 		    list_extend(tv1->vval.v_list, tv2->vval.v_list, NULL);
 		return OK;
@@ -2501,19 +2510,24 @@ tv_op(typval_T *tv1, typval_T *tv2, char_u *op)
 	    case VAR_STRING:
 		if (tv2->v_type == VAR_LIST)
 		    break;
-		if (*op == '+' || *op == '-')
+		if (vim_strchr((char_u *)"+-*/%", *op) != NULL)
 		{
-		    /* nr += nr  or  nr -= nr*/
+		    // nr += nr , nr -= nr , nr *=nr , nr /= nr , nr %= nr
 		    n = tv_get_number(tv1);
 #ifdef FEAT_FLOAT
 		    if (tv2->v_type == VAR_FLOAT)
 		    {
 			float_T f = n;
 
-			if (*op == '+')
-			    f += tv2->vval.v_float;
-			else
-			    f -= tv2->vval.v_float;
+			if (*op == '%')
+			    break;
+			switch (*op)
+			{
+			    case '+': f += tv2->vval.v_float; break;
+			    case '-': f -= tv2->vval.v_float; break;
+			    case '*': f *= tv2->vval.v_float; break;
+			    case '/': f /= tv2->vval.v_float; break;
+			}
 			clear_tv(tv1);
 			tv1->v_type = VAR_FLOAT;
 			tv1->vval.v_float = f;
@@ -2521,10 +2535,14 @@ tv_op(typval_T *tv1, typval_T *tv2, char_u *op)
 		    else
 #endif
 		    {
-			if (*op == '+')
-			    n += tv_get_number(tv2);
-			else
-			    n -= tv_get_number(tv2);
+			switch (*op)
+			{
+			    case '+': n += tv_get_number(tv2); break;
+			    case '-': n -= tv_get_number(tv2); break;
+			    case '*': n *= tv_get_number(tv2); break;
+			    case '/': n /= tv_get_number(tv2); break;
+			    case '%': n %= tv_get_number(tv2); break;
+			}
 			clear_tv(tv1);
 			tv1->v_type = VAR_NUMBER;
 			tv1->vval.v_number = n;
@@ -2535,7 +2553,7 @@ tv_op(typval_T *tv1, typval_T *tv2, char_u *op)
 		    if (tv2->v_type == VAR_FLOAT)
 			break;
 
-		    /* str .= str */
+		    // str .= str
 		    s = tv_get_string(tv1);
 		    s = concat_str(s, tv_get_string_buf(tv2, numbuf));
 		    clear_tv(tv1);
@@ -2549,7 +2567,8 @@ tv_op(typval_T *tv1, typval_T *tv2, char_u *op)
 		{
 		    float_T f;
 
-		    if (*op == '.' || (tv2->v_type != VAR_FLOAT
+		    if (*op == '%' || *op == '.'
+				   || (tv2->v_type != VAR_FLOAT
 				    && tv2->v_type != VAR_NUMBER
 				    && tv2->v_type != VAR_STRING))
 			break;
@@ -2557,10 +2576,13 @@ tv_op(typval_T *tv1, typval_T *tv2, char_u *op)
 			f = tv2->vval.v_float;
 		    else
 			f = tv_get_number(tv2);
-		    if (*op == '+')
-			tv1->vval.v_float += f;
-		    else
-			tv1->vval.v_float -= f;
+		    switch (*op)
+		    {
+			case '+': tv1->vval.v_float += f; break;
+			case '-': tv1->vval.v_float -= f; break;
+			case '*': tv1->vval.v_float *= f; break;
+			case '/': tv1->vval.v_float /= f; break;
+		    }
 		}
 #endif
 		return OK;
@@ -8752,7 +8774,7 @@ setwinvar(typval_T *argvars, typval_T *rettv UNUSED, int off)
     char_u	nbuf[NUMBUFLEN];
     tabpage_T	*tp = NULL;
 
-    if (check_restricted() || check_secure())
+    if (check_secure())
 	return;
 
     if (off == 1)
