@@ -171,6 +171,9 @@ static int g_fForceExit = FALSE;    /* set when forcefully exiting */
 static void scroll(unsigned cLines);
 static void set_scroll_region(unsigned left, unsigned top,
 			      unsigned right, unsigned bottom);
+static void set_scroll_region_tb(unsigned top, unsigned bottom);
+static void set_scroll_region_lr(unsigned left, unsigned right);
+static void insert_lines(unsigned cLines);
 static void delete_lines(unsigned cLines);
 static void gotoxy(unsigned x, unsigned y);
 static void standout(void);
@@ -186,10 +189,12 @@ static int win32_getattrs(char_u *name);
 static int win32_setattrs(char_u *name, int attrs);
 static int win32_set_archive(char_u *name);
 
-static int vtp_working = 0;
+static int conpty_working = 0;
+static int conpty_stable = 0;
 static void vtp_flag_init();
 
 #ifndef FEAT_GUI_W32
+static int vtp_working = 0;
 static void vtp_init();
 static void vtp_exit();
 static int vtp_printf(char *format, ...);
@@ -5390,7 +5395,7 @@ create_pipe_pair(HANDLE handles[2])
 
     if (handles[0] == INVALID_HANDLE_VALUE)
     {
-        CloseHandle(handles[1]);
+	CloseHandle(handles[1]);
 	return FALSE;
     }
 
@@ -5974,9 +5979,30 @@ set_scroll_region(
     g_srScrollRegion.Top =    top;
     g_srScrollRegion.Right =  right;
     g_srScrollRegion.Bottom = bottom;
+}
 
-    if (USE_VTP)
-	vtp_printf("\033[%d;%dr", top + 1, bottom + 1);
+    static void
+set_scroll_region_tb(
+    unsigned top,
+    unsigned bottom)
+{
+    if (top >= bottom || bottom > (unsigned)Rows - 1)
+	return;
+
+    g_srScrollRegion.Top = top;
+    g_srScrollRegion.Bottom = bottom;
+}
+
+    static void
+set_scroll_region_lr(
+    unsigned left,
+    unsigned right)
+{
+    if (left >= right || right > (unsigned)Columns - 1)
+	return;
+
+    g_srScrollRegion.Left = left;
+    g_srScrollRegion.Right = right;
 }
 
 
@@ -5986,47 +6012,49 @@ set_scroll_region(
     static void
 insert_lines(unsigned cLines)
 {
-    SMALL_RECT	    source;
+    SMALL_RECT	    source, clip;
     COORD	    dest;
     CHAR_INFO	    fill;
 
-    dest.X = 0;
+    dest.X = g_srScrollRegion.Left;
     dest.Y = g_coord.Y + cLines;
 
-    source.Left   = 0;
+    source.Left   = g_srScrollRegion.Left;
     source.Top	  = g_coord.Y;
     source.Right  = g_srScrollRegion.Right;
     source.Bottom = g_srScrollRegion.Bottom - cLines;
 
-    if (!USE_VTP)
+    clip.Left   = g_srScrollRegion.Left;
+    clip.Top    = g_coord.Y;
+    clip.Right  = g_srScrollRegion.Right;
+    clip.Bottom = g_srScrollRegion.Bottom;
+
     {
 	fill.Char.AsciiChar = ' ';
-	fill.Attributes = g_attrCurrent;
+	fill.Attributes = g_attrDefault;
 
-	ScrollConsoleScreenBuffer(g_hConOut, &source, NULL, dest, &fill);
-    }
-    else
-    {
 	set_console_color_rgb();
 
-	gotoxy(1, source.Top + 1);
-	vtp_printf("\033[%dT", cLines);
+	ScrollConsoleScreenBuffer(g_hConOut, &source, &clip, dest, &fill);
     }
-
-    /* Here we have to deal with a win32 console flake: If the scroll
-     * region looks like abc and we scroll c to a and fill with d we get
-     * cbd... if we scroll block c one line at a time to a, we get cdd...
-     * vim expects cdd consistently... So we have to deal with that
-     * here... (this also occurs scrolling the same way in the other
-     * direction).  */
+    // Here we have to deal with a win32 console flake: If the scroll
+    // region looks like abc and we scroll c to a and fill with d we get
+    // cbd... if we scroll block c one line at a time to a, we get cdd...
+    // vim expects cdd consistently... So we have to deal with that
+    // here... (this also occurs scrolling the same way in the other
+    // direction).
 
     if (source.Bottom < dest.Y)
     {
 	COORD coord;
+	int   i;
 
-	coord.X = 0;
-	coord.Y = source.Bottom;
-	clear_chars(coord, Columns * (dest.Y - source.Bottom));
+	coord.X = source.Left;
+	for (i = clip.Top; i < dest.Y; ++i)
+	{
+	    coord.Y = i;
+	    clear_chars(coord, source.Right - source.Left + 1);
+	}
     }
 }
 
@@ -6037,50 +6065,48 @@ insert_lines(unsigned cLines)
     static void
 delete_lines(unsigned cLines)
 {
-    SMALL_RECT	    source;
+    SMALL_RECT	    source, clip;
     COORD	    dest;
     CHAR_INFO	    fill;
     int		    nb;
 
-    dest.X = 0;
+    dest.X = g_srScrollRegion.Left;
     dest.Y = g_coord.Y;
 
-    source.Left   = 0;
+    source.Left   = g_srScrollRegion.Left;
     source.Top	  = g_coord.Y + cLines;
     source.Right  = g_srScrollRegion.Right;
     source.Bottom = g_srScrollRegion.Bottom;
 
-    if (!USE_VTP)
+    clip.Left   = g_srScrollRegion.Left;
+    clip.Top    = g_coord.Y;
+    clip.Right  = g_srScrollRegion.Right;
+    clip.Bottom = g_srScrollRegion.Bottom;
+
     {
 	fill.Char.AsciiChar = ' ';
-	fill.Attributes = g_attrCurrent;
+	fill.Attributes = g_attrDefault;
 
-	ScrollConsoleScreenBuffer(g_hConOut, &source, NULL, dest, &fill);
-    }
-    else
-    {
 	set_console_color_rgb();
 
-	gotoxy(1, source.Top + 1);
-	vtp_printf("\033[%dS", cLines);
+	ScrollConsoleScreenBuffer(g_hConOut, &source, &clip, dest, &fill);
     }
-
-    /* Here we have to deal with a win32 console flake: If the scroll
-     * region looks like abc and we scroll c to a and fill with d we get
-     * cbd... if we scroll block c one line at a time to a, we get cdd...
-     * vim expects cdd consistently... So we have to deal with that
-     * here... (this also occurs scrolling the same way in the other
-     * direction).  */
+    // Here we have to deal with a win32 console flake; See insert_lines()
+    // above.
 
     nb = dest.Y + (source.Bottom - source.Top) + 1;
 
     if (nb < source.Top)
     {
 	COORD coord;
+	int   i;
 
-	coord.X = 0;
-	coord.Y = nb;
-	clear_chars(coord, Columns * (source.Top - nb));
+	coord.X = source.Left;
+	for (i = nb; i < clip.Bottom; ++i)
+	{
+	    coord.Y = i;
+	    clear_chars(coord, source.Right - source.Left + 1);
+	}
     }
 }
 
@@ -6505,6 +6531,14 @@ mch_write(
 		else if (argc == 2 && *p == 'r')
 		{
 		    set_scroll_region(0, arg1 - 1, Columns - 1, arg2 - 1);
+		}
+		else if (argc == 2 && *p == 'R')
+		{
+		    set_scroll_region_tb(arg1, arg2);
+		}
+		else if (argc == 2 && *p == 'V')
+		{
+		    set_scroll_region_lr(arg1, arg2);
 		}
 		else if (argc == 1 && *p == 'A')
 		{
@@ -7638,9 +7672,10 @@ mch_setenv(char *var, char *value, int x)
 
 /*
  * Support for pseudo-console (ConPTY) was added in windows 10
- * version 1809 (October 2018 update).
+ * version 1809 (October 2018 update).  However, that version is unstable.
  */
-#define CONPTY_FIRST_SUPPORT_BUILD MAKE_VER(10, 0, 17763)
+#define CONPTY_FIRST_SUPPORT_BUILD  MAKE_VER(10, 0, 17763)
+#define CONPTY_STABLE_BUILD	    MAKE_VER(10, 0, 32767)  // T.B.D.
 
     static void
 vtp_flag_init(void)
@@ -7659,10 +7694,10 @@ vtp_flag_init(void)
 	vtp_working = 0;
 #endif
 
-#ifdef FEAT_GUI_W32
     if (ver >= CONPTY_FIRST_SUPPORT_BUILD)
-	vtp_working = 1;
-#endif
+	conpty_working = 1;
+    if (ver >= CONPTY_STABLE_BUILD)
+	conpty_stable = 1;
 
 }
 
@@ -7871,10 +7906,22 @@ is_term_win32(void)
     return T_NAME != NULL && STRCMP(T_NAME, "win32") == 0;
 }
 
-#endif
-
     int
 has_vtp_working(void)
 {
     return vtp_working;
+}
+
+#endif
+
+    int
+has_conpty_working(void)
+{
+    return conpty_working;
+}
+
+    int
+is_conpty_stable(void)
+{
+    return conpty_stable;
 }

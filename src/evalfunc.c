@@ -6291,9 +6291,6 @@ f_has(typval_T *argvars, typval_T *rettv)
 #ifdef FEAT_SEARCH_EXTRA
 	"extra_search",
 #endif
-#ifdef FEAT_FKMAP
-	"farsi",
-#endif
 #ifdef FEAT_SEARCHPATH
 	"file_in_path",
 #endif
@@ -13454,20 +13451,7 @@ get_cmd_output_as_rettv(
     else
     {
 	res = get_cmd_output(tv_get_string(&argvars[0]), infile, flags, NULL);
-#ifdef USE_CR
-	/* translate <CR> into <NL> */
-	if (res != NULL)
-	{
-	    char_u	*s;
-
-	    for (s = res; *s; ++s)
-	    {
-		if (*s == CAR)
-		    *s = NL;
-	    }
-	}
-#else
-# ifdef USE_CRNL
+#ifdef USE_CRNL
 	/* translate <CR><NL> into <NL> */
 	if (res != NULL)
 	{
@@ -13482,7 +13466,6 @@ get_cmd_output_as_rettv(
 	    }
 	    *d = NUL;
 	}
-# endif
 #endif
 	rettv->vval.v_string = res;
 	res = NULL;
@@ -14814,7 +14797,7 @@ f_writefile(typval_T *argvars, typval_T *rettv)
 	else if (do_fsync)
 	    // Ignore the error, the user wouldn't know what to do about it.
 	    // May happen for a device.
-	    vim_ignored = fsync(fileno(fd));
+	    vim_ignored = vim_fsync(fileno(fd));
 #endif
 	fclose(fd);
     }
@@ -14826,7 +14809,7 @@ f_writefile(typval_T *argvars, typval_T *rettv)
 	else if (do_fsync)
 	    /* Ignore the error, the user wouldn't know what to do about it.
 	     * May happen for a device. */
-	    vim_ignored = fsync(fileno(fd));
+	    vim_ignored = vim_fsync(fileno(fd));
 #endif
 	fclose(fd);
     }

@@ -81,6 +81,7 @@ extern int _stricoll(char *a, char *b);
 # include "ex_eval.pro"
 # include "ex_getln.pro"
 # include "fileio.pro"
+# include "findfile.pro"
 # include "fold.pro"
 # include "getchar.pro"
 # ifdef FEAT_HANGULIN
@@ -98,9 +99,6 @@ extern int _stricoll(char *a, char *b);
 # include "memline.pro"
 # ifdef FEAT_MENU
 #  include "menu.pro"
-# endif
-# ifdef FEAT_FKMAP
-#  include "farsi.pro"
 # endif
 # ifdef FEAT_ARABIC
 #  include "arabic.pro"

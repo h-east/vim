@@ -542,11 +542,7 @@ static struct vimoption options[] =
 #endif
 			    {(char_u *)FALSE, (char_u *)0L} SCTX_INIT},
     {"altkeymap",   "akm",  P_BOOL|P_VI_DEF,
-#ifdef FEAT_FKMAP
-			    (char_u *)&p_altkeymap, PV_NONE,
-#else
 			    (char_u *)NULL, PV_NONE,
-#endif
 			    {(char_u *)FALSE, (char_u *)0L} SCTX_INIT},
     {"ambiwidth",  "ambw",  P_STRING|P_VI_DEF|P_RCLR,
 			    (char_u *)&p_ambw, PV_NONE,
@@ -1175,11 +1171,7 @@ static struct vimoption options[] =
 			    (char_u *)&p_fixeol, PV_FIXEOL,
 			    {(char_u *)TRUE, (char_u *)0L} SCTX_INIT},
     {"fkmap",	    "fk",   P_BOOL|P_VI_DEF,
-#ifdef FEAT_FKMAP
-			    (char_u *)&p_fkmap, PV_NONE,
-#else
 			    (char_u *)NULL, PV_NONE,
-#endif
 			    {(char_u *)FALSE, (char_u *)0L} SCTX_INIT},
     {"flash",	    "fl",   P_BOOL|P_VI_DEF,
 			    (char_u *)NULL, PV_NONE,
@@ -5639,7 +5631,9 @@ didset_options2(void)
     (void)check_clipboard_option();
 #endif
 #ifdef FEAT_VARTABS
+    vim_free(curbuf->b_p_vsts_array);
     tabstop_set(curbuf->b_p_vsts, &curbuf->b_p_vsts_array);
+    vim_free(curbuf->b_p_vts_array);
     tabstop_set(curbuf->b_p_vts,  &curbuf->b_p_vts_array);
 #endif
 }
@@ -7628,14 +7622,14 @@ did_set_string_option(
 	    if (errmsg == NULL)
 	    {
 		int *oldarray = curbuf->b_p_vts_array;
+
 		if (tabstop_set(*varp, &(curbuf->b_p_vts_array)))
 		{
-		    if (oldarray)
-			vim_free(oldarray);
+		    vim_free(oldarray);
 #ifdef FEAT_FOLDING
 		    if (foldmethodIsIndent(curwin))
 			foldUpdateAll(curwin);
-#endif /* FEAT_FOLDING */
+#endif
 		}
 		else
 		    errmsg = e_invarg;
@@ -8755,69 +8749,6 @@ set_bool_option(
     }
 #endif
 
-#ifdef FEAT_FKMAP
-    else if ((int *)varp == &p_altkeymap)
-    {
-	if (old_value != p_altkeymap)
-	{
-	    if (!p_altkeymap)
-	    {
-		p_hkmap = p_fkmap;
-		p_fkmap = 0;
-	    }
-	    else
-	    {
-		p_fkmap = p_hkmap;
-		p_hkmap = 0;
-	    }
-	    (void)init_chartab();
-	}
-    }
-
-    /*
-     * In case some second language keymapping options have changed, check
-     * and correct the setting in a consistent way.
-     */
-
-    /*
-     * If hkmap or fkmap are set, reset Arabic keymapping.
-     */
-    if ((p_hkmap || p_fkmap) && p_altkeymap)
-    {
-	p_altkeymap = p_fkmap;
-# ifdef FEAT_ARABIC
-	curwin->w_p_arab = FALSE;
-# endif
-	(void)init_chartab();
-    }
-
-    /*
-     * If hkmap set, reset Farsi keymapping.
-     */
-    if (p_hkmap && p_altkeymap)
-    {
-	p_altkeymap = 0;
-	p_fkmap = 0;
-# ifdef FEAT_ARABIC
-	curwin->w_p_arab = FALSE;
-# endif
-	(void)init_chartab();
-    }
-
-    /*
-     * If fkmap set, reset Hebrew keymapping.
-     */
-    if (p_fkmap && !p_altkeymap)
-    {
-	p_altkeymap = 1;
-	p_hkmap = 0;
-# ifdef FEAT_ARABIC
-	curwin->w_p_arab = FALSE;
-# endif
-	(void)init_chartab();
-    }
-#endif
-
 #ifdef FEAT_ARABIC
     if ((int *)varp == &curwin->w_p_arab)
     {
@@ -8863,12 +8794,6 @@ set_bool_option(
 	    /* Force-set the necessary keymap for arabic */
 	    set_option_value((char_u *)"keymap", 0L, (char_u *)"arabic",
 								   OPT_LOCAL);
-# endif
-# ifdef FEAT_FKMAP
-	    p_altkeymap = 0;
-	    p_hkmap = 0;
-	    p_fkmap = 0;
-	    (void)init_chartab();
 # endif
 	}
 	else
@@ -11133,12 +11058,6 @@ win_copy_options(win_T *wp_from, win_T *wp_to)
 {
     copy_winopt(&wp_from->w_onebuf_opt, &wp_to->w_onebuf_opt);
     copy_winopt(&wp_from->w_allbuf_opt, &wp_to->w_allbuf_opt);
-# ifdef FEAT_RIGHTLEFT
-#  ifdef FEAT_FKMAP
-    /* Is this right? */
-    wp_to->w_farsi = wp_from->w_farsi;
-#  endif
-# endif
 #if defined(FEAT_LINEBREAK)
     briopt_check(wp_to);
 #endif
@@ -12853,10 +12772,11 @@ check_ff_value(char_u *p)
     return check_opt_strings(p, p_ff_values, FALSE);
 }
 
-#ifdef FEAT_VARTABS
+#if defined(FEAT_VARTABS) || defined(PROTO)
 
 /*
  * Set the integer values corresponding to the string setting of 'vartabstop'.
+ * "array" will be set, caller must free it if needed.
  */
     int
 tabstop_set(char_u *var, int **array)
@@ -12899,6 +12819,8 @@ tabstop_set(char_u *var, int **array)
     }
 
     *array = (int *)alloc((unsigned) ((valcount + 1) * sizeof(int)));
+    if (*array == NULL)
+	return FALSE;
     (*array)[0] = valcount;
 
     t = 1;
