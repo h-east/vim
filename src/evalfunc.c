@@ -126,7 +126,7 @@ static void f_cosh(typval_T *argvars, typval_T *rettv);
 static void f_count(typval_T *argvars, typval_T *rettv);
 static void f_cscope_connection(typval_T *argvars, typval_T *rettv);
 static void f_cursor(typval_T *argsvars, typval_T *rettv);
-#ifdef WIN3264
+#ifdef MSWIN
 static void f_debugbreak(typval_T *argvars, typval_T *rettv);
 #endif
 static void f_deepcopy(typval_T *argvars, typval_T *rettv);
@@ -605,7 +605,7 @@ static struct fst
     {"count",		2, 4, f_count},
     {"cscope_connection",0,3, f_cscope_connection},
     {"cursor",		1, 3, f_cursor},
-#ifdef WIN3264
+#ifdef MSWIN
     {"debugbreak",	1, 1, f_debugbreak},
 #endif
     {"deepcopy",	1, 2, f_deepcopy},
@@ -2904,7 +2904,7 @@ f_cursor(typval_T *argvars, typval_T *rettv)
     rettv->vval.v_number = 0;
 }
 
-#ifdef WIN3264
+#ifdef MSWIN
 /*
  * "debugbreak()" function
  */
@@ -4157,7 +4157,7 @@ f_foreground(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
     if (gui.in_use)
 	gui_mch_set_foreground();
 #else
-# ifdef WIN32
+# ifdef MSWIN
     win32_set_foreground();
 # endif
 #endif
@@ -6172,7 +6172,7 @@ f_has(typval_T *argvars, typval_T *rettv)
 #ifdef VMS
 	"vms",
 #endif
-#ifdef WIN32
+#ifdef MSWIN
 	"win32",
 #endif
 #if defined(UNIX) && (defined(__CYGWIN32__) || defined(__CYGWIN__))
@@ -6202,7 +6202,7 @@ f_has(typval_T *argvars, typval_T *rettv)
 #endif
 #ifdef FEAT_BEVAL_GUI
 	"balloon_eval",
-# ifndef FEAT_GUI_W32 /* other GUIs always have multiline balloons */
+# ifndef FEAT_GUI_MSWIN /* other GUIs always have multiline balloons */
 	"balloon_multiline",
 # endif
 #endif
@@ -6216,7 +6216,7 @@ f_has(typval_T *argvars, typval_T *rettv)
 # endif
 #endif
 #if defined(FEAT_BROWSE) && (defined(USE_FILE_CHOOSER) \
-	|| defined(FEAT_GUI_W32) \
+	|| defined(FEAT_GUI_MSWIN) \
 	|| defined(FEAT_GUI_MOTIF))
 	"browsefilter",
 #endif
@@ -6345,7 +6345,7 @@ f_has(typval_T *argvars, typval_T *rettv)
 #ifdef FEAT_GUI_PHOTON
 	"gui_photon",
 #endif
-#ifdef FEAT_GUI_W32
+#ifdef FEAT_GUI_MSWIN
 	"gui_win32",
 #endif
 #ifdef FEAT_HANGULIN
@@ -6549,7 +6549,7 @@ f_has(typval_T *argvars, typval_T *rettv)
 #ifdef FEAT_TERMGUICOLORS
 	"termguicolors",
 #endif
-#if defined(FEAT_TERMINAL) && !defined(WIN3264)
+#if defined(FEAT_TERMINAL) && !defined(MSWIN)
 	"terminal",
 #endif
 #ifdef TERMINFO
@@ -6681,7 +6681,7 @@ f_has(typval_T *argvars, typval_T *rettv)
 	    n = stdout_isatty;
 	else if (STRICMP(name, "multi_byte_encoding") == 0)
 	    n = has_mbyte;
-#if defined(FEAT_BEVAL) && defined(FEAT_GUI_W32)
+#if defined(FEAT_BEVAL) && defined(FEAT_GUI_MSWIN)
 	else if (STRICMP(name, "balloon_multiline") == 0)
 	    n = multiline_balloon_available();
 #endif
@@ -6754,11 +6754,11 @@ f_has(typval_T *argvars, typval_T *rettv)
 	else if (STRICMP(name, "netbeans_enabled") == 0)
 	    n = netbeans_active();
 #endif
-#if defined(FEAT_TERMINAL) && defined(WIN3264)
+#if defined(FEAT_TERMINAL) && defined(MSWIN)
 	else if (STRICMP(name, "terminal") == 0)
 	    n = terminal_enabled();
 #endif
-#if defined(FEAT_TERMINAL) && defined(WIN3264)
+#if defined(FEAT_TERMINAL) && defined(MSWIN)
 	else if (STRICMP(name, "conpty") == 0)
 	    n = use_conpty();
 #endif
@@ -9332,7 +9332,7 @@ list2proftime(typval_T *arg, proftime_T *tm)
 	return FAIL;
     n1 = list_find_nr(arg->vval.v_list, 0L, &error);
     n2 = list_find_nr(arg->vval.v_list, 1L, &error);
-# ifdef WIN3264
+# ifdef MSWIN
     tm->HighPart = n1;
     tm->LowPart = n2;
 # else
@@ -9377,7 +9377,7 @@ f_reltime(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
     {
 	long	n1, n2;
 
-# ifdef WIN3264
+# ifdef MSWIN
 	n1 = res.HighPart;
 	n2 = res.LowPart;
 # else
@@ -9466,7 +9466,7 @@ remote_common(typval_T *argvars, typval_T *rettv, int expr)
     char_u	*r = NULL;
     char_u	buf[NUMBUFLEN];
     int		timeout = 0;
-# ifdef WIN32
+# ifdef MSWIN
     HWND	w;
 # else
     Window	w;
@@ -9487,7 +9487,7 @@ remote_common(typval_T *argvars, typval_T *rettv, int expr)
     if (server_name == NULL)
 	return;		/* type error; errmsg already given */
     keys = tv_get_string_buf(&argvars[1], buf);
-# ifdef WIN32
+# ifdef MSWIN
     if (serverSendToVim(server_name, keys, &r, &w, expr, timeout, TRUE) < 0)
 # else
     if (serverSendToVim(X_DISPLAY, server_name, keys, &r, &w, expr, timeout,
@@ -9545,7 +9545,7 @@ f_remote_expr(typval_T *argvars UNUSED, typval_T *rettv)
 f_remote_foreground(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
 {
 #ifdef FEAT_CLIENTSERVER
-# ifdef WIN32
+# ifdef MSWIN
     /* On Win32 it's done in this application. */
     {
 	char_u	*server_name = tv_get_string_chk(&argvars[0]);
@@ -9572,7 +9572,7 @@ f_remote_peek(typval_T *argvars UNUSED, typval_T *rettv)
 #ifdef FEAT_CLIENTSERVER
     dictitem_T	v;
     char_u	*s = NULL;
-# ifdef WIN32
+# ifdef MSWIN
     long_u	n = 0;
 # endif
     char_u	*serverid;
@@ -9588,7 +9588,7 @@ f_remote_peek(typval_T *argvars UNUSED, typval_T *rettv)
 	rettv->vval.v_number = -1;
 	return;		/* type error; errmsg already given */
     }
-# ifdef WIN32
+# ifdef MSWIN
     sscanf((const char *)serverid, SCANF_HEX_LONG_U, &n);
     if (n == 0)
 	rettv->vval.v_number = -1;
@@ -9632,7 +9632,7 @@ f_remote_read(typval_T *argvars UNUSED, typval_T *rettv)
     if (serverid != NULL && !check_restricted() && !check_secure())
     {
 	int timeout = 0;
-# ifdef WIN32
+# ifdef MSWIN
 	/* The server's HWND is encoded in the 'id' parameter */
 	long_u		n = 0;
 # endif
@@ -9640,7 +9640,7 @@ f_remote_read(typval_T *argvars UNUSED, typval_T *rettv)
 	if (argvars[1].v_type != VAR_UNKNOWN)
 	    timeout = tv_get_number(&argvars[1]);
 
-# ifdef WIN32
+# ifdef MSWIN
 	sscanf((char *)serverid, SCANF_HEX_LONG_U, &n);
 	if (n != 0)
 	    r = serverGetReply((HWND)n, FALSE, TRUE, TRUE, timeout);
@@ -10812,7 +10812,7 @@ f_serverlist(typval_T *argvars UNUSED, typval_T *rettv)
     char_u	*r = NULL;
 
 #ifdef FEAT_CLIENTSERVER
-# ifdef WIN32
+# ifdef MSWIN
     r = serverGetVimNames();
 # else
     make_connection();

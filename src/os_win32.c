@@ -10,7 +10,7 @@
  * os_win32.c
  *
  * Used for both the console version and the Win32 GUI.  A lot of code is for
- * the console version only, so there is a lot of "#ifndef FEAT_GUI_W32".
+ * the console version only, so there is a lot of "#ifndef FEAT_GUI_MSWIN".
  *
  * Win32 (Windows NT and Windows 95) system-dependent routines.
  * Portions lifted from the Win32 SDK samples, the MSDOS-dependent code,
@@ -45,7 +45,7 @@
 #endif
 
 #ifndef PROTO
-# if defined(FEAT_TITLE) && !defined(FEAT_GUI_W32)
+# if defined(FEAT_TITLE) && !defined(FEAT_GUI_MSWIN)
 #  include <shellapi.h>
 # endif
 #endif
@@ -151,7 +151,7 @@ typedef int LPSECURITY_ATTRIBUTES;
 # define wcsicmp(a, b) wcscmpi((a), (b))
 #endif
 
-#ifndef FEAT_GUI_W32
+#ifndef FEAT_GUI_MSWIN
 /* Win32 Console handles for input and output */
 static HANDLE g_hConIn  = INVALID_HANDLE_VALUE;
 static HANDLE g_hConOut = INVALID_HANDLE_VALUE;
@@ -193,7 +193,7 @@ static int conpty_working = 0;
 static int conpty_stable = 0;
 static void vtp_flag_init();
 
-#ifndef FEAT_GUI_W32
+#ifndef FEAT_GUI_MSWIN
 static int vtp_working = 0;
 static void vtp_init();
 static void vtp_exit();
@@ -227,7 +227,7 @@ static void reset_console_color_rgb(void);
 # define ENABLE_VIRTUAL_TERMINAL_PROCESSING 0x0004
 #endif
 
-#ifndef FEAT_GUI_W32
+#ifndef FEAT_GUI_MSWIN
 static int suppress_winsize = 1;	/* don't fiddle with console */
 #endif
 
@@ -235,7 +235,7 @@ static char_u *exe_path = NULL;
 
 static BOOL win8_or_later = FALSE;
 
-#ifndef FEAT_GUI_W32
+#ifndef FEAT_GUI_MSWIN
 /* Dynamic loading for portability */
 typedef struct _DYN_CONSOLE_SCREEN_BUFFER_INFOEX
 {
@@ -284,7 +284,7 @@ get_build_number(void)
     return ver;
 }
 
-#ifndef FEAT_GUI_W32
+#ifndef FEAT_GUI_MSWIN
 /*
  * Version of ReadConsoleInput() that works with IME.
  * Works around problems on Windows 8.
@@ -830,7 +830,7 @@ PlatformId(void)
     }
 }
 
-#ifndef FEAT_GUI_W32
+#ifndef FEAT_GUI_MSWIN
 
 #define SHIFT  (SHIFT_PRESSED)
 #define CTRL   (RIGHT_CTRL_PRESSED | LEFT_CTRL_PRESSED)
@@ -1122,7 +1122,7 @@ decode_key_event(
 # pragma optimize("", on)
 #endif
 
-#endif /* FEAT_GUI_W32 */
+#endif /* FEAT_GUI_MSWIN */
 
 
 #ifdef FEAT_MOUSE
@@ -1130,7 +1130,7 @@ decode_key_event(
 /*
  * For the GUI the mouse handling is in gui_w32.c.
  */
-# ifdef FEAT_GUI_W32
+# ifdef FEAT_GUI_MSWIN
     void
 mch_setmouse(int on UNUSED)
 {
@@ -1441,7 +1441,7 @@ decode_mouse_event(
     return TRUE;
 }
 
-# endif /* FEAT_GUI_W32 */
+# endif /* FEAT_GUI_MSWIN */
 #endif /* FEAT_MOUSE */
 
 
@@ -1481,7 +1481,7 @@ mch_update_cursor(void)
 }
 #endif
 
-#ifndef FEAT_GUI_W32	    /* this isn't used for the GUI */
+#ifndef FEAT_GUI_MSWIN	    /* this isn't used for the GUI */
 /*
  * Handle FOCUS_EVENT.
  */
@@ -1491,6 +1491,8 @@ handle_focus_event(INPUT_RECORD ir)
     g_fJustGotFocus = ir.Event.FocusEvent.bSetFocus;
     ui_focus_change((int)g_fJustGotFocus);
 }
+
+static void ResizeConBuf(HANDLE hConsole, COORD coordScreen);
 
 /*
  * Wait until console input from keyboard or mouse is available,
@@ -1657,11 +1659,18 @@ WaitForChar(long msec, int ignore_input)
 		handle_focus_event(ir);
 	    else if (ir.EventType == WINDOW_BUFFER_SIZE_EVENT)
 	    {
-		/* Only call shell_resized() when the size actually change to
-		 * avoid the screen is cleard. */
-		if (ir.Event.WindowBufferSizeEvent.dwSize.X != Columns
-			|| ir.Event.WindowBufferSizeEvent.dwSize.Y != Rows)
+		COORD dwSize = ir.Event.WindowBufferSizeEvent.dwSize;
+
+		// Only call shell_resized() when the size actually change to
+		// avoid the screen is cleard.
+		if (dwSize.X != Columns || dwSize.Y != Rows)
+		{
+		    CONSOLE_SCREEN_BUFFER_INFO csbi;
+		    GetConsoleScreenBufferInfo(g_hConOut, &csbi);
+		    dwSize.Y = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
+		    ResizeConBuf(g_hConOut, dwSize);
 		    shell_resized();
+		}
 	    }
 #ifdef FEAT_MOUSE
 	    else if (ir.EventType == MOUSE_EVENT
@@ -1766,7 +1775,7 @@ tgetch(int *pmodifiers, WCHAR *pch2)
 #endif
     }
 }
-#endif /* !FEAT_GUI_W32 */
+#endif /* !FEAT_GUI_MSWIN */
 
 
 /*
@@ -1784,7 +1793,7 @@ mch_inchar(
     long	time UNUSED,
     int		tb_change_cnt UNUSED)
 {
-#ifndef FEAT_GUI_W32	    /* this isn't used for the GUI */
+#ifndef FEAT_GUI_MSWIN	    /* this isn't used for the GUI */
 
     int		len;
     int		c;
@@ -1997,9 +2006,9 @@ theend:
     }
     return len;
 
-#else /* FEAT_GUI_W32 */
+#else /* FEAT_GUI_MSWIN */
     return 0;
-#endif /* FEAT_GUI_W32 */
+#endif /* FEAT_GUI_MSWIN */
 }
 
 #ifndef PROTO
@@ -2114,7 +2123,7 @@ bad_param_handler(const wchar_t *expression,
 # define SET_INVALID_PARAM_HANDLER
 #endif
 
-#ifdef FEAT_GUI_W32
+#ifdef FEAT_GUI_MSWIN
 
 /*
  * GUI version of mch_init().
@@ -2187,7 +2196,7 @@ mch_init(void)
 }
 
 
-#else /* FEAT_GUI_W32 */
+#else /* FEAT_GUI_MSWIN */
 
 #define SRWIDTH(sr) ((sr).Right - (sr).Left + 1)
 #define SRHEIGHT(sr) ((sr).Bottom - (sr).Top + 1)
@@ -2742,7 +2751,7 @@ mch_exit(int r)
 
     exit(r);
 }
-#endif /* !FEAT_GUI_W32 */
+#endif /* !FEAT_GUI_MSWIN */
 
 /*
  * Do we have an interactive window?
@@ -2754,7 +2763,7 @@ mch_check_win(
 {
     get_exe_name();
 
-#ifdef FEAT_GUI_W32
+#ifdef FEAT_GUI_MSWIN
     return OK;	    /* GUI always has a tty */
 #else
     if (isatty(1))
@@ -3843,7 +3852,7 @@ mch_free_acl(vim_acl_T acl)
 #endif
 }
 
-#ifndef FEAT_GUI_W32
+#ifndef FEAT_GUI_MSWIN
 
 /*
  * handler for ctrl-break, ctrl-c interrupts, and fatal events.
@@ -4159,7 +4168,7 @@ mch_set_winsize_now(void)
     }
     suppress_winsize = 0;
 }
-#endif /* FEAT_GUI_W32 */
+#endif /* FEAT_GUI_MSWIN */
 
     static BOOL
 vim_create_process(
@@ -4240,7 +4249,7 @@ vim_shell_execute(
 }
 
 
-#if defined(FEAT_GUI_W32) || defined(PROTO)
+#if defined(FEAT_GUI_MSWIN) || defined(PROTO)
 
 /*
  * Specialised version of system() for Win32 GUI mode.
@@ -5115,7 +5124,7 @@ mch_call_shell(
 	    else
 	    {
 		x = -1;
-#ifdef FEAT_GUI_W32
+#ifdef FEAT_GUI_MSWIN
 		emsg(_("E371: Command not found"));
 #endif
 	    }
@@ -5135,7 +5144,7 @@ mch_call_shell(
 	else
 	{
 	    cmdlen = (
-#ifdef FEAT_GUI_W32
+#ifdef FEAT_GUI_MSWIN
 		(!p_stmp ? 0 : STRLEN(vimrun_path)) +
 #endif
 		STRLEN(p_sh) + STRLEN(p_shcf) + STRLEN(cmd) + 10);
@@ -5143,7 +5152,7 @@ mch_call_shell(
 	    newcmd = lalloc(cmdlen, TRUE);
 	    if (newcmd != NULL)
 	    {
-#if defined(FEAT_GUI_W32)
+#if defined(FEAT_GUI_MSWIN)
 		if (need_vimrun_warning)
 		{
 		    char *msg = _("VIMRUN.EXE not found in your $PATH.\n"
@@ -5187,7 +5196,7 @@ mch_call_shell(
 
     /* Print the return value, unless "vimrun" was used. */
     if (x != 0 && !(options & SHELL_SILENT) && !emsg_silent
-#if defined(FEAT_GUI_W32)
+#if defined(FEAT_GUI_MSWIN)
 		&& ((options & SHELL_DOOUT) || s_dont_use_vimrun || !p_stmp)
 #endif
 	    )
@@ -5727,7 +5736,7 @@ mch_clear_job(job_T *job)
 #endif
 
 
-#ifndef FEAT_GUI_W32
+#ifndef FEAT_GUI_MSWIN
 
 /*
  * Start termcap mode
@@ -5843,10 +5852,10 @@ termcap_mode_end(void)
 
     g_fTermcapMode = FALSE;
 }
-#endif /* FEAT_GUI_W32 */
+#endif /* FEAT_GUI_MSWIN */
 
 
-#ifdef FEAT_GUI_W32
+#ifdef FEAT_GUI_MSWIN
     void
 mch_write(
     char_u  *s UNUSED,
@@ -6031,7 +6040,10 @@ insert_lines(unsigned cLines)
 
     {
 	fill.Char.AsciiChar = ' ';
-	fill.Attributes = g_attrDefault;
+	if (!USE_VTP)
+	    fill.Attributes = g_attrCurrent;
+	else
+	    fill.Attributes = g_attrDefault;
 
 	set_console_color_rgb();
 
@@ -6085,7 +6097,10 @@ delete_lines(unsigned cLines)
 
     {
 	fill.Char.AsciiChar = ' ';
-	fill.Attributes = g_attrDefault;
+	if (!USE_VTP)
+	    fill.Attributes = g_attrCurrent;
+	else
+	    fill.Attributes = g_attrDefault;
 
 	set_console_color_rgb();
 
@@ -6321,7 +6336,7 @@ write_chars(
 	     * character was written, otherwise we get stuck. */
 	    if (WriteConsoleOutputCharacterW(g_hConOut, unicodebuf, length,
 			coord, &cchwritten) == 0
-		    || cchwritten == 0)
+		    || cchwritten == 0 || cchwritten == (DWORD)-1)
 		cchwritten = 1;
 	}
 	else
@@ -6355,7 +6370,7 @@ write_chars(
 	     * character was written, otherwise we get stuck. */
 	    if (WriteConsoleOutputCharacter(g_hConOut, (LPCSTR)pchBuf, cbToWrite,
 			coord, &written) == 0
-		    || written == 0)
+		    || written == 0 || written == (DWORD)-1)
 		written = 1;
 	}
 	else
@@ -6677,7 +6692,7 @@ mch_write(
 #endif
 }
 
-#endif /* FEAT_GUI_W32 */
+#endif /* FEAT_GUI_MSWIN */
 
 
 /*
@@ -6688,7 +6703,7 @@ mch_delay(
     long    msec,
     int	    ignoreinput UNUSED)
 {
-#ifdef FEAT_GUI_W32
+#ifdef FEAT_GUI_MSWIN
     Sleep((int)msec);	    /* never wait for input */
 #else /* Console */
     if (ignoreinput)
@@ -6756,7 +6771,7 @@ mch_remove(char_u *name)
     void
 mch_breakcheck(int force)
 {
-#ifndef FEAT_GUI_W32	    /* never used */
+#ifndef FEAT_GUI_MSWIN	    /* never used */
     if (g_fCtrlCPressed || g_fCBrkPressed)
     {
 	ctrl_break_was_pressed = g_fCBrkPressed;
@@ -7681,7 +7696,7 @@ mch_setenv(char *var, char *value, int x)
 vtp_flag_init(void)
 {
     DWORD   ver = get_build_number();
-#ifndef FEAT_GUI_W32
+#ifndef FEAT_GUI_MSWIN
     DWORD   mode;
     HANDLE  out;
 
@@ -7701,7 +7716,7 @@ vtp_flag_init(void)
 
 }
 
-#ifndef FEAT_GUI_W32
+#if !defined(FEAT_GUI_MSWIN) || defined(PROTO)
 
     static void
 vtp_init(void)
@@ -7925,3 +7940,28 @@ is_conpty_stable(void)
 {
     return conpty_stable;
 }
+
+#if !defined(FEAT_GUI_MSWIN) || defined(PROTO)
+    void
+resize_console_buf(void)
+{
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    COORD coord;
+    SMALL_RECT newsize;
+
+    if (GetConsoleScreenBufferInfo(g_hConOut, &csbi))
+    {
+	coord.X = SRWIDTH(csbi.srWindow);
+	coord.Y = SRHEIGHT(csbi.srWindow);
+	SetConsoleScreenBufferSize(g_hConOut, coord);
+
+	newsize.Left = 0;
+	newsize.Top = 0;
+	newsize.Right = coord.X - 1;
+	newsize.Bottom = coord.Y - 1;
+	SetConsoleWindowInfo(g_hConOut, TRUE, &newsize);
+
+	SetConsoleScreenBufferSize(g_hConOut, coord);
+    }
+}
+#endif
