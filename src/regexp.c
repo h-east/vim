@@ -2228,7 +2228,7 @@ regatom(int *flagp)
 				  default:  i = -1; break;
 			      }
 
-			      if (i < 0)
+			      if (i < 0 || i > INT_MAX)
 				  EMSG2_RET_NULL(
 					_("E678: Invalid character after %s%%[dxouU]"),
 					reg_magic == MAGIC_ALL);
@@ -3293,7 +3293,7 @@ coll_get_char(void)
 	case 'u': nr = gethexchrs(4); break;
 	case 'U': nr = gethexchrs(8); break;
     }
-    if (nr < 0)
+    if (nr < 0 || nr > INT_MAX)
     {
 	/* If getting the number fails be backwards compatible: the character
 	 * is a backslash. */
@@ -7969,6 +7969,7 @@ vim_regcomp(char_u *expr_arg, int re_flags)
 {
     regprog_T   *prog = NULL;
     char_u	*expr = expr_arg;
+    int		save_called_emsg;
 
     regexp_engine = p_re;
 
@@ -8004,6 +8005,8 @@ vim_regcomp(char_u *expr_arg, int re_flags)
     /*
      * First try the NFA engine, unless backtracking was requested.
      */
+    save_called_emsg = called_emsg;
+    called_emsg = FALSE;
     if (regexp_engine != BACKTRACKING_ENGINE)
 	prog = nfa_regengine.regcomp(expr,
 		re_flags + (regexp_engine == AUTOMATIC_ENGINE ? RE_AUTO : 0));
@@ -8032,13 +8035,15 @@ vim_regcomp(char_u *expr_arg, int re_flags)
 	 * If the NFA engine failed, try the backtracking engine.
 	 * The NFA engine also fails for patterns that it can't handle well
 	 * but are still valid patterns, thus a retry should work.
+	 * But don't try if an error message was given.
 	 */
-	if (regexp_engine == AUTOMATIC_ENGINE)
+	if (regexp_engine == AUTOMATIC_ENGINE && !called_emsg)
 	{
 	    regexp_engine = BACKTRACKING_ENGINE;
 	    prog = bt_regengine.regcomp(expr, re_flags);
 	}
     }
+    called_emsg |= save_called_emsg;
 
     if (prog != NULL)
     {
