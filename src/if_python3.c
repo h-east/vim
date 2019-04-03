@@ -799,10 +799,11 @@ static struct PyModuleDef vimmodule;
  */
 #include "if_py_both.h"
 
+// NOTE: Must always be used at the start of a block, since it declares "name".
 #define GET_ATTR_STRING(name, nameobj) \
     char	*name = ""; \
     if (PyUnicode_Check(nameobj)) \
-	name = _PyUnicode_AsString(nameobj)
+	name = (char *)_PyUnicode_AsString(nameobj)
 
 #define PY3OBJ_DELETED(obj) (obj->ob_base.ob_refcnt<=0)
 
@@ -1235,9 +1236,7 @@ BufferSubscript(PyObject *self, PyObject* idx)
 	      (Py_ssize_t)((BufferObject *)(self))->buf->b_ml.ml_line_count,
 	      &start, &stop,
 	      &step, &slicelen) < 0)
-	{
 	    return NULL;
-	}
 	return BufferSlice((BufferObject *)(self), start, stop);
     }
     else
@@ -1267,9 +1266,7 @@ BufferAsSubscript(PyObject *self, PyObject* idx, PyObject* val)
 	      (Py_ssize_t)((BufferObject *)(self))->buf->b_ml.ml_line_count,
 	      &start, &stop,
 	      &step, &slicelen) < 0)
-	{
 	    return -1;
-	}
 	return RBAsSlice((BufferObject *)(self), start, stop, val, 1,
 			  (PyInt)((BufferObject *)(self))->buf->b_ml.ml_line_count,
 			  NULL);
@@ -1351,9 +1348,7 @@ RangeSubscript(PyObject *self, PyObject* idx)
 		((RangeObject *)(self))->end-((RangeObject *)(self))->start+1,
 		&start, &stop,
 		&step, &slicelen) < 0)
-	{
 	    return NULL;
-	}
 	return RangeSlice((RangeObject *)(self), start, stop);
     }
     else
@@ -1370,7 +1365,8 @@ RangeAsSubscript(PyObject *self, PyObject *idx, PyObject *val)
     {
 	long n = PyLong_AsLong(idx);
 	return RangeAsItem(self, n, val);
-    } else if (PySlice_Check(idx))
+    }
+    else if (PySlice_Check(idx))
     {
 	Py_ssize_t start, stop, step, slicelen;
 
@@ -1378,9 +1374,7 @@ RangeAsSubscript(PyObject *self, PyObject *idx, PyObject *val)
 		((RangeObject *)(self))->end-((RangeObject *)(self))->start+1,
 		&start, &stop,
 		&step, &slicelen) < 0)
-	{
 	    return -1;
-	}
 	return RangeAsSlice(self, start, stop, val);
     }
     else
@@ -1662,35 +1656,21 @@ LineToString(const char *str)
 }
 
     void
-do_py3eval (char_u *str, typval_T *rettv)
+do_py3eval(char_u *str, typval_T *rettv)
 {
     DoPyCommand((char *) str,
 	    (rangeinitializer) init_range_eval,
 	    (runner) run_eval,
 	    (void *) rettv);
-    switch(rettv->v_type)
+    if (rettv->v_type == VAR_UNKNOWN)
     {
-	case VAR_DICT: ++rettv->vval.v_dict->dv_refcount; break;
-	case VAR_LIST: ++rettv->vval.v_list->lv_refcount; break;
-	case VAR_FUNC: func_ref(rettv->vval.v_string);    break;
-	case VAR_PARTIAL: ++rettv->vval.v_partial->pt_refcount; break;
-	case VAR_UNKNOWN:
-	    rettv->v_type = VAR_NUMBER;
-	    rettv->vval.v_number = 0;
-	    break;
-	case VAR_NUMBER:
-	case VAR_STRING:
-	case VAR_FLOAT:
-	case VAR_SPECIAL:
-	case VAR_JOB:
-	case VAR_CHANNEL:
-	case VAR_BLOB:
-	    break;
+	rettv->v_type = VAR_NUMBER;
+	rettv->vval.v_number = 0;
     }
 }
 
     int
-set_ref_in_python3 (int copyID)
+set_ref_in_python3(int copyID)
 {
     return set_ref_in_py(copyID);
 }

@@ -2382,16 +2382,22 @@ win_close(win_T *win, int free_buf)
     }
 
 #ifdef FEAT_GUI
-    /* Avoid trouble with scrollbars that are going to be deleted in
-     * win_free(). */
+    // Avoid trouble with scrollbars that are going to be deleted in
+    // win_free().
     if (gui.in_use)
 	out_flush();
 #endif
 
 #ifdef FEAT_SYN_HL
-    /* Free independent synblock before the buffer is freed. */
+    // Free independent synblock before the buffer is freed.
     if (win->w_buffer != NULL)
 	reset_synblock(win);
+#endif
+
+#ifdef FEAT_QUICKFIX
+    // When the quickfix/location list window is closed, unlist the buffer.
+    if (win->w_buffer != NULL && bt_quickfix(win->w_buffer))
+	win->w_buffer->b_p_bl = FALSE;
 #endif
 
     /*
@@ -2671,10 +2677,10 @@ winframe_remove(
 	    {
 		if (frp != NULL)
 		{
-		    if (frp->fr_win != NULL && !frp->fr_win->w_p_wfh)
+		    if (!frame_fixed_height(frp))
 		    {
 			frp2 = frp;
-			wp = frp->fr_win;
+			wp = frame2win(frp2);
 			break;
 		    }
 		    frp = frp->fr_prev;
@@ -2708,10 +2714,10 @@ winframe_remove(
 	    {
 		if (frp != NULL)
 		{
-		    if (frp->fr_win != NULL && !frp->fr_win->w_p_wfw)
+		    if (!frame_fixed_width(frp))
 		    {
 			frp2 = frp;
-			wp = frp->fr_win;
+			wp = frame2win(frp2);
 			break;
 		    }
 		    frp = frp->fr_prev;

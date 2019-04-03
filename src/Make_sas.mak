@@ -115,6 +115,7 @@ SRC = \
 	hardcopy.c \
 	hashtab.c \
 	indent.c \
+	insexpand.c \
 	json.c \
 	list.c \
 	main.c \
@@ -176,6 +177,7 @@ OBJ = \
 	hardcopy.o \
 	hashtab.o \
 	indent.o \
+	insexpand.o \
 	json.o \
 	list.o \
 	main.o \
@@ -237,6 +239,7 @@ PRO = \
 	proto/hardcopy.pro \
 	proto/hashtab.pro \
 	proto/indent.pro \
+	proto/insexpand.pro \
 	proto/json.pro \
 	proto/list.pro \
 	proto/main.pro \
@@ -377,6 +380,8 @@ hashtab.o:		hashtab.c
 proto/hashtab.pro:	hashtab.c
 indent.o:		indent.c
 proto/indent.pro:	indent.c
+insexpand.o:		insexpand.c
+proto/insexpand.pro:	insexpand.c
 json.o:			json.c
 proto/json.pro:		json.c
 list.o:			list.c

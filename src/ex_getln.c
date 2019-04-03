@@ -11,6 +11,8 @@
  * ex_getln.c: Functions for entering and editing an Ex command line.
  */
 
+// TODO: Move the CLPUM code to new file.  Like insexpand.c.
+
 #include "vim.h"
 
 #ifndef MAX
@@ -84,6 +86,16 @@ static int	cmd_hkmap = 0;	/* Hebrew mapping during command line */
 #ifdef FEAT_CLPUM
 static char e_complwin[] = N_("E839: Completion function changed window");
 static char e_compldel[] = N_("E840: Completion function deleted text");
+
+/*
+ * Array indexes used for cp_text[].
+ */
+#define CPT_ABBR	0	// "abbr"
+#define CPT_MENU	1	// "menu"
+#define CPT_KIND	2	// "kind"
+#define CPT_INFO	3	// "info"
+#define CPT_USER_DATA	4	// "user data"
+#define CPT_COUNT	5	// Number of entries
 
 /*
  * Structure used to store one match for insert completion.
@@ -1160,9 +1172,8 @@ getcmdline_int(
 	/* Get a character.  Ignore K_IGNORE and K_NOP, they should not do
 	 * anything, such as stop completion. */
 	do
-	{
 	    c = safe_vgetc();
-	} while (c == K_IGNORE || c == K_NOP);
+	while (c == K_IGNORE || c == K_NOP);
 
 	if (KeyTyped)
 	{
@@ -3204,9 +3215,8 @@ redraw:
 		    if (*p == TAB)
 		    {
 			do
-			{
 			    msg_putchar(' ');
-			} while (++vcol % 8);
+			while (++vcol % 8);
 			++p;
 		    }
 		    else
@@ -3279,9 +3289,8 @@ redraw:
 	{
 	    /* Don't use chartabsize(), 'ts' can be different */
 	    do
-	    {
 		msg_putchar(' ');
-	    } while (++vcol % 8);
+	    while (++vcol % 8);
 	}
 	else
 	{
