@@ -6647,6 +6647,7 @@ f_has(typval_T *argvars, typval_T *rettv)
 #endif
 	"vimscript-1",
 	"vimscript-2",
+	"vimscript-3",
 	"virtualedit",
 	"visual",
 	"visualextra",
@@ -9347,10 +9348,8 @@ f_readdir(typval_T *argvars, typval_T *rettv)
     }
 #endif
 
-    rettv->vval.v_list = list_alloc();
-    if (!failed && rettv->vval.v_list != NULL)
+    if (!failed && rettv->vval.v_list != NULL && ga.ga_len > 0)
     {
-	++rettv->vval.v_list->lv_refcount;
 	sort_strings((char_u **)ga.ga_data, ga.ga_len);
 	for (i = 0; i < ga.ga_len; i++)
 	{
@@ -9358,10 +9357,7 @@ f_readdir(typval_T *argvars, typval_T *rettv)
 	    list_append_string(rettv->vval.v_list, p, -1);
 	}
     }
-    for (i = 0; i < ga.ga_len; i++)
-	vim_free(((char_u **)ga.ga_data)[i]);
-
-    ga_clear(&ga);
+    ga_clear_strings(&ga);
 }
 
 /*

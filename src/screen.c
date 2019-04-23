@@ -795,7 +795,7 @@ update_screen(int type_arg)
 
     /* Clear or redraw the command line.  Done last, because scrolling may
      * mess up the command line. */
-    if (clear_cmdline || redraw_cmdline)
+    if (clear_cmdline || redraw_cmdline || redraw_mode)
 	showmode();
 
     if (no_update)
@@ -862,7 +862,7 @@ update_prepare(void)
     static void
 update_finish(void)
 {
-    if (redraw_cmdline)
+    if (redraw_cmdline || redraw_mode)
 	showmode();
 
 # ifdef FEAT_SEARCH_EXTRA
@@ -8649,6 +8649,18 @@ check_for_delay(int check_msg_scroll)
 }
 
 /*
+ * Init TabPageIdxs[] to zero: Clicking outside of tabs has no effect.
+ */
+    static void
+clear_TabPageIdxs(void)
+{
+    int		scol;
+
+    for (scol = 0; scol < Columns; ++scol)
+	TabPageIdxs[scol] = 0;
+}
+
+/*
  * screen_valid -  allocate screen buffers if size changed
  *   If "doclear" is TRUE: clear screen if it has been resized.
  *	Returns TRUE if there is a valid screen to write to.
@@ -8909,7 +8921,6 @@ give_up:
     must_redraw = CLEAR;	/* need to clear the screen later */
     if (doclear)
 	screenclear2();
-
 #ifdef FEAT_GUI
     else if (gui.in_use
 	    && !gui.starting
@@ -8929,6 +8940,7 @@ give_up:
 	    msg_col = Columns - 1;	/* put cursor at last column */
     }
 #endif
+    clear_TabPageIdxs();
 
     entered = FALSE;
     --RedrawingDisabled;
@@ -10126,7 +10138,7 @@ skip_showmode()
 	    || !redrawing()
 	    || (char_avail() && !KeyTyped))
     {
-	redraw_cmdline = TRUE;		// show mode later
+	redraw_mode = TRUE;		// show mode later
 	return TRUE;
     }
     return FALSE;
@@ -10138,6 +10150,7 @@ skip_showmode()
  * If clear_cmdline is TRUE, clear the rest of the cmdline.
  * If clear_cmdline is FALSE there may be a message there that needs to be
  * cleared only if a mode is shown.
+ * If redraw_mode is TRUE show or clear the mode.
  * Return the length of the message (0 if no message).
  */
     int
@@ -10316,7 +10329,7 @@ showmode(void)
 	}
 
 	mode_displayed = TRUE;
-	if (need_clear || clear_cmdline)
+	if (need_clear || clear_cmdline || redraw_mode)
 	    msg_clr_eos();
 	msg_didout = FALSE;		/* overwrite this message */
 	length = msg_col;
@@ -10326,6 +10339,11 @@ showmode(void)
     else if (clear_cmdline && msg_silent == 0)
 	/* Clear the whole command line.  Will reset "clear_cmdline". */
 	msg_clr_cmdline();
+    else if (redraw_mode)
+    {
+	msg_pos_mode();
+	msg_clr_eos();
+    }
 
 #ifdef FEAT_CMDL_INFO
     /* In Visual mode the size of the selected area must be redrawn. */
@@ -10338,6 +10356,7 @@ showmode(void)
 	win_redr_ruler(lastwin, TRUE, FALSE);
 #endif
     redraw_cmdline = FALSE;
+    redraw_mode = FALSE;
     clear_cmdline = FALSE;
 
     return length;
@@ -10450,10 +10469,7 @@ draw_tabline(void)
 	return;
 
 #if defined(FEAT_STL_OPT)
-
-    /* Init TabPageIdxs[] to zero: Clicking outside of tabs has no effect. */
-    for (scol = 0; scol < Columns; ++scol)
-	TabPageIdxs[scol] = 0;
+    clear_TabPageIdxs();
 
     /* Use the 'tabline' option if it's set. */
     if (*p_tal != NUL)

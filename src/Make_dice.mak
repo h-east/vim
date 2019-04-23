@@ -34,6 +34,7 @@ SRC = \
 	clpum.c \
 	crypt.c \
 	crypt_zip.c \
+	debugger.c \
 	dict.c \
 	diff.c \
 	digraph.c \
@@ -95,6 +96,7 @@ OBJ =	o/arabic.o \
 	o/clpum.o \
 	o/crypt.o \
 	o/crypt_zip.o \
+	o/debugger.o \
 	o/dict.o \
 	o/diff.o \
 	o/digraph.o \
@@ -182,6 +184,8 @@ o/clpum.o:	clpum.c  $(SYMS)
 o/crypt.o:	crypt.c  $(SYMS)
 
 o/crypt_zip.o:	crypt_zip.c  $(SYMS)
+
+o/debugger.o:	debugger.c  $(SYMS)
 
 o/dict.o:	dict.c	$(SYMS)
 

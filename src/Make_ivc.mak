@@ -218,6 +218,7 @@ LINK32_OBJS= \
 	"$(INTDIR)/clpum.obj" \
 	"$(INTDIR)/crypt.obj" \
 	"$(INTDIR)/crypt_zip.obj" \
+	"$(INTDIR)/debugger.obj" \
 	"$(INTDIR)/dict.obj" \
 	"$(INTDIR)/diff.obj" \
 	"$(INTDIR)/digraph.obj" \
@@ -371,6 +372,10 @@ SOURCE=.\crypt.c
 # Begin Source File
 
 SOURCE=.\crypt_zip.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\debugger.c
 # End Source File
 # Begin Source File
 
