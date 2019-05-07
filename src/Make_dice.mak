@@ -84,6 +84,7 @@ SRC = \
 	term.c \
 	ui.c \
 	undo.c \
+	usercmd.c \
 	userfunc.c \
 	window.c \
 	version.c
@@ -146,6 +147,7 @@ OBJ =	o/arabic.o \
 	o/term.o \
 	o/ui.o \
 	o/undo.o \
+	o/usercmd.o \
 	o/userfunc.o \
 	o/window.o \
 	$(TERMLIB)
@@ -291,6 +293,8 @@ o/termlib.o:	termlib.c $(SYMS)
 o/ui.o: 	ui.c	$(SYMS)
 
 o/undo.o: 	undo.c	$(SYMS)
+
+o/usercmd.o: 	usercmd.c  $(SYMS)
 
 o/userfunc.o: 	userfunc.c  $(SYMS)
 

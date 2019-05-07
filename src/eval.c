@@ -1122,10 +1122,10 @@ call_func_retnr(
     return retval;
 }
 
-#if (defined(FEAT_USR_CMDS) && defined(FEAT_CMDL_COMPL)) \
+#if defined(FEAT_CMDL_COMPL) \
 	|| defined(FEAT_COMPL_FUNC) || defined(PROTO)
 
-# if (defined(FEAT_USR_CMDS) && defined(FEAT_CMDL_COMPL)) || defined(PROTO)
+# if defined(FEAT_CMDL_COMPL) || defined(PROTO)
 /*
  * Call Vim script function "func" and return the result as a string.
  * Returns NULL when calling the function fails.
@@ -4053,7 +4053,7 @@ eval6(
     varnumber_T	n1, n2;
 #ifdef FEAT_FLOAT
     int		use_float = FALSE;
-    float_T	f1 = 0, f2;
+    float_T	f1 = 0, f2 = 0;
 #endif
     int		error = FALSE;
 
@@ -8706,11 +8706,13 @@ find_win_by_nr_or_id(typval_T *vp)
 
 /*
  * Find window specified by "wvp" in tabpage "tvp".
+ * Returns the tab page in 'ptp'
  */
     win_T *
 find_tabwin(
-    typval_T	*wvp,	/* VAR_UNKNOWN for current window */
-    typval_T	*tvp)	/* VAR_UNKNOWN for current tab page */
+    typval_T	*wvp,	// VAR_UNKNOWN for current window
+    typval_T	*tvp,	// VAR_UNKNOWN for current tab page
+    tabpage_T	**ptp)
 {
     win_T	*wp = NULL;
     tabpage_T	*tp = NULL;
@@ -8728,10 +8730,22 @@ find_tabwin(
 	    tp = curtab;
 
 	if (tp != NULL)
+	{
 	    wp = find_win_by_nr(wvp, tp);
+	    if (wp == NULL && wvp->v_type == VAR_NUMBER
+						&& wvp->vval.v_number != -1)
+		// A window with the specified number is not found
+		tp = NULL;
+	}
     }
     else
+    {
 	wp = curwin;
+	tp = curtab;
+    }
+
+    if (ptp != NULL)
+	*ptp = tp;
 
     return wp;
 }
@@ -9583,14 +9597,27 @@ assert_beeps(typval_T *argvars)
     return ret;
 }
 
+    static void
+assert_append_cmd_or_arg(garray_T *gap, typval_T *argvars, char_u *cmd)
+{
+    char_u	*tofree;
+    char_u	numbuf[NUMBUFLEN];
+
+    if (argvars[1].v_type != VAR_UNKNOWN && argvars[2].v_type != VAR_UNKNOWN)
+    {
+	ga_concat(gap, echo_string(&argvars[2], &tofree, numbuf, 0));
+	vim_free(tofree);
+    }
+    else
+	ga_concat(gap, cmd);
+}
+
     int
 assert_fails(typval_T *argvars)
 {
     char_u	*cmd = tv_get_string_chk(&argvars[0]);
     garray_T	ga;
     int		ret = 0;
-    char_u	numbuf[NUMBUFLEN];
-    char_u	*tofree;
 
     called_emsg = FALSE;
     suppress_errthrow = TRUE;
@@ -9600,14 +9627,7 @@ assert_fails(typval_T *argvars)
     {
 	prepare_assert_error(&ga);
 	ga_concat(&ga, (char_u *)"command did not fail: ");
-	if (argvars[1].v_type != VAR_UNKNOWN
-					   && argvars[2].v_type != VAR_UNKNOWN)
-	{
-	    ga_concat(&ga, echo_string(&argvars[2], &tofree, numbuf, 0));
-	    vim_free(tofree);
-	}
-	else
-	    ga_concat(&ga, cmd);
+	assert_append_cmd_or_arg(&ga, argvars, cmd);
 	assert_error(&ga);
 	ga_clear(&ga);
 	ret = 1;
@@ -9623,6 +9643,8 @@ assert_fails(typval_T *argvars)
 	    prepare_assert_error(&ga);
 	    fill_assert_error(&ga, &argvars[2], NULL, &argvars[1],
 				     &vimvars[VV_ERRMSG].vv_tv, ASSERT_OTHER);
+	    ga_concat(&ga, (char_u *)": ");
+	    assert_append_cmd_or_arg(&ga, argvars, cmd);
 	    assert_error(&ga);
 	    ga_clear(&ga);
 	ret = 1;
