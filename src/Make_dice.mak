@@ -30,6 +30,7 @@ SRC = \
 	autocmd.c \
 	blowfish.c \
 	buffer.c \
+	change.c \
 	charset.c \
 	clpum.c \
 	crypt.c \
@@ -93,6 +94,7 @@ OBJ =	o/arabic.o \
 	o/autocmd.o \
 	o/blowfish.o \
 	o/buffer.o \
+	o/change.o \
 	o/charset.o \
 	o/clpum.o \
 	o/crypt.o \
@@ -178,6 +180,8 @@ o/autocmd.o:	autocmd.c  $(SYMS)
 o/blowfish.o:	blowfish.c  $(SYMS)
 
 o/buffer.o:	buffer.c  $(SYMS)
+
+o/change.o:	change.c  $(SYMS)
 
 o/charset.o:	charset.c  $(SYMS)
 

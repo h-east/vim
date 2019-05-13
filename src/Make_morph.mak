@@ -28,6 +28,7 @@ SRC =	arabic.c						\
 	autocmd.c						\
 	blowfish.c						\
 	buffer.c						\
+	change.c						\
 	charset.c						\
 	clpum.c							\
 	crypt.c							\

@@ -40,6 +40,7 @@ SRC =	arabic.c \
 	autocmd.c \
 	blowfish.c \
 	buffer.c \
+	change.c \
 	charset.c \
 	clpum.c \
 	crypt.c \
@@ -105,6 +106,7 @@ OBJ =	obj/arabic.o \
 	obj/autocmd.o \
 	obj/blowfish.o \
 	obj/buffer.o \
+	obj/change.o \
 	obj/charset.o \
 	obj/clpum.o \
 	obj/crypt.o \
@@ -168,6 +170,7 @@ PRO =	proto/arabic.pro \
 	proto/autocmd.pro \
 	proto/blowfish.pro \
 	proto/buffer.pro \
+	proto/change.pro \
 	proto/charset.pro \
 	proto/clpum.pro \
 	proto/crypt.pro \
@@ -282,6 +285,9 @@ obj/blowfish.o:	blowfish.c
 
 obj/buffer.o:	buffer.c
 	$(CCSYM) $@ buffer.c
+
+obj/change.o:	change.c
+	$(CCSYM) $@ change.c
 
 obj/charset.o:	charset.c
 	$(CCSYM) $@ charset.c
