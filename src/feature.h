@@ -484,7 +484,7 @@
 #endif
 
 /*
- * +textprop		Text properties
+ * +textprop		Text properties and popup windows
  */
 #if defined(FEAT_EVAL) && defined(FEAT_SYN_HL)
 # define FEAT_TEXT_PROP
@@ -665,6 +665,13 @@
  */
 #if defined(FEAT_MENU) && !defined(ALWAYS_USE_GUI) && defined(FEAT_INS_EXPAND)
 # define FEAT_TERM_POPUP_MENU
+#endif
+
+/*
+ * sound - currently only with libcanberra
+ */
+#if !defined(FEAT_SOUND) && defined(FEAT_BIG) && defined(HAVE_CANBERRA)
+# define FEAT_SOUND
 #endif
 
 /* There are two ways to use XPM. */

@@ -1621,6 +1621,7 @@ BASIC_SRC = \
 	os_unix.c \
 	auto/pathdef.c \
 	popupmnu.c \
+	popupwin.c \
 	pty.c \
 	quickfix.c \
 	regexp.c \
@@ -1628,6 +1629,7 @@ BASIC_SRC = \
 	search.c \
 	sha256.c \
 	sign.c \
+	sound.c \
 	spell.c \
 	spellfile.c \
 	syntax.c \
@@ -1736,6 +1738,7 @@ OBJ_COMMON = \
 	objects/os_unix.o \
 	objects/pathdef.o \
 	objects/popupmnu.o \
+	objects/popupwin.o \
 	objects/pty.o \
 	objects/quickfix.o \
 	objects/regexp.o \
@@ -1743,6 +1746,7 @@ OBJ_COMMON = \
 	objects/search.o \
 	objects/sha256.o \
 	objects/sign.o \
+	objects/sound.o \
 	objects/spell.o \
 	objects/spellfile.o \
 	objects/syntax.o \
@@ -1876,6 +1880,7 @@ PRO_AUTO = \
 	os_mac_conv.pro \
 	os_unix.pro \
 	popupmnu.pro \
+	popupwin.pro \
 	pty.pro \
 	quickfix.pro \
 	regexp.pro \
@@ -1883,6 +1888,7 @@ PRO_AUTO = \
 	search.pro \
 	sha256.pro \
 	sign.pro \
+	sound.pro \
 	spell.pro \
 	spellfile.pro \
 	syntax.pro \
@@ -2117,7 +2123,8 @@ types.vim: $(TAGS_FILES)
 # TESTING
 #
 # Execute the test scripts and the unittests.
-test check: scripttests unittests test_libvterm
+# Do the scripttests first, so that the summary shows last.
+test check: unittests test_libvterm scripttests
 
 # Execute the test scripts.  Run these after compiling Vim, before installing.
 # This doesn't depend on $(VIMTARGET), because that won't work when configure
@@ -2181,8 +2188,7 @@ test_libvterm:
 # These do not depend on the executable, compile it when needed.
 test1 \
 	test_eval \
-	test3 \
-	test30 test39 \
+	test39 \
 	test42 test44 test48 test49 \
 	test52 test59 \
 	test64 test69 \
@@ -3214,6 +3220,9 @@ objects/pathdef.o: auto/pathdef.c
 objects/popupmnu.o: popupmnu.c
 	$(CCC) -o $@ popupmnu.c
 
+objects/popupwin.o: popupwin.c
+	$(CCC) -o $@ popupwin.c
+
 objects/pty.o: pty.c
 	$(CCC) -o $@ pty.c
 
@@ -3234,6 +3243,9 @@ objects/sha256.o: sha256.c
 
 objects/sign.o: sign.c
 	$(CCC) -o $@ sign.c
+
+objects/sound.o: sound.c
+	$(CCC) -o $@ sound.c
 
 objects/spell.o: spell.c
 	$(CCC) -o $@ spell.c
@@ -3621,6 +3633,10 @@ objects/popupmnu.o: popupmnu.c vim.h protodef.h auto/config.h feature.h os_unix.
  auto/osdef.h ascii.h keymap.h term.h macros.h option.h beval.h \
  proto/gui_beval.pro structs.h regexp.h gui.h alloc.h ex_cmds.h spell.h \
  proto.h globals.h
+objects/popupwin.o: popupwin.c vim.h protodef.h auto/config.h feature.h os_unix.h \
+ auto/osdef.h ascii.h keymap.h term.h macros.h option.h beval.h \
+ proto/gui_beval.pro structs.h regexp.h gui.h alloc.h ex_cmds.h spell.h \
+ proto.h globals.h
 objects/pty.o: pty.c vim.h protodef.h auto/config.h feature.h os_unix.h \
  auto/osdef.h ascii.h keymap.h term.h macros.h option.h beval.h \
  proto/gui_beval.pro structs.h regexp.h gui.h alloc.h ex_cmds.h spell.h \
@@ -3646,6 +3662,10 @@ objects/sha256.o: sha256.c vim.h protodef.h auto/config.h feature.h os_unix.h \
  proto/gui_beval.pro structs.h regexp.h gui.h alloc.h ex_cmds.h spell.h \
  proto.h globals.h
 objects/sign.o: sign.c vim.h protodef.h auto/config.h feature.h os_unix.h \
+ auto/osdef.h ascii.h keymap.h term.h macros.h option.h beval.h \
+ proto/gui_beval.pro structs.h regexp.h gui.h alloc.h ex_cmds.h spell.h \
+ proto.h globals.h
+objects/sound.o: spell.c vim.h protodef.h auto/config.h feature.h os_unix.h \
  auto/osdef.h ascii.h keymap.h term.h macros.h option.h beval.h \
  proto/gui_beval.pro structs.h regexp.h gui.h alloc.h ex_cmds.h spell.h \
  proto.h globals.h

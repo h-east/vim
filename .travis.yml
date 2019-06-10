@@ -77,6 +77,7 @@ addons:
       - clang
       - lcov
       - gettext
+      - libcanberra-dev
       - libperl-dev
       - python-dev
       - python3-dev
@@ -86,6 +87,7 @@ addons:
       - tcl-dev
       - cscope
       - libgtk2.0-dev
+      - desktop-file-utils
   homebrew:
     packages:
       - lua
@@ -122,10 +124,13 @@ before_install:
 
 before_script:
   # Start virtual framebuffer to be able to test the GUI. Does not work on OS X.
+  # Install dummy device for sound.
   - |
     if [[ "${TRAVIS_OS_NAME}" = "linux" ]]; then
       export DISPLAY=:99.0
       sh -e /etc/init.d/xvfb start && sleep 3
+      sudo modprobe snd-dummy
+      sudo usermod -a -G audio $USER
     fi
 
 script:
