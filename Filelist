@@ -121,9 +121,11 @@ SRC_ALL =	\
 		src/testdir/sautest/autoload/*.vim \
 		src/testdir/runtest.vim \
 		src/testdir/summarize.vim \
+		src/testdir/check.vim \
 		src/testdir/shared.vim \
 		src/testdir/screendump.vim \
 		src/testdir/view_util.vim \
+		src/testdir/term_util.vim \
 		src/testdir/setup.vim \
 		src/testdir/gui_init.vim \
 		src/testdir/setup_gui.vim \
@@ -153,6 +155,7 @@ SRC_ALL =	\
 		src/testdir/if_ver*.vim \
 		src/testdir/color_ramp.vim \
 		src/testdir/silent.wav \
+		src/testdir/popupbounce.vim \
 		src/proto.h \
 		src/protodef.h \
 		src/proto/arabic.pro \

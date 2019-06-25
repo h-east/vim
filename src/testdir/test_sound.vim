@@ -10,6 +10,10 @@ func PlayCallback(id, result)
 endfunc
 
 func Test_play_event()
+  if has('win32')
+    throw 'Skipped: Playing event with callback is not supported on Windows'
+  endif
+
   let id = sound_playevent('bell', 'PlayCallback')
   if id == 0
     throw 'Skipped: bell event not available'
@@ -41,7 +45,7 @@ func Test_play_silent()
   let id2 = sound_playfile(fname, 'PlayCallback')
   call assert_true(id2 > 0)
   sleep 20m
-  call sound_stopall()
+  call sound_clear()
   call assert_equal(id2, g:id)
   call assert_equal(1, g:result)
 endfunc

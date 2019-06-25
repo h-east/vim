@@ -401,6 +401,9 @@ EX(CMD_continue,	"continue",	ex_continue,
 EX(CMD_confirm,		"confirm",	ex_wrongmodifier,
 			NEEDARG|EXTRA|NOTRLCOM|CMDWIN,
 			ADDR_NONE),
+EX(CMD_const,		"const",	ex_const,
+			EXTRA|NOTRLCOM|SBOXOK|CMDWIN,
+			ADDR_NONE),
 EX(CMD_copen,		"copen",	ex_copen,
 			RANGE|COUNT|TRLBAR,
 			ADDR_OTHER),
@@ -1090,9 +1093,6 @@ EX(CMD_pop,		"pop",		ex_tag,
 			ADDR_OTHER),
 EX(CMD_popup,		"popup",	ex_popup,
 			NEEDARG|EXTRA|BANG|TRLBAR|NOTRLCOM|CMDWIN,
-			ADDR_NONE),
-EX(CMD_popupclear,	"popupclear",	ex_popupclear,
-			TRLBAR,
 			ADDR_NONE),
 EX(CMD_ppop,		"ppop",		ex_ptag,
 			RANGE|BANG|COUNT|TRLBAR|ZEROR,
@@ -1837,7 +1837,7 @@ struct exarg
     int		bad_char;	/* BAD_KEEP, BAD_DROP or replacement byte */
     int		useridx;	/* user command index */
     char	*errmsg;	/* returned error message */
-    char_u	*(*getline)(int, void *, int);
+    char_u	*(*getline)(int, void *, int, int);
     void	*cookie;	/* argument for getline() */
 #ifdef FEAT_EVAL
     struct condstack *cstack;	/* condition stack for ":if" etc. */

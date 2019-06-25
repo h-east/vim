@@ -5698,12 +5698,21 @@ bt_popup(buf_T *buf)
  * buffer.  This means the buffer name is not a file name.
  */
     int
-bt_nofile(buf_T *buf)
+bt_nofilename(buf_T *buf)
 {
     return buf != NULL && ((buf->b_p_bt[0] == 'n' && buf->b_p_bt[2] == 'f')
 	    || buf->b_p_bt[0] == 'a'
 	    || buf->b_p_bt[0] == 't'
 	    || buf->b_p_bt[0] == 'p');
+}
+
+/*
+ * Return TRUE if "buf" has 'buftype' set to "nofile".
+ */
+    int
+bt_nofile(buf_T *buf)
+{
+    return buf != NULL && buf->b_p_bt[0] == 'n' && buf->b_p_bt[2] == 'f';
 }
 
 /*
@@ -5772,7 +5781,7 @@ buf_spname(buf_T *buf)
 
     /* There is no _file_ when 'buftype' is "nofile", b_sfname
      * contains the name as specified by the user. */
-    if (bt_nofile(buf))
+    if (bt_nofilename(buf))
     {
 #ifdef FEAT_TERMINAL
 	if (buf->b_term != NULL)
@@ -5953,3 +5962,48 @@ wipe_buffer(
     if (!aucmd)
 	unblock_autocmds();
 }
+
+#if defined(FEAT_EVAL) || defined(PROTO)
+/*
+ * Mark references in functions of buffers.
+ */
+    int
+set_ref_in_buffers(int copyID)
+{
+    int		abort = FALSE;
+    buf_T	*bp;
+
+    FOR_ALL_BUFFERS(bp)
+    {
+	listener_T *lnr;
+	typval_T tv;
+
+	for (lnr = bp->b_listener; !abort && lnr != NULL; lnr = lnr->lr_next)
+	{
+	    if (lnr->lr_callback.cb_partial != NULL)
+	    {
+		tv.v_type = VAR_PARTIAL;
+		tv.vval.v_partial = lnr->lr_callback.cb_partial;
+		abort = abort || set_ref_in_item(&tv, copyID, NULL, NULL);
+	    }
+	}
+# ifdef FEAT_JOB_CHANNEL
+	if (!abort && bp->b_prompt_callback.cb_partial != NULL)
+	{
+	    tv.v_type = VAR_PARTIAL;
+	    tv.vval.v_partial = bp->b_prompt_callback.cb_partial;
+	    abort = abort || set_ref_in_item(&tv, copyID, NULL, NULL);
+	}
+	if (!abort && bp->b_prompt_interrupt.cb_partial != NULL)
+	{
+	    tv.v_type = VAR_PARTIAL;
+	    tv.vval.v_partial = bp->b_prompt_interrupt.cb_partial;
+	    abort = abort || set_ref_in_item(&tv, copyID, NULL, NULL);
+	}
+# endif
+	if (abort)
+	    break;
+    }
+    return abort;
+}
+#endif

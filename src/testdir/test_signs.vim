@@ -1,8 +1,9 @@
 " Test for signs
 
-if !has('signs')
-  finish
-endif
+source check.vim
+CheckFeature signs
+
+source screendump.vim
 
 func Test_sign()
   new
@@ -1706,4 +1707,89 @@ func Test_sign_jump_func()
   sign unplace * group=*
   sign undefine sign1
   enew! | only!
+endfunc
+
+" Test for correct cursor position after the sign column appears or disappears.
+func Test_sign_cursor_position()
+  if !CanRunVimInTerminal()
+    throw 'Skipped: cannot make screendumps'
+  endif
+
+  let lines =<< trim END
+	call setline(1, [repeat('x', 75), 'mmmm', 'yyyy'])
+	call cursor(2,1)
+   	sign define s1 texthl=Search text==>
+	redraw
+   	sign place 10 line=2 name=s1
+  END
+  call writefile(lines, 'XtestSigncolumn')
+  let buf = RunVimInTerminal('-S XtestSigncolumn', {'rows': 6})
+  call VerifyScreenDump(buf, 'Test_sign_cursor_01', {})
+
+  " update cursor position calculation
+  call term_sendkeys(buf, "lh")
+  call term_sendkeys(buf, ":sign unplace 10\<CR>")
+  call VerifyScreenDump(buf, 'Test_sign_cursor_02', {})
+
+
+  " clean up
+  call StopVimInTerminal(buf)
+  call delete('XtestSigncolumn')
+endfunc
+
+" Return the 'len' characters in screen starting from (row,col)
+func s:ScreenLine(row, col, len)
+  let s = ''
+  for i in range(a:len)
+    let s .= nr2char(screenchar(a:row, a:col + i))
+  endfor
+  return s
+endfunc
+
+" Test for 'signcolumn' set to 'number'.
+func Test_sign_numcol()
+  new
+  call append(0, "01234")
+  " With 'signcolumn' set to 'number', make sure sign is displayed in the
+  " number column and line number is not displayed.
+  set numberwidth=2
+  set number
+  set signcolumn=number
+  sign define sign1 text==>
+  sign place 10 line=1 name=sign1
+  redraw!
+  call assert_equal("=> 01234", s:ScreenLine(1, 1, 8))
+
+  " With 'signcolumn' set to 'number', when there is no sign, make sure line
+  " number is displayed in the number column
+  sign unplace 10
+  redraw!
+  call assert_equal("1 01234", s:ScreenLine(1, 1, 7))
+
+  " Disable number column. Check whether sign is displayed in the sign column
+  set numberwidth=4
+  set nonumber
+  sign place 10 line=1 name=sign1
+  redraw!
+  call assert_equal("=>01234", s:ScreenLine(1, 1, 7))
+
+  " Enable number column. Check whether sign is displayed in the number column
+  set number
+  redraw!
+  call assert_equal(" => 01234", s:ScreenLine(1, 1, 9))
+
+  " Disable sign column. Make sure line number is displayed
+  set signcolumn=no
+  redraw!
+  call assert_equal("  1 01234", s:ScreenLine(1, 1, 9))
+
+  " Enable auto sign column. Make sure both sign and line number are displayed
+  set signcolumn=auto
+  redraw!
+  call assert_equal("=>  1 01234", s:ScreenLine(1, 1, 11))
+
+  sign undefine sign1
+  set signcolumn&
+  set number&
+  enew!  | close
 endfunc

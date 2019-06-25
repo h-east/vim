@@ -86,26 +86,6 @@ static void f_call(typval_T *argvars, typval_T *rettv);
 #ifdef FEAT_FLOAT
 static void f_ceil(typval_T *argvars, typval_T *rettv);
 #endif
-#ifdef FEAT_JOB_CHANNEL
-static void f_ch_canread(typval_T *argvars, typval_T *rettv);
-static void f_ch_close(typval_T *argvars, typval_T *rettv);
-static void f_ch_close_in(typval_T *argvars, typval_T *rettv);
-static void f_ch_evalexpr(typval_T *argvars, typval_T *rettv);
-static void f_ch_evalraw(typval_T *argvars, typval_T *rettv);
-static void f_ch_getbufnr(typval_T *argvars, typval_T *rettv);
-static void f_ch_getjob(typval_T *argvars, typval_T *rettv);
-static void f_ch_info(typval_T *argvars, typval_T *rettv);
-static void f_ch_log(typval_T *argvars, typval_T *rettv);
-static void f_ch_logfile(typval_T *argvars, typval_T *rettv);
-static void f_ch_open(typval_T *argvars, typval_T *rettv);
-static void f_ch_read(typval_T *argvars, typval_T *rettv);
-static void f_ch_readblob(typval_T *argvars, typval_T *rettv);
-static void f_ch_readraw(typval_T *argvars, typval_T *rettv);
-static void f_ch_sendexpr(typval_T *argvars, typval_T *rettv);
-static void f_ch_sendraw(typval_T *argvars, typval_T *rettv);
-static void f_ch_setoptions(typval_T *argvars, typval_T *rettv);
-static void f_ch_status(typval_T *argvars, typval_T *rettv);
-#endif
 static void f_changenr(typval_T *argvars, typval_T *rettv);
 static void f_char2nr(typval_T *argvars, typval_T *rettv);
 static void f_chdir(typval_T *argvars, typval_T *rettv);
@@ -249,14 +229,6 @@ static void f_isinf(typval_T *argvars, typval_T *rettv);
 static void f_isnan(typval_T *argvars, typval_T *rettv);
 #endif
 static void f_items(typval_T *argvars, typval_T *rettv);
-#ifdef FEAT_JOB_CHANNEL
-static void f_job_getchannel(typval_T *argvars, typval_T *rettv);
-static void f_job_info(typval_T *argvars, typval_T *rettv);
-static void f_job_setoptions(typval_T *argvars, typval_T *rettv);
-static void f_job_start(typval_T *argvars, typval_T *rettv);
-static void f_job_stop(typval_T *argvars, typval_T *rettv);
-static void f_job_status(typval_T *argvars, typval_T *rettv);
-#endif
 static void f_join(typval_T *argvars, typval_T *rettv);
 static void f_js_decode(typval_T *argvars, typval_T *rettv);
 static void f_js_encode(typval_T *argvars, typval_T *rettv);
@@ -312,11 +284,6 @@ static void f_pow(typval_T *argvars, typval_T *rettv);
 #endif
 static void f_prevnonblank(typval_T *argvars, typval_T *rettv);
 static void f_printf(typval_T *argvars, typval_T *rettv);
-#ifdef FEAT_JOB_CHANNEL
-static void f_prompt_setcallback(typval_T *argvars, typval_T *rettv);
-static void f_prompt_setinterrupt(typval_T *argvars, typval_T *rettv);
-static void f_prompt_setprompt(typval_T *argvars, typval_T *rettv);
-#endif
 static void f_pumvisible(typval_T *argvars, typval_T *rettv);
 #ifdef FEAT_PYTHON3
 static void f_py3eval(typval_T *argvars, typval_T *rettv);
@@ -451,6 +418,7 @@ static void f_test_option_not_set(typval_T *argvars, typval_T *rettv);
 static void f_test_override(typval_T *argvars, typval_T *rettv);
 static void f_test_refcount(typval_T *argvars, typval_T *rettv);
 static void f_test_garbagecollect_now(typval_T *argvars, typval_T *rettv);
+static void f_test_garbagecollect_soon(typval_T *argvars, typval_T *rettv);
 static void f_test_ignore_error(typval_T *argvars, typval_T *rettv);
 static void f_test_null_blob(typval_T *argvars, typval_T *rettv);
 #ifdef FEAT_JOB_CHANNEL
@@ -818,12 +786,20 @@ static struct fst
 #endif
 #ifdef FEAT_TEXT_PROP
     {"popup_atcursor",	2, 2, f_popup_atcursor},
+    {"popup_clear",	0, 0, f_popup_clear},
     {"popup_close",	1, 2, f_popup_close},
     {"popup_create",	2, 2, f_popup_create},
+    {"popup_dialog",	2, 2, f_popup_dialog},
+    {"popup_filter_menu", 2, 2, f_popup_filter_menu},
+    {"popup_filter_yesno", 2, 2, f_popup_filter_yesno},
     {"popup_getoptions", 1, 1, f_popup_getoptions},
     {"popup_getpos",	1, 1, f_popup_getpos},
     {"popup_hide",	1, 1, f_popup_hide},
+    {"popup_menu",	2, 2, f_popup_menu},
     {"popup_move",	2, 2, f_popup_move},
+    {"popup_notification", 2, 2, f_popup_notification},
+    {"popup_setoptions", 2, 2, f_popup_setoptions},
+    {"popup_settext",	2, 2, f_popup_settext},
     {"popup_show",	1, 1, f_popup_show},
 #endif
 #ifdef FEAT_FLOAT
@@ -934,10 +910,10 @@ static struct fst
 #endif
     {"sort",		1, 3, f_sort},
 #ifdef FEAT_SOUND
+    {"sound_clear",	0, 0, f_sound_clear},
     {"sound_playevent",	1, 2, f_sound_playevent},
     {"sound_playfile",	1, 2, f_sound_playfile},
     {"sound_stop",	1, 1, f_sound_stop},
-    {"sound_stopall",	0, 0, f_sound_stopall},
 #endif
     {"soundfold",	1, 1, f_soundfold},
     {"spellbadword",	0, 1, f_spellbadword},
@@ -1017,6 +993,7 @@ static struct fst
     {"test_autochdir",	0, 0, f_test_autochdir},
     {"test_feedinput",	1, 1, f_test_feedinput},
     {"test_garbagecollect_now",	0, 0, f_test_garbagecollect_now},
+    {"test_garbagecollect_soon",	0, 0, f_test_garbagecollect_soon},
     {"test_getvalue",	1, 1, f_test_getvalue},
     {"test_ignore_error",	1, 1, f_test_ignore_error},
     {"test_null_blob",	0, 0, f_test_null_blob},
@@ -1947,7 +1924,7 @@ find_buffer(typval_T *avar)
 		if (buf->b_fname != NULL
 			&& (path_with_url(buf->b_fname)
 #ifdef FEAT_QUICKFIX
-			    || bt_nofile(buf)
+			    || bt_nofilename(buf)
 #endif
 			   )
 			&& STRCMP(buf->b_fname, avar->vval.v_string) == 0)
@@ -2264,262 +2241,6 @@ f_ceil(typval_T *argvars, typval_T *rettv)
 	rettv->vval.v_float = ceil(f);
     else
 	rettv->vval.v_float = 0.0;
-}
-#endif
-
-#ifdef FEAT_JOB_CHANNEL
-/*
- * "ch_canread()" function
- */
-    static void
-f_ch_canread(typval_T *argvars, typval_T *rettv)
-{
-    channel_T *channel = get_channel_arg(&argvars[0], FALSE, FALSE, 0);
-
-    rettv->vval.v_number = 0;
-    if (channel != NULL)
-	rettv->vval.v_number = channel_has_readahead(channel, PART_SOCK)
-			    || channel_has_readahead(channel, PART_OUT)
-			    || channel_has_readahead(channel, PART_ERR);
-}
-
-/*
- * "ch_close()" function
- */
-    static void
-f_ch_close(typval_T *argvars, typval_T *rettv UNUSED)
-{
-    channel_T *channel = get_channel_arg(&argvars[0], TRUE, FALSE, 0);
-
-    if (channel != NULL)
-    {
-	channel_close(channel, FALSE);
-	channel_clear(channel);
-    }
-}
-
-/*
- * "ch_close()" function
- */
-    static void
-f_ch_close_in(typval_T *argvars, typval_T *rettv UNUSED)
-{
-    channel_T *channel = get_channel_arg(&argvars[0], TRUE, FALSE, 0);
-
-    if (channel != NULL)
-	channel_close_in(channel);
-}
-
-/*
- * "ch_getbufnr()" function
- */
-    static void
-f_ch_getbufnr(typval_T *argvars, typval_T *rettv)
-{
-    channel_T *channel = get_channel_arg(&argvars[0], FALSE, FALSE, 0);
-
-    rettv->vval.v_number = -1;
-    if (channel != NULL)
-    {
-	char_u	*what = tv_get_string(&argvars[1]);
-	int	part;
-
-	if (STRCMP(what, "err") == 0)
-	    part = PART_ERR;
-	else if (STRCMP(what, "out") == 0)
-	    part = PART_OUT;
-	else if (STRCMP(what, "in") == 0)
-	    part = PART_IN;
-	else
-	    part = PART_SOCK;
-	if (channel->ch_part[part].ch_bufref.br_buf != NULL)
-	    rettv->vval.v_number =
-			      channel->ch_part[part].ch_bufref.br_buf->b_fnum;
-    }
-}
-
-/*
- * "ch_getjob()" function
- */
-    static void
-f_ch_getjob(typval_T *argvars, typval_T *rettv)
-{
-    channel_T *channel = get_channel_arg(&argvars[0], FALSE, FALSE, 0);
-
-    if (channel != NULL)
-    {
-	rettv->v_type = VAR_JOB;
-	rettv->vval.v_job = channel->ch_job;
-	if (channel->ch_job != NULL)
-	    ++channel->ch_job->jv_refcount;
-    }
-}
-
-/*
- * "ch_info()" function
- */
-    static void
-f_ch_info(typval_T *argvars, typval_T *rettv UNUSED)
-{
-    channel_T *channel = get_channel_arg(&argvars[0], FALSE, FALSE, 0);
-
-    if (channel != NULL && rettv_dict_alloc(rettv) != FAIL)
-	channel_info(channel, rettv->vval.v_dict);
-}
-
-/*
- * "ch_log()" function
- */
-    static void
-f_ch_log(typval_T *argvars, typval_T *rettv UNUSED)
-{
-    char_u	*msg = tv_get_string(&argvars[0]);
-    channel_T	*channel = NULL;
-
-    if (argvars[1].v_type != VAR_UNKNOWN)
-	channel = get_channel_arg(&argvars[1], FALSE, FALSE, 0);
-
-    ch_log(channel, "%s", msg);
-}
-
-/*
- * "ch_logfile()" function
- */
-    static void
-f_ch_logfile(typval_T *argvars, typval_T *rettv UNUSED)
-{
-    char_u *fname;
-    char_u *opt = (char_u *)"";
-    char_u buf[NUMBUFLEN];
-
-    /* Don't open a file in restricted mode. */
-    if (check_restricted() || check_secure())
-	return;
-    fname = tv_get_string(&argvars[0]);
-    if (argvars[1].v_type == VAR_STRING)
-	opt = tv_get_string_buf(&argvars[1], buf);
-    ch_logfile(fname, opt);
-}
-
-/*
- * "ch_open()" function
- */
-    static void
-f_ch_open(typval_T *argvars, typval_T *rettv)
-{
-    rettv->v_type = VAR_CHANNEL;
-    if (check_restricted() || check_secure())
-	return;
-    rettv->vval.v_channel = channel_open_func(argvars);
-}
-
-/*
- * "ch_read()" function
- */
-    static void
-f_ch_read(typval_T *argvars, typval_T *rettv)
-{
-    common_channel_read(argvars, rettv, FALSE, FALSE);
-}
-
-/*
- * "ch_readblob()" function
- */
-    static void
-f_ch_readblob(typval_T *argvars, typval_T *rettv)
-{
-    common_channel_read(argvars, rettv, TRUE, TRUE);
-}
-
-/*
- * "ch_readraw()" function
- */
-    static void
-f_ch_readraw(typval_T *argvars, typval_T *rettv)
-{
-    common_channel_read(argvars, rettv, TRUE, FALSE);
-}
-
-/*
- * "ch_evalexpr()" function
- */
-    static void
-f_ch_evalexpr(typval_T *argvars, typval_T *rettv)
-{
-    ch_expr_common(argvars, rettv, TRUE);
-}
-
-/*
- * "ch_sendexpr()" function
- */
-    static void
-f_ch_sendexpr(typval_T *argvars, typval_T *rettv)
-{
-    ch_expr_common(argvars, rettv, FALSE);
-}
-
-/*
- * "ch_evalraw()" function
- */
-    static void
-f_ch_evalraw(typval_T *argvars, typval_T *rettv)
-{
-    ch_raw_common(argvars, rettv, TRUE);
-}
-
-/*
- * "ch_sendraw()" function
- */
-    static void
-f_ch_sendraw(typval_T *argvars, typval_T *rettv)
-{
-    ch_raw_common(argvars, rettv, FALSE);
-}
-
-/*
- * "ch_setoptions()" function
- */
-    static void
-f_ch_setoptions(typval_T *argvars, typval_T *rettv UNUSED)
-{
-    channel_T	*channel;
-    jobopt_T	opt;
-
-    channel = get_channel_arg(&argvars[0], FALSE, FALSE, 0);
-    if (channel == NULL)
-	return;
-    clear_job_options(&opt);
-    if (get_job_options(&argvars[1], &opt,
-			    JO_CB_ALL + JO_TIMEOUT_ALL + JO_MODE_ALL, 0) == OK)
-	channel_set_options(channel, &opt);
-    free_job_options(&opt);
-}
-
-/*
- * "ch_status()" function
- */
-    static void
-f_ch_status(typval_T *argvars, typval_T *rettv)
-{
-    channel_T	*channel;
-    jobopt_T	opt;
-    int		part = -1;
-
-    /* return an empty string by default */
-    rettv->v_type = VAR_STRING;
-    rettv->vval.v_string = NULL;
-
-    channel = get_channel_arg(&argvars[0], FALSE, FALSE, 0);
-
-    if (argvars[1].v_type != VAR_UNKNOWN)
-    {
-	clear_job_options(&opt);
-	if (get_job_options(&argvars[1], &opt, JO_PART, 0) == OK
-						     && (opt.jo_set & JO_PART))
-	    part = opt.jo_part;
-    }
-
-    rettv->vval.v_string = vim_strsave((char_u *)channel_status(channel, part));
 }
 #endif
 
@@ -3533,7 +3254,8 @@ execute_redir_str(char_u *value, int value_len)
 get_list_line(
     int	    c UNUSED,
     void    *cookie,
-    int	    indent UNUSED)
+    int	    indent UNUSED,
+    int	    do_concat UNUSED)
 {
     listitem_T **p = (listitem_T **)cookie;
     listitem_T *item = *p;
@@ -5173,12 +4895,18 @@ f_getchar(typval_T *argvars, typval_T *rettv)
 	    {
 		/* Find the window at the mouse coordinates and compute the
 		 * text position. */
-		win = mouse_find_win(&row, &col);
+		win = mouse_find_win(&row, &col, FIND_POPUP);
 		if (win == NULL)
 		    return;
 		(void)mouse_comp_pos(win, &row, &col, &lnum);
-		for (wp = firstwin; wp != win; wp = wp->w_next)
-		    ++winnr;
+# ifdef FEAT_TEXT_PROP
+		if (bt_popup(win->w_buffer))
+		    winnr = 0;
+		else
+# endif
+		    for (wp = firstwin; wp != win && wp != NULL;
+							       wp = wp->w_next)
+			++winnr;
 		set_vim_var_nr(VV_MOUSE_WIN, winnr);
 		set_vim_var_nr(VV_MOUSE_WINID, win->w_id);
 		set_vim_var_nr(VV_MOUSE_LNUM, lnum);
@@ -7757,119 +7485,6 @@ f_items(typval_T *argvars, typval_T *rettv)
     dict_list(argvars, rettv, 2);
 }
 
-#if defined(FEAT_JOB_CHANNEL) || defined(PROTO)
-/*
- * Get the job from the argument.
- * Returns NULL if the job is invalid.
- */
-    static job_T *
-get_job_arg(typval_T *tv)
-{
-    job_T *job;
-
-    if (tv->v_type != VAR_JOB)
-    {
-	semsg(_(e_invarg2), tv_get_string(tv));
-	return NULL;
-    }
-    job = tv->vval.v_job;
-
-    if (job == NULL)
-	emsg(_("E916: not a valid job"));
-    return job;
-}
-
-/*
- * "job_getchannel()" function
- */
-    static void
-f_job_getchannel(typval_T *argvars, typval_T *rettv)
-{
-    job_T	*job = get_job_arg(&argvars[0]);
-
-    if (job != NULL)
-    {
-	rettv->v_type = VAR_CHANNEL;
-	rettv->vval.v_channel = job->jv_channel;
-	if (job->jv_channel != NULL)
-	    ++job->jv_channel->ch_refcount;
-    }
-}
-
-/*
- * "job_info()" function
- */
-    static void
-f_job_info(typval_T *argvars, typval_T *rettv)
-{
-    if (argvars[0].v_type != VAR_UNKNOWN)
-    {
-	job_T	*job = get_job_arg(&argvars[0]);
-
-	if (job != NULL && rettv_dict_alloc(rettv) != FAIL)
-	    job_info(job, rettv->vval.v_dict);
-    }
-    else if (rettv_list_alloc(rettv) == OK)
-	job_info_all(rettv->vval.v_list);
-}
-
-/*
- * "job_setoptions()" function
- */
-    static void
-f_job_setoptions(typval_T *argvars, typval_T *rettv UNUSED)
-{
-    job_T	*job = get_job_arg(&argvars[0]);
-    jobopt_T	opt;
-
-    if (job == NULL)
-	return;
-    clear_job_options(&opt);
-    if (get_job_options(&argvars[1], &opt, JO_STOPONEXIT + JO_EXIT_CB, 0) == OK)
-	job_set_options(job, &opt);
-    free_job_options(&opt);
-}
-
-/*
- * "job_start()" function
- */
-    static void
-f_job_start(typval_T *argvars, typval_T *rettv)
-{
-    rettv->v_type = VAR_JOB;
-    if (check_restricted() || check_secure())
-	return;
-    rettv->vval.v_job = job_start(argvars, NULL, NULL, FALSE);
-}
-
-/*
- * "job_status()" function
- */
-    static void
-f_job_status(typval_T *argvars, typval_T *rettv)
-{
-    job_T	*job = get_job_arg(&argvars[0]);
-
-    if (job != NULL)
-    {
-	rettv->v_type = VAR_STRING;
-	rettv->vval.v_string = vim_strsave((char_u *)job_status(job));
-    }
-}
-
-/*
- * "job_stop()" function
- */
-    static void
-f_job_stop(typval_T *argvars, typval_T *rettv)
-{
-    job_T	*job = get_job_arg(&argvars[0]);
-
-    if (job != NULL)
-	rettv->vval.v_number = job_stop(job, argvars, NULL);
-}
-#endif
-
 /*
  * "join()" function
  */
@@ -9254,74 +8869,6 @@ f_printf(typval_T *argvars, typval_T *rettv)
     }
     did_emsg |= saved_did_emsg;
 }
-
-#ifdef FEAT_JOB_CHANNEL
-/*
- * "prompt_setcallback({buffer}, {callback})" function
- */
-    static void
-f_prompt_setcallback(typval_T *argvars, typval_T *rettv UNUSED)
-{
-    buf_T	*buf;
-    callback_T	callback;
-
-    if (check_secure())
-	return;
-    buf = tv_get_buf(&argvars[0], FALSE);
-    if (buf == NULL)
-	return;
-
-    callback = get_callback(&argvars[1]);
-    if (callback.cb_name == NULL)
-	return;
-
-    free_callback(&buf->b_prompt_callback);
-    set_callback(&buf->b_prompt_callback, &callback);
-}
-
-/*
- * "prompt_setinterrupt({buffer}, {callback})" function
- */
-    static void
-f_prompt_setinterrupt(typval_T *argvars, typval_T *rettv UNUSED)
-{
-    buf_T	*buf;
-    callback_T	callback;
-
-    if (check_secure())
-	return;
-    buf = tv_get_buf(&argvars[0], FALSE);
-    if (buf == NULL)
-	return;
-
-    callback = get_callback(&argvars[1]);
-    if (callback.cb_name == NULL)
-	return;
-
-    free_callback(&buf->b_prompt_interrupt);
-    set_callback(&buf->b_prompt_interrupt, &callback);
-}
-
-/*
- * "prompt_setprompt({buffer}, {text})" function
- */
-    static void
-f_prompt_setprompt(typval_T *argvars, typval_T *rettv UNUSED)
-{
-    buf_T	*buf;
-    char_u	*text;
-
-    if (check_secure())
-	return;
-    buf = tv_get_buf(&argvars[0], FALSE);
-    if (buf == NULL)
-	return;
-
-    text = tv_get_string(&argvars[1]);
-    vim_free(buf->b_prompt_text);
-    buf->b_prompt_text = vim_strsave(text);
-}
-#endif
 
 /*
  * "pumvisible()" function
@@ -13197,9 +12744,7 @@ f_str2nr(typval_T *argvars, typval_T *rettv)
 f_strftime(typval_T *argvars, typval_T *rettv)
 {
     char_u	result_buf[256];
-# ifdef HAVE_LOCALTIME_R
     struct tm	tmval;
-# endif
     struct tm	*curtime;
     time_t	seconds;
     char_u	*p;
@@ -13211,11 +12756,7 @@ f_strftime(typval_T *argvars, typval_T *rettv)
 	seconds = time(NULL);
     else
 	seconds = (time_t)tv_get_number(&argvars[1]);
-# ifdef HAVE_LOCALTIME_R
-    curtime = localtime_r(&seconds, &tmval);
-# else
-    curtime = localtime(&seconds);
-# endif
+    curtime = vim_localtime(&seconds, &tmval);
     /* MSVC returns NULL for an invalid value of seconds. */
     if (curtime == NULL)
 	rettv->vval.v_string = vim_strsave((char_u *)_("(Invalid)"));
@@ -14475,6 +14016,8 @@ f_test_override(typval_T *argvars, typval_T *rettv UNUSED)
 	    nfa_fail_for_testing = val;
 	else if (STRCMP(name, (char_u *)"no_query_mouse") == 0)
 	    no_query_mouse_for_testing = val;
+	else if (STRCMP(name, (char_u *)"no_wait_return") == 0)
+	    no_wait_return = val;
 	else if (STRCMP(name, (char_u *)"ALL") == 0)
 	{
 	    disable_char_avail_for_testing = FALSE;
@@ -14563,6 +14106,15 @@ f_test_garbagecollect_now(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
     /* This is dangerous, any Lists and Dicts used internally may be freed
      * while still in use. */
     garbage_collect(TRUE);
+}
+
+/*
+ * "test_garbagecollect_soon()" function
+ */
+    static void
+f_test_garbagecollect_soon(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
+{
+    may_garbage_collect = TRUE;
 }
 
 /*

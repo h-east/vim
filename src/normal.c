@@ -4521,7 +4521,7 @@ nv_mousescroll(cmdarg_T *cap)
 	col = mouse_col;
 
 	/* find the window at the pointer coordinates */
-	wp = mouse_find_win(&row, &col);
+	wp = mouse_find_win(&row, &col, FAIL_POPUP);
 	if (wp == NULL)
 	    return;
 	curwin = wp;
@@ -6237,7 +6237,7 @@ nv_search(cmdarg_T *cap)
 
     /* When using 'incsearch' the cursor may be moved to set a different search
      * start position. */
-    cap->searchbuf = getcmdline(cap->cmdchar, cap->count1, 0);
+    cap->searchbuf = getcmdline(cap->cmdchar, cap->count1, 0, TRUE);
 
     if (cap->searchbuf == NULL)
     {

@@ -2253,6 +2253,8 @@ gui_outstr_nowrap(
     int		col = gui.col;
 #ifdef FEAT_SIGN_ICONS
     int		draw_sign = FALSE;
+    int		signcol = 0;
+    char_u	extra[18];
 # ifdef FEAT_NETBEANS_INTG
     int		multi_sign = FALSE;
 # endif
@@ -2275,10 +2277,19 @@ gui_outstr_nowrap(
 	    multi_sign = TRUE;
 # endif
 	/* draw spaces instead */
-	s = (char_u *)"  ";
+	if (*curwin->w_p_scl == 'n' && *(curwin->w_p_scl + 1) == 'u' &&
+		(curwin->w_p_nu || curwin->w_p_rnu))
+	{
+	    sprintf((char *)extra, "%*c ", number_width(curwin), ' ');
+	    s = extra;
+	}
+	else
+	    s = (char_u *)"  ";
 	if (len == 1 && col > 0)
 	    --col;
-	len = 2;
+	len = (int)STRLEN(s);
+	if (len > 2)
+	    signcol = len - 3;	// Right align sign icon in the number column
 	draw_sign = TRUE;
 	highlight_mask = 0;
     }
@@ -2604,7 +2615,7 @@ gui_outstr_nowrap(
 #ifdef FEAT_SIGN_ICONS
     if (draw_sign)
 	/* Draw the sign on top of the spaces. */
-	gui_mch_drawsign(gui.row, col, gui.highlight_mask);
+	gui_mch_drawsign(gui.row, signcol, gui.highlight_mask);
 # if defined(FEAT_NETBEANS_INTG) && (defined(FEAT_GUI_X11) \
 	|| defined(FEAT_GUI_GTK) || defined(FEAT_GUI_MSWIN))
     if (multi_sign)
@@ -4942,7 +4953,7 @@ xy2win(int x, int y)
     col = X_2_COL(x);
     if (row < 0 || col < 0)		/* before first window */
 	return NULL;
-    wp = mouse_find_win(&row, &col);
+    wp = mouse_find_win(&row, &col, FALSE);
     if (wp == NULL)
 	return NULL;
 #ifdef FEAT_MOUSESHAPE
@@ -5398,7 +5409,7 @@ gui_wingoto_xy(int x, int y)
 
     if (row >= 0 && col >= 0)
     {
-	wp = mouse_find_win(&row, &col);
+	wp = mouse_find_win(&row, &col, FAIL_POPUP);
 	if (wp != NULL && wp != curwin)
 	    win_goto(wp);
     }

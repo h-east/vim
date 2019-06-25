@@ -28,6 +28,7 @@ static char *e_missbrac = N_("E111: Missing ']'");
 static char *e_dictrange = N_("E719: Cannot use [:] with a Dictionary");
 static char *e_letwrong = N_("E734: Wrong variable type for %s=");
 static char *e_illvar = N_("E461: Illegal variable name: %s");
+static char *e_cannot_mod = N_("E995: Cannot modify existing variable");
 #ifdef FEAT_FLOAT
 static char *e_float_as_string = N_("E806: using Float as a String");
 #endif
@@ -171,6 +172,9 @@ static struct vimvar
     {VV_NAME("completed_item",	 VAR_DICT), VV_RO},
     {VV_NAME("option_new",	 VAR_STRING), VV_RO},
     {VV_NAME("option_old",	 VAR_STRING), VV_RO},
+    {VV_NAME("option_oldlocal",	 VAR_STRING), VV_RO},
+    {VV_NAME("option_oldglobal", VAR_STRING), VV_RO},
+    {VV_NAME("option_command",	 VAR_STRING), VV_RO},
     {VV_NAME("option_type",	 VAR_STRING), VV_RO},
     {VV_NAME("errors",		 VAR_LIST), 0},
     {VV_NAME("false",		 VAR_SPECIAL), VV_RO},
@@ -193,9 +197,10 @@ static struct vimvar
     {VV_NAME("termrfgresp",	 VAR_STRING), VV_RO},
     {VV_NAME("termrbgresp",	 VAR_STRING), VV_RO},
     {VV_NAME("termu7resp",	 VAR_STRING), VV_RO},
-    {VV_NAME("termstyleresp",	VAR_STRING), VV_RO},
-    {VV_NAME("termblinkresp",	VAR_STRING), VV_RO},
-    {VV_NAME("event",		VAR_DICT), VV_RO},
+    {VV_NAME("termstyleresp",	 VAR_STRING), VV_RO},
+    {VV_NAME("termblinkresp",	 VAR_STRING), VV_RO},
+    {VV_NAME("event",		 VAR_DICT), VV_RO},
+    {VV_NAME("versionlong",	 VAR_NUMBER), VV_RO},
     {VV_NAME("clcompleted_item", VAR_DICT), VV_RO},
 };
 
@@ -212,7 +217,8 @@ static struct vimvar
 static dictitem_T	vimvars_var;		/* variable used for v: */
 #define vimvarht  vimvardict.dv_hashtab
 
-static int ex_let_vars(char_u *arg, typval_T *tv, int copy, int semicolon, int var_count, char_u *nextchars);
+static void ex_let_const(exarg_T *eap, int is_const);
+static int ex_let_vars(char_u *arg, typval_T *tv, int copy, int semicolon, int var_count, int is_const, char_u *nextchars);
 static char_u *skip_var_list(char_u *arg, int *var_count, int *semicolon);
 static char_u *skip_var_one(char_u *arg);
 static void list_glob_vars(int *first);
@@ -222,8 +228,8 @@ static void list_tab_vars(int *first);
 static void list_vim_vars(int *first);
 static void list_script_vars(int *first);
 static char_u *list_arg_vars(exarg_T *eap, char_u *arg, int *first);
-static char_u *ex_let_one(char_u *arg, typval_T *tv, int copy, char_u *endchars, char_u *op);
-static void set_var_lval(lval_T *lp, char_u *endp, typval_T *rettv, int copy, char_u *op);
+static char_u *ex_let_one(char_u *arg, typval_T *tv, int copy, int is_const, char_u *endchars, char_u *op);
+static void set_var_lval(lval_T *lp, char_u *endp, typval_T *rettv, int copy, int is_const, char_u *op);
 static int tv_op(typval_T *tv1, typval_T *tv2, char_u  *op);
 static void ex_unletlock(exarg_T *eap, char_u *argstart, int deep);
 static int do_unlet_var(lval_T *lp, char_u *name_end, int forceit);
@@ -248,6 +254,7 @@ static typval_T *alloc_string_tv(char_u *string);
 static void delete_var(hashtab_T *ht, hashitem_T *hi);
 static void list_one_var(dictitem_T *v, char *prefix, int *first);
 static void list_one_var_a(char *prefix, char_u *name, int type, char_u *string, int *first);
+static void set_var_const(char_u *name, typval_T *tv, int copy, int is_const);
 static int tv_check_lock(typval_T *tv, char_u *name, int use_gettext);
 static char_u *find_option_end(char_u **arg, int *opt_flags);
 
@@ -334,7 +341,7 @@ eval_init(void)
     for (i = 0; i < VV_LEN; ++i)
     {
 	p = &vimvars[i];
-	if (STRLEN(p->vv_name) > 16)
+	if (STRLEN(p->vv_name) > DICTITEM16_KEY_LEN)
 	{
 	    iemsg("INTERNAL: name too long, increase size of dictitem16_T");
 	    getout(1);
@@ -355,6 +362,7 @@ eval_init(void)
 	    hash_add(&compat_hashtab, p->vv_di.di_key);
     }
     vimvars[VV_VERSION].vv_nr = VIM_VERSION_100;
+    vimvars[VV_VERSIONLONG].vv_nr = VIM_VERSION_100 * 10000 + highest_patch();
 
     set_vim_var_nr(VV_SEARCHFORWARD, 1L);
     set_vim_var_nr(VV_HLSEARCH, 1L);
@@ -526,9 +534,9 @@ var_redir_start(char_u *name, int append)
     tv.v_type = VAR_STRING;
     tv.vval.v_string = (char_u *)"";
     if (append)
-	set_var_lval(redir_lval, redir_endp, &tv, TRUE, (char_u *)".");
+	set_var_lval(redir_lval, redir_endp, &tv, TRUE, FALSE, (char_u *)".");
     else
-	set_var_lval(redir_lval, redir_endp, &tv, TRUE, (char_u *)"=");
+	set_var_lval(redir_lval, redir_endp, &tv, TRUE, FALSE, (char_u *)"=");
     clear_lval(redir_lval);
     err = did_emsg;
     did_emsg |= save_emsg;
@@ -601,7 +609,8 @@ var_redir_stop(void)
 	    redir_endp = get_lval(redir_varname, NULL, redir_lval,
 					FALSE, FALSE, 0, FNE_CHECK_START);
 	    if (redir_endp != NULL && redir_lval->ll_name != NULL)
-		set_var_lval(redir_lval, redir_endp, &tv, FALSE, (char_u *)".");
+		set_var_lval(redir_lval, redir_endp, &tv, FALSE, FALSE,
+								(char_u *)".");
 	    clear_lval(redir_lval);
 	}
 
@@ -1247,7 +1256,9 @@ heredoc_get(exarg_T *eap, char_u *cmd)
     char_u	*marker;
     list_T	*l;
     char_u	*p;
-    int		indent_len = 0;
+    int		marker_indent_len = 0;
+    int		text_indent_len = 0;
+    char_u	*text_indent = NULL;
 
     if (eap->getline == NULL)
     {
@@ -1261,15 +1272,17 @@ heredoc_get(exarg_T *eap, char_u *cmd)
     {
 	cmd = skipwhite(cmd + 4);
 
-	// Trim the indentation from all the lines in the here document
+	// Trim the indentation from all the lines in the here document.
 	// The amount of indentation trimmed is the same as the indentation of
-	// the :let command line.
+	// the first line after the :let command line.  To find the end marker
+	// the indent of the :let command line is trimmed.
 	p = *eap->cmdlinep;
 	while (VIM_ISWHITE(*p))
 	{
 	    p++;
-	    indent_len++;
+	    marker_indent_len++;
 	}
+	text_indent_len = -1;
     }
 
     // The marker is the next word.  Default marker is "."
@@ -1293,31 +1306,50 @@ heredoc_get(exarg_T *eap, char_u *cmd)
 
     for (;;)
     {
-	int	i = 0;
+	int	mi = 0;
+	int	ti = 0;
 
-	theline = eap->getline(NUL, eap->cookie, 0);
-	if (theline != NULL && indent_len > 0)
-	{
-	    // trim the indent matching the first line
-	    if (STRNCMP(theline, *eap->cmdlinep, indent_len) == 0)
-		i = indent_len;
-	}
-
+	theline = eap->getline(NUL, eap->cookie, 0, FALSE);
 	if (theline == NULL)
 	{
 	    semsg(_("E990: Missing end marker '%s'"), marker);
 	    break;
 	}
-	if (STRCMP(marker, theline + i) == 0)
+
+	// with "trim": skip the indent matching the :let line to find the
+	// marker
+	if (marker_indent_len > 0
+		&& STRNCMP(theline, *eap->cmdlinep, marker_indent_len) == 0)
+	    mi = marker_indent_len;
+	if (STRCMP(marker, theline + mi) == 0)
 	{
 	    vim_free(theline);
 	    break;
 	}
 
-	if (list_append_string(l, theline + i, -1) == FAIL)
+	if (text_indent_len == -1 && *theline != NUL)
+	{
+	    // set the text indent from the first line.
+	    p = theline;
+	    text_indent_len = 0;
+	    while (VIM_ISWHITE(*p))
+	    {
+		p++;
+		text_indent_len++;
+	    }
+	    text_indent = vim_strnsave(theline, text_indent_len);
+	}
+	// with "trim": skip the indent matching the first line
+	if (text_indent != NULL)
+	    for (ti = 0; ti < text_indent_len; ++ti)
+		if (theline[ti] != text_indent[ti])
+		    break;
+
+	if (list_append_string(l, theline + ti, -1) == FAIL)
 	    break;
 	vim_free(theline);
     }
+    vim_free(text_indent);
 
     return l;
 }
@@ -1337,6 +1369,24 @@ heredoc_get(exarg_T *eap, char_u *cmd)
  */
     void
 ex_let(exarg_T *eap)
+{
+    ex_let_const(eap, FALSE);
+}
+
+/*
+ * ":const"			list all variable values
+ * ":const var1 var2"		list variable values
+ * ":const var = expr"		assignment command.
+ * ":const [var1, var2] = expr"	unpack list.
+ */
+    void
+ex_const(exarg_T *eap)
+{
+    ex_let_const(eap, TRUE);
+}
+
+    static void
+ex_let_const(exarg_T *eap, int is_const)
 {
     char_u	*arg = eap->arg;
     char_u	*expr = NULL;
@@ -1396,7 +1446,7 @@ ex_let(exarg_T *eap)
 	    op[0] = '=';
 	    op[1] = NUL;
 	    (void)ex_let_vars(eap->arg, &rettv, FALSE, semicolon, var_count,
-									  op);
+								is_const, op);
 	    clear_tv(&rettv);
 	}
     }
@@ -1429,7 +1479,7 @@ ex_let(exarg_T *eap)
 	else if (i != FAIL)
 	{
 	    (void)ex_let_vars(eap->arg, &rettv, FALSE, semicolon, var_count,
-									  op);
+								 is_const, op);
 	    clear_tv(&rettv);
 	}
     }
@@ -1447,9 +1497,10 @@ ex_let(exarg_T *eap)
 ex_let_vars(
     char_u	*arg_start,
     typval_T	*tv,
-    int		copy,		/* copy values from "tv", don't move */
-    int		semicolon,	/* from skip_var_list() */
-    int		var_count,	/* from skip_var_list() */
+    int		copy,		// copy values from "tv", don't move
+    int		semicolon,	// from skip_var_list()
+    int		var_count,	// from skip_var_list()
+    int		is_const,	// lock variables for const
     char_u	*nextchars)
 {
     char_u	*arg = arg_start;
@@ -1463,7 +1514,7 @@ ex_let_vars(
 	/*
 	 * ":let var = expr" or ":for var in list"
 	 */
-	if (ex_let_one(arg, tv, copy, nextchars, nextchars) == NULL)
+	if (ex_let_one(arg, tv, copy, is_const, nextchars, nextchars) == NULL)
 	    return FAIL;
 	return OK;
     }
@@ -1493,7 +1544,8 @@ ex_let_vars(
     while (*arg != ']')
     {
 	arg = skipwhite(arg + 1);
-	arg = ex_let_one(arg, &item->li_tv, TRUE, (char_u *)",;]", nextchars);
+	arg = ex_let_one(arg, &item->li_tv, TRUE, is_const,
+						   (char_u *)",;]", nextchars);
 	item = item->li_next;
 	if (arg == NULL)
 	    return FAIL;
@@ -1517,8 +1569,8 @@ ex_let_vars(
 	    ltv.vval.v_list = l;
 	    l->lv_refcount = 1;
 
-	    arg = ex_let_one(skipwhite(arg + 1), &ltv, FALSE,
-						    (char_u *)"]", nextchars);
+	    arg = ex_let_one(skipwhite(arg + 1), &ltv, FALSE, is_const,
+						     (char_u *)"]", nextchars);
 	    clear_tv(&ltv);
 	    if (arg == NULL)
 		return FAIL;
@@ -1805,11 +1857,12 @@ list_arg_vars(exarg_T *eap, char_u *arg, int *first)
  */
     static char_u *
 ex_let_one(
-    char_u	*arg,		/* points to variable name */
-    typval_T	*tv,		/* value to assign to variable */
-    int		copy,		/* copy value from "tv" */
-    char_u	*endchars,	/* valid chars after variable name  or NULL */
-    char_u	*op)		/* "+", "-", "."  or NULL*/
+    char_u	*arg,		// points to variable name
+    typval_T	*tv,		// value to assign to variable
+    int		copy,		// copy value from "tv"
+    int		is_const,	// lock variable for const
+    char_u	*endchars,	// valid chars after variable name  or NULL
+    char_u	*op)		// "+", "-", "."  or NULL
 {
     int		c1;
     char_u	*name;
@@ -1824,6 +1877,11 @@ ex_let_one(
      */
     if (*arg == '$')
     {
+	if (is_const)
+	{
+	    emsg(_("E996: Cannot lock an environment variable"));
+	    return NULL;
+	}
 	/* Find the end of the name. */
 	++arg;
 	name = arg;
@@ -1879,6 +1937,11 @@ ex_let_one(
      */
     else if (*arg == '&')
     {
+	if (is_const)
+	{
+	    emsg(_("E996: Cannot lock an option"));
+	    return NULL;
+	}
 	/* Find the end of the name. */
 	p = find_option_end(&arg, &opt_flags);
 	if (p == NULL || (endchars != NULL
@@ -1943,6 +2006,11 @@ ex_let_one(
      */
     else if (*arg == '@')
     {
+	if (is_const)
+	{
+	    emsg(_("E996: Cannot lock a register"));
+	    return NULL;
+	}
 	++arg;
 	if (op != NULL && vim_strchr((char_u *)"+-*/%", *op) != NULL)
 	    semsg(_(e_letwrong), op);
@@ -1988,7 +2056,7 @@ ex_let_one(
 		emsg(_(e_letunexp));
 	    else
 	    {
-		set_var_lval(&lv, p, tv, copy, op);
+		set_var_lval(&lv, p, tv, copy, is_const, op);
 		arg_end = p;
 	    }
 	}
@@ -2430,6 +2498,7 @@ set_var_lval(
     char_u	*endp,
     typval_T	*rettv,
     int		copy,
+    int		is_const,    // Disallow to modify existing variable for :const
     char_u	*op)
 {
     int		cc;
@@ -2495,6 +2564,13 @@ set_var_lval(
 	{
 	    typval_T tv;
 
+	    if (is_const)
+	    {
+		emsg(_(e_cannot_mod));
+		*endp = cc;
+		return;
+	    }
+
 	    // handle +=, -=, *=, /=, %= and .=
 	    di = NULL;
 	    if (get_var_tv(lp->ll_name, (int)STRLEN(lp->ll_name),
@@ -2509,7 +2585,7 @@ set_var_lval(
 	    }
 	}
 	else
-	    set_var(lp->ll_name, rettv, copy);
+	    set_var_const(lp->ll_name, rettv, copy, is_const);
 	*endp = cc;
     }
     else if (var_check_lock(lp->ll_newkey == NULL
@@ -2520,6 +2596,12 @@ set_var_lval(
     {
 	listitem_T *ll_li = lp->ll_li;
 	int	    ll_n1 = lp->ll_n1;
+
+	if (is_const)
+	{
+	    emsg(_("E996: Cannot lock a range"));
+	    return;
+	}
 
 	/*
 	 * Check whether any of the list items is locked
@@ -2574,6 +2656,11 @@ set_var_lval(
 	/*
 	 * Assign to a List or Dictionary item.
 	 */
+	if (is_const)
+	{
+	    emsg(_("E996: Cannot lock a list or dict"));
+	    return;
+	}
 	if (lp->ll_newkey != NULL)
 	{
 	    if (op != NULL && *op != '=')
@@ -2860,8 +2947,8 @@ next_for_item(void *fi_void, char_u *arg)
 	tv.v_lock = VAR_FIXED;
 	tv.vval.v_number = blob_get(fi->fi_blob, fi->fi_bi);
 	++fi->fi_bi;
-	return ex_let_vars(arg, &tv, TRUE,
-			      fi->fi_semicolon, fi->fi_varcount, NULL) == OK;
+	return ex_let_vars(arg, &tv, TRUE, fi->fi_semicolon,
+					   fi->fi_varcount, FALSE, NULL) == OK;
     }
 
     item = fi->fi_lw.lw_item;
@@ -2870,8 +2957,8 @@ next_for_item(void *fi_void, char_u *arg)
     else
     {
 	fi->fi_lw.lw_item = item->li_next;
-	result = (ex_let_vars(arg, &item->li_tv, TRUE,
-			      fi->fi_semicolon, fi->fi_varcount, NULL) == OK);
+	result = (ex_let_vars(arg, &item->li_tv, TRUE, fi->fi_semicolon,
+					  fi->fi_varcount, FALSE, NULL) == OK);
     }
     return result;
 }
@@ -5616,6 +5703,9 @@ garbage_collect(int testing)
     /* v: vars */
     abort = abort || set_ref_in_ht(&vimvarht, copyID, NULL);
 
+    // callbacks in buffers
+    abort = abort || set_ref_in_buffers(copyID);
+
 #ifdef FEAT_LUA
     abort = abort || set_ref_in_lua(copyID);
 #endif
@@ -5646,6 +5736,10 @@ garbage_collect(int testing)
 
 #ifdef FEAT_TERMINAL
     abort = abort || set_ref_in_term(copyID);
+#endif
+
+#ifdef FEAT_TEXT_PROP
+    abort = abort || set_ref_in_popups(copyID);
 #endif
 
     if (!abort)
@@ -5772,13 +5866,43 @@ set_ref_in_ht(hashtab_T *ht, int copyID, list_stack_T **list_stack)
 }
 
 /*
+ * Mark a dict and its items with "copyID".
+ * Returns TRUE if setting references failed somehow.
+ */
+    int
+set_ref_in_dict(dict_T *d, int copyID)
+{
+    if (d != NULL && d->dv_copyID != copyID)
+    {
+	d->dv_copyID = copyID;
+	return set_ref_in_ht(&d->dv_hashtab, copyID, NULL);
+    }
+    return FALSE;
+}
+
+/*
+ * Mark a list and its items with "copyID".
+ * Returns TRUE if setting references failed somehow.
+ */
+    int
+set_ref_in_list(list_T *ll, int copyID)
+{
+    if (ll != NULL && ll->lv_copyID != copyID)
+    {
+	ll->lv_copyID = copyID;
+	return set_ref_in_list_items(ll, copyID, NULL);
+    }
+    return FALSE;
+}
+
+/*
  * Mark all lists and dicts referenced through list "l" with "copyID".
  * "ht_stack" is used to add hashtabs to be marked.  Can be NULL.
  *
  * Returns TRUE if setting references failed somehow.
  */
     int
-set_ref_in_list(list_T *l, int copyID, ht_stack_T **ht_stack)
+set_ref_in_list_items(list_T *l, int copyID, ht_stack_T **ht_stack)
 {
     listitem_T	 *li;
     int		 abort = FALSE;
@@ -5861,7 +5985,7 @@ set_ref_in_item(
 	    ll->lv_copyID = copyID;
 	    if (list_stack == NULL)
 	    {
-		abort = set_ref_in_list(ll, copyID, ht_stack);
+		abort = set_ref_in_list_items(ll, copyID, ht_stack);
 	    }
 	    else
 	    {
@@ -8051,7 +8175,22 @@ list_one_var_a(
 set_var(
     char_u	*name,
     typval_T	*tv,
-    int		copy)	    /* make copy of value in "tv" */
+    int		copy)	    // make copy of value in "tv"
+{
+    set_var_const(name, tv, copy, FALSE);
+}
+
+/*
+ * Set variable "name" to value in "tv".
+ * If the variable already exists and "is_const" is FALSE the value is updated.
+ * Otherwise the variable is created.
+ */
+    static void
+set_var_const(
+    char_u	*name,
+    typval_T	*tv,
+    int		copy,	    // make copy of value in "tv"
+    int		is_const)   // disallow to modify existing variable
 {
     dictitem_T	*v;
     char_u	*varname;
@@ -8075,6 +8214,12 @@ set_var(
 
     if (v != NULL)
     {
+	if (is_const)
+	{
+	    emsg(_(e_cannot_mod));
+	    return;
+	}
+
 	/* existing variable, need to clear the value */
 	if (var_check_ro(v->di_flags, name, FALSE)
 			      || var_check_lock(v->di_tv.v_lock, name, FALSE))
@@ -8152,6 +8297,8 @@ set_var(
 	    return;
 	}
 	v->di_flags = DI_FLAGS_ALLOC;
+	if (is_const)
+	    v->di_flags |= DI_FLAGS_LOCK;
     }
 
     if (copy || tv->v_type == VAR_NUMBER || tv->v_type == VAR_FLOAT)
@@ -8162,6 +8309,9 @@ set_var(
 	v->di_tv.v_lock = 0;
 	init_tv(tv);
     }
+
+    if (is_const)
+	v->di_tv.v_lock |= VAR_LOCKED;
 }
 
 /*
@@ -9415,14 +9565,18 @@ last_set_msg(sctx_T script_ctx)
 }
 
 /*
- * Reset v:option_new, v:option_old and v:option_type.
+ * reset v:option_new, v:option_old, v:option_oldlocal, v:option_oldglobal,
+ * v:option_type, and v:option_command.
  */
     void
 reset_v_option_vars(void)
 {
     set_vim_var_string(VV_OPTION_NEW,  NULL, -1);
     set_vim_var_string(VV_OPTION_OLD,  NULL, -1);
+    set_vim_var_string(VV_OPTION_OLDLOCAL, NULL, -1);
+    set_vim_var_string(VV_OPTION_OLDGLOBAL, NULL, -1);
     set_vim_var_string(VV_OPTION_TYPE, NULL, -1);
+    set_vim_var_string(VV_OPTION_COMMAND, NULL, -1);
 }
 
 /*

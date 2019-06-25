@@ -73,6 +73,9 @@ EXTERN short	*TabPageIdxs INIT(= NULL);
 #ifdef FEAT_TEXT_PROP
 // Array with size Rows x Columns containing zindex of popups.
 EXTERN short	*popup_mask INIT(= NULL);
+EXTERN short	*popup_mask_next INIT(= NULL);
+// Array with flags for tansparent cells of current popup.
+EXTERN char	*popup_transparent INIT(= NULL);
 
 // Flag set to TRUE when popup_mask needs to be updated.
 EXTERN int	popup_mask_refresh INIT(= TRUE);
@@ -558,11 +561,11 @@ EXTERN int	gui_win_y INIT(= -1);
 #endif
 
 #ifdef FEAT_CLIPBOARD
-EXTERN VimClipboard clip_star;	/* PRIMARY selection in X11 */
+EXTERN Clipboard_T clip_star;	// PRIMARY selection in X11
 # ifdef FEAT_X11
-EXTERN VimClipboard clip_plus;	/* CLIPBOARD selection in X11 */
+EXTERN Clipboard_T clip_plus;	// CLIPBOARD selection in X11
 # else
-#  define clip_plus clip_star	/* there is only one clipboard */
+#  define clip_plus clip_star	// there is only one clipboard
 #  define ONE_CLIPBOARD
 # endif
 
@@ -612,7 +615,8 @@ EXTERN win_T	*aucmd_win;	/* window used in aucmd_prepbuf() */
 EXTERN int	aucmd_win_used INIT(= FALSE);	/* aucmd_win is being used */
 
 #ifdef FEAT_TEXT_PROP
-EXTERN win_T    *first_popupwin;	// first global popup window
+EXTERN win_T    *first_popupwin;		// first global popup window
+EXTERN win_T	*popup_dragwin INIT(= NULL);	// popup window being dragged
 #endif
 
 /*
@@ -1693,5 +1697,7 @@ EXTERN HINSTANCE g_hinst INIT(= NULL);
 
 #ifdef FEAT_TEXT_PROP
 EXTERN int text_prop_frozen INIT(= 0);
+
+// Set to TRUE if there is any visible popup.
 EXTERN int popup_visible INIT(= FALSE);
 #endif

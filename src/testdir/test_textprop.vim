@@ -1,9 +1,8 @@
 " Tests for defining text property types and adding text properties to the
 " buffer.
 
-if !has('textprop')
-  finish
-endif
+source check.vim
+CheckFeature textprop
 
 source screendump.vim
 
@@ -758,6 +757,30 @@ func Test_textprop_screenshot_visual()
 
   " Same, but delete four columns
   call RunTestVisualBlock(4, '02')
+endfunc
+
+func Test_textprop_after_tab()
+  if !CanRunVimInTerminal()
+    throw 'Skipped: cannot make screendumps'
+  endif
+
+  let lines =<< trim END
+       call setline(1, [
+             \ "\txxx",
+             \ "x\txxx",
+             \ ])
+       hi SearchProp ctermbg=yellow
+       call prop_type_add('search', {'highlight': 'SearchProp'})
+       call prop_add(1, 2, {'length': 3, 'type': 'search'})
+       call prop_add(2, 3, {'length': 3, 'type': 'search'})
+  END
+  call writefile(lines, 'XtestPropTab')
+  let buf = RunVimInTerminal('-S XtestPropTab', {'rows': 6})
+  call VerifyScreenDump(buf, 'Test_textprop_tab', {})
+
+  " clean up
+  call StopVimInTerminal(buf)
+  call delete('XtestPropTab')
 endfunc
 
 " Adding a text property to a new buffer should not fail

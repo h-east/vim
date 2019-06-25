@@ -62,6 +62,7 @@ int bt_terminal(buf_T *buf);
 int bt_help(buf_T *buf);
 int bt_prompt(buf_T *buf);
 int bt_popup(buf_T *buf);
+int bt_nofilename(buf_T *buf);
 int bt_nofile(buf_T *buf);
 int bt_dontwrite(buf_T *buf);
 int bt_dontwrite_msg(buf_T *buf);
@@ -73,4 +74,5 @@ int find_win_for_buf(buf_T *buf, win_T **wp, tabpage_T **tp);
 void set_buflisted(int on);
 int buf_contents_changed(buf_T *buf);
 void wipe_buffer(buf_T *buf, int aucmd);
+int set_ref_in_buffers(int copyID);
 /* vim: set ft=c : */

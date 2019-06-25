@@ -1,4 +1,4 @@
-*eval.txt*	For Vim version 8.1.  Last change: 2019 Jun 06
+*eval.txt*	For Vim version 8.1.  Last change: 2019 Jun 22
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -1943,10 +1943,29 @@ v:option_new    New value of the option. Valid while executing an |OptionSet|
 		autocommand.
 						    *v:option_old*
 v:option_old    Old value of the option. Valid while executing an |OptionSet|
-		autocommand.
+		autocommand. Depending on the command used for setting and the
+		kind of option this is either the local old value or the
+		global old value.
+						    *v:option_oldlocal*
+v:option_oldlocal
+		Old local value of the option. Valid while executing an
+		|OptionSet| autocommand.
+						    *v:option_oldglobal*
+v:option_oldglobal
+		Old global value of the option. Valid while executing an
+		|OptionSet| autocommand.
 						    *v:option_type*
 v:option_type   Scope of the set command. Valid while executing an
 		|OptionSet| autocommand. Can be either "global" or "local"
+						    *v:option_command*
+v:option_command
+		Command used to set the option. Valid while executing an
+		|OptionSet| autocommand.
+			value		option was set via   ~
+			"setlocal"	|:setlocal| or ":let l:xxx"
+			"setglobal"	|:setglobal| or ":let g:xxx"
+			"set"		|:set| or |:let|
+			"modeline"	|modeline|
 					*v:operator* *operator-variable*
 v:operator	The last operator given in Normal mode.  This is a single
 		character except for commands starting with <g> or <z>,
@@ -2164,7 +2183,7 @@ v:val		Value of the current item of a |List| or |Dictionary|.  Only
 
 					*v:version* *version-variable*
 v:version	Version number of Vim: Major version number times 100 plus
-		minor version number.  Version 5.0 is 500.  Version 5.1 (5.01)
+		minor version number.  Version 5.0 is 500.  Version 5.1
 		is 501.  Read-only.  "version" also works, for backwards
 		compatibility, unless |scriptversion| is 3 or higher.
 		Use |has()| to check if a certain patch was included, e.g.: >
@@ -2172,6 +2191,17 @@ v:version	Version number of Vim: Major version number times 100 plus
 <		Note that patch numbers are specific to the version, thus both
 		version 5.0 and 5.1 may have a patch 123, but these are
 		completely different.
+
+					*v:versionlong* *versionlong-variable*
+v:versionlong	Like v:version, but also including the patchlevel in the last
+		four digits.  Version 8.1 with patch 123 has value 8010123.
+		This can be used like this: >
+			if v:versionlong >= 8010123
+<		However, if there are gaps in the list of patches included
+		this will not work well.  This can happen if a recent patch
+		was included into an older version, e.g. for a security fix.
+		Use the has() function to make sure the patch is actually
+		included.
 
 				*v:vim_did_enter* *vim_did_enter-variable*
 v:vim_did_enter	Zero until most of startup is done.  It is set to one just
@@ -2623,12 +2653,12 @@ sin({expr})			Float	sine of {expr}
 sinh({expr})			Float	hyperbolic sine of {expr}
 sort({list} [, {func} [, {dict}]])
 				List	sort {list}, using {func} to compare
+sound_clear()			none	stop playing all sounds
 sound_playevent({name} [, {callback}])
 				Number	play an event sound
-sound_playfile({name} [, {callback}])
-				Number	play a sound file
+sound_playfile({path} [, {callback}])
+				Number	play sound file {path}
 sound_stop({id})		none	stop playing sound {id}
-sound_stopall()			none	stop playing all sounds
 soundfold({word})		String	sound-fold {word}
 spellbadword()			String	badly spelled word at cursor
 spellsuggest({word} [, {max} [, {capital}]])
@@ -2711,6 +2741,7 @@ test_alloc_fail({id}, {countdown}, {repeat})
 test_autochdir()		none	enable 'autochdir' during startup
 test_feedinput({string})	none	add key sequence to input buffer
 test_garbagecollect_now()	none	free memory right now for testing
+test_garbagecollect_soon()	none	free memory soon for testing
 test_getvalue({string})		any	get value of an internal variable
 test_ignore_error({expr})	none	ignore a specific error
 test_null_blob()		Blob	null value for testing
@@ -7360,7 +7391,7 @@ prop_remove({props} [, {lnum} [, {lnum-end}]])
 				not just the first one
 		A property matches when either "id" or "type" matches.
 		If buffer "bufnr" does not exist you get an error message.
-		If buffer 'bufnr" is not loaded then nothing happens.
+		If buffer "bufnr" is not loaded then nothing happens.
 
 		Returns the number of properties that were removed.
 
@@ -8093,10 +8124,9 @@ setbufline({expr}, {lnum}, {text})			*setbufline()*
 
 		{lnum} is used like with |setline()|.
 		This works like |setline()| for the specified buffer.
-		On success 0 is returned, on failure 1 is returned.
 
-		If {expr} is not a valid buffer or {lnum} is not valid, an
-		error message is given.
+		When {expr} is not a valid buffer or {lnum} is not valid then
+		1 is returned.  On success 0 is returned.
 
 setbufvar({expr}, {varname}, {val})			*setbufvar()*
 		Set option or local variable {varname} in buffer {expr} to
@@ -8852,6 +8882,10 @@ sort({list} [, {func} [, {dict}]])			*sort()* *E702*
 			   return a:i1 - a:i2
 			endfunc
 <
+sound_clear()						*sound_clear()*
+		Stop playing all sounds.
+		{only available when compiled with the |+sound| feature}
+
 							*sound_playevent()*
 sound_playevent({name} [, {callback}])
 		Play a sound identified by {name}.  Which event names are
@@ -8859,41 +8893,45 @@ sound_playevent({name} [, {callback}])
 		are used.  On Ubuntu they may be found in
 		/usr/share/sounds/freedesktop/stereo.  Example: >
 			call sound_playevent('bell')
+<		On MS-Windows, {name} can be SystemAsterisk, SystemDefault,
+		SystemExclamation, SystemExit, SystemHand, SystemQuestion,
+		SystemStart, SystemWelcome, etc.
 
-<		When {callback} is specified it is invoked when the sound is
+		When {callback} is specified it is invoked when the sound is
 		finished.  The first argument is the sound ID, the second
 		argument is the status:
 			0	sound was played to the end
-			1	sound was interruped
-			2	error occured after sound started
+			1	sound was interrupted
+			2	error occurred after sound started
 		Example: >
 		   func Callback(id, status)
 		     echomsg "sound " .. a:id .. " finished with " .. a:status
 		   endfunc
 		   call sound_playevent('bell', 'Callback')
 
-<		Returns the sound ID, which can be passed to `sound_stop()`.
+<		MS-Windows: {callback} doesn't work for this function.
+
+		Returns the sound ID, which can be passed to `sound_stop()`.
 		Returns zero if the sound could not be played.
-		{only available when compiled with the +sound feature}
+		{only available when compiled with the |+sound| feature}
 
 							*sound_playfile()*
-sound_playfile({name} [, {callback}])
-		Like `sound_playevent()` but play sound file {name}.  {name}
+sound_playfile({path} [, {callback}])
+		Like `sound_playevent()` but play sound file {path}.  {path}
 		must be a full path.  On Ubuntu you may find files to play
 		with this command: >
 		    :!find /usr/share/sounds -type f | grep -v index.theme
-
-<		{only available when compiled with the +sound feature}
+<		{only available when compiled with the |+sound| feature}
 
 
 sound_stop({id})					*sound_stop()*
 		Stop playing sound {id}.  {id} must be previously returned by
 		`sound_playevent()` or `sound_playfile()`.
-		{only available when compiled with the +sound feature}
 
-sound_stopall()						*sound_stopall()*
-		Stop playing all sounds.
-		{only available when compiled with the +sound feature}
+		On MS-Windows, this does not work for event sound started by
+		`sound_playevent()`. To stop event sounds, use `sound_clear()`.
+
+		{only available when compiled with the |+sound| feature}
 
 							*soundfold()*
 soundfold({word})
@@ -9972,6 +10010,10 @@ test_garbagecollect_now()			 *test_garbagecollect_now()*
 		internally, and |v:testing| must have been set before calling
 		any function.
 
+test_garbagecollect_soon()			 *test_garbagecollect_soon()*
+		Set the flag to call the garbagecollector as if in the main
+		loop.  Only to be used in tests.
+
 test_getvalue({name})					*test_getvalue()*
 		Get the value of an internal variable.  These values for
 		{name} are supported:
@@ -10035,6 +10077,8 @@ test_override({name}, {val})				*test_override()*
 			     fallback to the old engine
 		no_query_mouse  do not query the mouse position for "dec"
 				terminals
+		no_wait_return	set the "no_wait_return" flag.  Not restored
+				with "ALL".
 		ALL	     clear all overrides ({val} is not used)
 
 		"starting" is to be used when a test should behave like
@@ -11522,13 +11566,24 @@ text...
 			If {marker} is not supplied, then "." is used as the
 			default marker.
 
-			Any white space characters in the lines of text are
-			preserved.  If "trim" is specified before {marker},
-			then all the leading indentation exactly matching the
-			leading indentation before `let` is stripped from the
-			input lines and the line containing {marker}.  Note
-			that the difference between space and tab matters
-			here.
+			Without "trim" any white space characters in the lines
+			of text are preserved.  If "trim" is specified before
+			{marker}, then indentation is stripped so you can do: >
+				let text =<< trim END
+				   if ok
+				     echo 'done'
+				   endif
+				END
+<			Results in: ["if ok", "  echo 'done'", "endif"]
+			The marker must line up with "let" and the indentation
+			of the first line is removed from all the text lines.
+			Specifically: all the leading indentation exactly
+			matching the leading indentation of the first
+			non-empty text line is stripped from the input lines.
+			All leading indentation exactly matching the leading
+			indentation before `let` is stripped from the line
+			containing {marker}.  Note that the difference between
+			space and tab matters here.
 
 			If {var-name} didn't exist yet, it is created.
 			Cannot be followed by another command, but can be
@@ -11564,7 +11619,6 @@ text...
 				#	Number
 				*	Funcref
 
-
 :unl[et][!] {name} ...				*:unlet* *:unl* *E108* *E795*
 			Remove the internal variable {name}.  Several variable
 			names can be given, they are all removed.  The name
@@ -11589,7 +11643,33 @@ text...
 			No error message is given for a non-existing
 			variable, also without !.
 			If the system does not support deleting an environment
-			variable, it is made emtpy.
+			variable, it is made empty.
+
+						*:cons* *:const*
+:cons[t] {var-name} = {expr1}
+:cons[t] [{name1}, {name2}, ...] = {expr1}
+:cons[t] [{name}, ..., ; {lastname}] = {expr1}
+:cons[t] {var-name} =<< [trim] {marker}
+text...
+text...
+{marker}
+			Similar to |:let|, but additionally lock the variable
+			after setting the value.  This is the same as locking
+			the variable with |:lockvar| just after |:let|, thus: >
+				:const x = 1
+<			is equivalent to: >
+				:let x = 1
+				:lockvar 1 x
+<			This is useful if you want to make sure the variable
+			is not modified.
+							*E995*
+			|:const| does not allow to for changing a variable: >
+				:let x = 1
+				:const x = 2  " Error!
+<							*E996*
+			Note that environment variables, option values and
+			register values cannot be used here, since they cannot
+			be locked.
 
 :lockv[ar][!] [depth] {name} ...			*:lockvar* *:lockv*
 			Lock the internal variable {name}.  Locking means that
@@ -13084,19 +13164,22 @@ Sometimes old syntax of functionality gets in the way of making Vim better.
 When support is taken away this will break older Vim scripts.  To make this
 explicit the |:scriptversion| command can be used.  When a Vim script is not
 compatible with older versions of Vim this will give an explicit error,
-instead of failing in mysterious ways. >
+instead of failing in mysterious ways.
 
+							*scriptversion-1*  >
  :scriptversion 1
 <	This is the original Vim script, same as not using a |:scriptversion|
 	command.  Can be used to go back to old syntax for a range of lines.
 	Test for support with: >
 		has('vimscript-1')
 
+<							*scriptversion-2*  >
  :scriptversion 2
 <	String concatenation with "." is not supported, use ".." instead.
 	This avoids the ambiguity using "." for Dict member access and
 	floating point numbers.  Now ".5" means the number 0.5.
->
+
+							*scriptversion-3*  >
  :scriptversion 3
 <	All |vim-variable|s must be prefixed by "v:".  E.g. "version" doesn't
 	work as |v:version| anymore, it can be used as a normal variable.

@@ -1,7 +1,7 @@
 " Test Vim profiler
-if !has('profile')
-  finish
-endif
+
+source check.vim
+CheckFeature profile
 
 func Test_profile_func()
   let lines =<< trim [CODE]
@@ -310,13 +310,13 @@ endfunc
 
 func Test_profile_file()
   let lines =<< trim [CODE]
-  func! Foo()
-  endfunc
-  for i in range(10)
-    " a comment
+    func! Foo()
+    endfunc
+    for i in range(10)
+      " a comment
+      call Foo()
+    endfor
     call Foo()
-  endfor
-  call Foo()
   [CODE]
 
   call writefile(lines, 'Xprofile_file.vim')
