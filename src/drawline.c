@@ -197,6 +197,30 @@ typedef struct {
 #endif
 #define WL_LINE		(WL_SBR + 1)	// text in the line
 
+char *ch_log_wlv_draw_state(int draw_state)
+{
+    switch (draw_state)
+    {
+    case WL_START: return "WL_START";
+    case WL_CMDLINE: return "WL_CMDLINE";
+    case WL_FOLD: return "WL_FOLD";
+    case WL_SIGN: return "WL_SIGN";
+    case WL_NR: return "WL_NR";
+    case WL_BRI: return "WL_BRI";
+    case WL_SBR: return "WL_SBR";
+    case WL_LINE: return "WL_LINE";
+    }
+
+    return "???";
+}
+
+void ch_log_wlv(const winlinevars_T *wlv)
+{
+    CH_LOG("wlv draw_state:%s (%d), lnum:%ld, need_showbreak:%d, dont_use_showbreak:%d, text_prop_above_count:%d", ch_log_wlv_draw_state(wlv->draw_state), wlv->draw_state, wlv->lnum, wlv->need_showbreak, wlv->dont_use_showbreak, wlv->text_prop_above_count);
+    CH_LOG("    n_extra:%d, p_extra:%p \"%s\", extra_for_textprop:%d, c_extra:0x%02x (%c), c_final:0x%02x (%c)", wlv->n_extra, wlv->p_extra, (wlv->p_extra != NULL) ? (char *)wlv->p_extra : "", wlv->extra_for_textprop, wlv->c_extra, wlv->c_extra, wlv->c_final, wlv->c_final);
+    CH_LOG(" sv n_extra:%d, p_extra:%p \"%s\", extra_for_textprop:%d, c_extra:0x%02x (%c), c_final:0x%02x (%c)", wlv->saved_n_extra, wlv->saved_p_extra, (wlv->saved_p_extra != NULL) ? (char *)wlv->saved_p_extra : "", wlv->saved_extra_for_textprop, wlv->saved_c_extra, wlv->saved_c_extra, wlv->saved_c_final, wlv->saved_c_final);
+}
+
 #if defined(FEAT_SIGNS) || defined(FEAT_FOLDING)
 /*
  * Return TRUE if CursorLineSign highlight is to be used.
@@ -518,7 +542,10 @@ handle_breakindent(win_T *wp, winlinevars_T *wlv)
 	    }
 	    if (wp->w_skipcol > 0 && wlv->startrow == 0
 					   && wp->w_p_wrap && wp->w_briopt_sbr)
+	    {
 		wlv->need_showbreak = FALSE;
+		CH_LOG("wlv.need_showbreak = FALSE");
+	    }
 	    // Correct end of highlighted area for 'breakindent',
 	    // required when 'linebreak' is also set.
 	    if (wlv->tocol == wlv->vcol)
@@ -566,7 +593,10 @@ handle_showbreak_and_filler(win_T *wp, winlinevars_T *wlv)
 	wlv->c_final = NUL;
 	wlv->n_extra = (int)STRLEN(sbr);
 	if (wp->w_skipcol == 0 || wlv->startrow != 0 || !wp->w_p_wrap)
+	{
 	    wlv->need_showbreak = FALSE;
+	    CH_LOG("wlv.need_showbreak = FALSE");
+	}
 	wlv->vcol_sbr = wlv->vcol + MB_CHARLEN(sbr);
 	// Correct end of highlighted area for 'showbreak',
 	// required when 'linebreak' is also set.
@@ -954,6 +984,7 @@ draw_screen_line(win_T *wp, winlinevars_T *wlv)
     static void
 win_line_start(win_T *wp UNUSED, winlinevars_T *wlv, int save_extra)
 {
+    CH_LOG("save_extra:%d", save_extra);
     wlv->col = 0;
     wlv->off = (unsigned)(current_ScreenLine - ScreenLines);
 
@@ -1002,6 +1033,7 @@ win_line_start(win_T *wp UNUSED, winlinevars_T *wlv, int save_extra)
     static void
 win_line_continue(winlinevars_T *wlv)
 {
+    CH_LOG("wlv->saved_n_extra:%d", wlv->saved_n_extra);
     if (wlv->saved_n_extra > 0)
     {
 	// Continue item from end of wrapped line.
@@ -1065,6 +1097,8 @@ win_line(
     int		nochange UNUSED,	// not updating for changed text
     int		number_only)		// only update the number column
 {
+    CH_LOG("lnum:%ld, startrow:%d, endrow:%d, number_only:%d", lnum, startrow, endrow, number_only);
+
     winlinevars_T	wlv;		// variables passed between functions
 
     int		c = 0;			// init for GCC
@@ -1488,6 +1522,7 @@ win_line(
 
     line = ml_get_buf(wp->w_buffer, lnum, FALSE);
     ptr = line;
+    CH_LOG("line: \"%s\"", line);
 
 #ifdef FEAT_SPELL
     if (has_spell && !number_only)
@@ -1580,6 +1615,7 @@ win_line(
     text_prop_count = get_text_props(wp->w_buffer, lnum, &prop_start, FALSE);
     if (text_prop_count > 0)
     {
+	CH_LOG("text_prop_count:%d", text_prop_count);
 	// Make a copy of the properties, so that they are properly
 	// aligned.
 	text_props = ALLOC_MULT(textprop_T, text_prop_count);
@@ -1711,7 +1747,10 @@ win_line(
 #ifdef FEAT_LINEBREAK
 	// When w_skipcol is non-zero, first line needs 'showbreak'
 	if (wp->w_p_wrap)
+	{
 	    wlv.need_showbreak = TRUE;
+	    CH_LOG("wlv.need_showbreak = TRUE");
+	}
 #endif
 #ifdef FEAT_SPELL
 	// When spell checking a word we need to figure out the start of the
@@ -1816,9 +1855,11 @@ win_line(
     }
 #endif
 
+    CH_LOG("Pre win_line_start(,,FALSE)");
     win_line_start(wp, &wlv, FALSE);
 
     // Repeat for the whole displayed line.
+    CH_LOG("Pre for (;;)");
     for (;;)
     {
 	char_u	*prev_ptr = ptr;
@@ -1828,6 +1869,9 @@ win_line(
 #ifdef FEAT_CONCEAL
 	int	did_decrement_ptr = FALSE;
 #endif
+	CH_LOG("for (;;) ptr:\"%s\"", ptr);
+	ch_log_wlv(&wlv);
+	CH_LOG("text_prop_above:%d, text_prop_follows:%d, in_linebreak:%d", text_prop_above, text_prop_follows, in_linebreak);
 
 	// Skip this quickly when working on the text.
 	if (wlv.draw_state != WL_LINE)
@@ -1892,6 +1936,7 @@ win_line(
 		wlv.draw_state = WL_LINE;
 		win_line_continue(&wlv);  // use wlv.saved_ values
 	    }
+	    CH_LOG("wlv.draw_state:%s (%d)", ch_log_wlv_draw_state(wlv.draw_state), wlv.draw_state);
 	}
 
 #ifdef FEAT_SYN_HL
@@ -1974,6 +2019,7 @@ win_line(
 					sizeof(int)
 					     * (text_props_active - (pi + 1)));
 			--text_props_active;
+			CH_LOG("text_props_active:%d", text_props_active);
 			--pi;
 # ifdef FEAT_LINEBREAK
 			// not exactly right but should work in most cases
@@ -2009,6 +2055,7 @@ win_line(
 			    || bcol <= text_props[text_prop_next].tp_col - 1
 					   + text_props[text_prop_next].tp_len)
 			text_prop_idxs[text_props_active++] = text_prop_next;
+		    CH_LOG("text_props_active:%d", text_props_active);
 		    ++text_prop_next;
 		}
 
@@ -2099,6 +2146,7 @@ win_line(
 							& TP_FLAG_ALIGN_ABOVE);
 			int	    bail_out = FALSE;
 
+			CH_LOG("above:%d", above);
 			// reset the ID in the copy to avoid it being used
 			// again
 			tp->tp_id = -MAXCOL;
@@ -2114,6 +2162,7 @@ win_line(
 						 && tp->tp_len > 1
 							  ? tp->tp_len - 1 : 0;
 
+			    CH_LOG("right:%d, below:%d, wrap:%d, padding:%d", right, below, wrap, padding);
 			    // Insert virtual text before the current
 			    // character, or add after the end of the line.
 			    wlv.p_extra = p;
@@ -2121,6 +2170,7 @@ win_line(
 			    wlv.c_final = NUL;
 			    wlv.n_extra = (int)STRLEN(p);
 			    wlv.extra_for_textprop = TRUE;
+			    CH_LOG("wlv.extra_for_textprop = TRUE");
 			    wlv.extra_attr = hl_combine_attr(wlv.win_attr,
 								    used_attr);
 			    n_attr = mb_charlen(p);
@@ -2141,7 +2191,9 @@ win_line(
 				// no 'showbreak' before "below" text property
 				// or after "above" or "right" text property
 				wlv.need_showbreak = FALSE;
+				CH_LOG("wlv.need_showbreak = FALSE");
 				wlv.dont_use_showbreak = TRUE;
+				CH_LOG("wlv.dont_use_showbreak = TRUE");
 			    }
 #endif
 			    if ((right || above || below || !wrap
@@ -2190,6 +2242,7 @@ win_line(
 					++wlv.row;
 					break;
 				    }
+				    CH_LOG("Pre win_line_start(,,TRUE)");
 				    win_line_start(wp, &wlv, TRUE);
 				    bail_out = TRUE;
 				}
@@ -2229,6 +2282,7 @@ win_line(
 					&& (wp->w_p_wrap
 					     || (text_props[other_tpi].tp_flags
 			       & (TP_FLAG_ALIGN_BELOW | TP_FLAG_ALIGN_RIGHT)));
+			CH_LOG("text_prop_above:%d, text_prop_follows:%d", text_prop_above, text_prop_follows);
 
 			if (bail_out)
 			    // starting a new line for "below"
@@ -2540,12 +2594,17 @@ win_line(
 			area_attr = saved_area_attr;
 
 		    if (wlv.extra_for_textprop)
+		    {
+//			wlv.dont_use_showbreak = FALSE;
+//			CH_LOG("wlv.dont_use_showbreak = FALSE");
 			// wlv.extra_attr should be used at this position but
 			// not any further.
 			reset_extra_attr = TRUE;
+		    }
 		}
 
 		wlv.extra_for_textprop = FALSE;
+		CH_LOG("wlv.extra_for_textprop = FALSE");
 		in_linebreak = FALSE;
 	    }
 #endif
@@ -3465,6 +3524,10 @@ win_line(
 #ifdef FEAT_PROP_POPUP
 	    if (reset_extra_attr)
 	    {
+//		wlv.dont_use_showbreak = FALSE;
+//		CH_LOG("wlv.dont_use_showbreak = FALSE");
+//		wlv.need_showbreak = FALSE;
+//		CH_LOG("wlv.need_showbreak = FALSE");
 		reset_extra_attr = FALSE;
 		wlv.extra_attr = 0;
 	    }
@@ -4009,6 +4072,7 @@ win_line(
 		ptr += STRLEN(ptr);
 # ifdef FEAT_LINEBREAK
 		wlv.dont_use_showbreak = TRUE;
+		CH_LOG("wlv.dont_use_showbreak = TRUE");
 # endif
 	    }
 #endif
@@ -4091,6 +4155,7 @@ win_line(
 		}
 	    }
 
+	    CH_LOG("Pre win_line_start(,,TRUE)");
 	    win_line_start(wp, &wlv, TRUE);
 
 	    lcs_prec_todo = wp->w_lcs_chars.prec;
@@ -4100,7 +4165,10 @@ win_line(
 		    && wlv.filler_todo <= 0
 # endif
 	       )
+	    {
 		wlv.need_showbreak = TRUE;
+		CH_LOG("wlv.need_showbreak = TRUE");
+	    }
 #endif
 #ifdef FEAT_DIFF
 	    --wlv.filler_todo;
@@ -4112,6 +4180,7 @@ win_line(
 	}
 
     }	// for every character in the line
+    CH_LOG("end for(;;)");
 
 #ifdef FEAT_SPELL
     // After an empty line check first word for capital.
