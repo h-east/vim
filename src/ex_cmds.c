@@ -2647,9 +2647,9 @@ do_ecmd(
     }
 
 
-     // End Visual mode before switching to another buffer, so the text can be
-     // copied into the GUI selection buffer.
-     // Careful: may trigger ModeChanged() autocommand
+    // End Visual mode before switching to another buffer, so the text can be
+    // copied into the GUI selection buffer.
+    // Careful: may trigger ModeChanged() autocommand
 
     // Should we block autocommands here?
     reset_VIsual();
@@ -4519,6 +4519,9 @@ ex_substitute(exarg_T *eap)
 		{
 		    nmatch = curbuf->b_ml.ml_line_count - sub_firstlnum + 1;
 		    skip_match = TRUE;
+		    // safety check
+		    if (nmatch < 0)
+			goto skip;
 		}
 
 		// Need room for:
