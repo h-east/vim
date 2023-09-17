@@ -1827,14 +1827,19 @@ generate_CALL(
 	    }
 	    if (i < regular_args)
 	    {
-		if (ufunc->uf_arg_types == NULL)
+		char_u  *func_line;
+
+		if (ufunc->uf_arg_types == NULL
+					    || ufunc->uf_lines.ga_data == NULL)
 		    continue;
 		expected = ufunc->uf_arg_types[i];
+		func_line = ((char_u **)ufunc->uf_lines.ga_data)[i];
 
 		// When the method is a class constructor and the formal
 		// argument is an object member, the type check is performed on
 		// the object member type.
-		if (class_constructor && expected->tt_type == VAR_ANY)
+		if (class_constructor && strstr((char *)func_line, "this.")
+				    != NULL && expected->tt_type == VAR_ANY)
 		{
 		    class_T *clp = mtype->tt_class;
 		    char_u  *aname = ((char_u **)ufunc->uf_args.ga_data)[i];
