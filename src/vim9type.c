@@ -1984,10 +1984,16 @@ equal_type(type_T *type1, type_T *type2, int flags)
 	case VAR_JOB:
 	case VAR_CHANNEL:
 	case VAR_INSTR:
-	case VAR_CLASS:
-	case VAR_OBJECT:
 	case VAR_TYPEALIAS:
 	    break;  // not composite is always OK
+	case VAR_CLASS:
+	case VAR_OBJECT:
+	    {
+		HH_ch_log("type1->tt_type:%d, type2->tt_type:%d", type1->tt_type, type2->tt_type);
+		HH_ch_log("type1->tt_class->class_name:\"%s\", type2->tt_class->class_name:\"%s\"", type1->tt_class->class_name, type2->tt_class->class_name);
+		return type1->tt_class == type2->tt_class;
+	    }
+	    break;
 	case VAR_LIST:
 	case VAR_DICT:
 	    return equal_type(type1->tt_member, type2->tt_member, flags);
@@ -2172,6 +2178,7 @@ push_type_stack2(cctx_T *cctx, type_T *type, type_T *decl_type)
     typep = ((type2_T *)stack->ga_data) + stack->ga_len;
     typep->type_curr = type;
     typep->type_decl = decl_type;
+    HH_ch_log("out. stack->(da_data:%p, ga_len:%d), type->tt_type:%d, decl_type->tt_type:%d", ((isn_T *)stack->ga_data), stack->ga_len, type->tt_type, decl_type->tt_type);
     ++stack->ga_len;
     return OK;
 }
