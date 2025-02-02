@@ -1285,6 +1285,7 @@ list_slice_or_index(
     varnumber_T	n2 = n2_arg;
     typval_T	var1;
 
+    HH_ch_log("in. len:%ld, n1:%lld, n2:%lld", len, n1, n2);
     if (n1 < 0)
 	n1 = len + n1;
     if (n1 < 0 || n1 >= len)
@@ -1342,6 +1343,10 @@ list_slice_or_index(
 
 	clear_tv(rettv);
 	*rettv = var1;
+	if (rettv->v_type == VAR_OBJECT)
+	    HH_ch_log("out. rettv->{v_type:%d, v_object->obj_class->class_name:\"%s\"}", rettv->v_type, rettv->vval.v_object->obj_class->class_name);
+	else
+	    HH_ch_log("out. rettv->{v_type:%d}", rettv->v_type);
     }
     return OK;
 }

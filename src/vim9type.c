@@ -2386,6 +2386,7 @@ push_type_stack2(cctx_T *cctx, type_T *type, type_T *decl_type)
     typep = ((type2_T *)stack->ga_data) + stack->ga_len;
     typep->type_curr = type;
     typep->type_decl = decl_type;
+    HH_ch_log("out. stack->(da_data:%p, ga_len:%d), type->tt_type:%d, decl_type->tt_type:%d", ((isn_T *)stack->ga_data), stack->ga_len, type->tt_type, decl_type->tt_type);
     ++stack->ga_len;
     return OK;
 }

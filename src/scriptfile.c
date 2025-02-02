@@ -13,6 +13,8 @@
 
 #include "vim.h"
 
+int g_sourced_sid = 0;
+
 #if defined(FEAT_EVAL)
 // The names of packages that once were loaded are remembered.
 static garray_T		ga_loaded = {0, 0, sizeof(char_u *), 4, NULL};
@@ -510,6 +512,7 @@ get_new_scriptitem_for_fname(int *error, char_u *fname)
 	si->sn_name = vim_strsave(fname);
 	si->sn_state = SN_STATE_NOT_LOADED;
     }
+    HH_ch_log("sid:%d, fname:\"%s\", *error:%d", sid, fname, *error);
     return sid;
 }
 
@@ -1639,6 +1642,7 @@ do_source_ext(
     ESTACK_CHECK_DECLARATION;
 #endif
 
+    HH_ch_log("in. fname:\"%s\"", fname);
     CLEAR_FIELD(cookie);
     if (fname == NULL)
     {
@@ -1661,6 +1665,7 @@ do_source_ext(
 	    goto theend;
 	}
     }
+    HH_ch_log("fname_exp:\"%s\"", fname_exp);
 #ifdef FEAT_EVAL
     estack_compiling = FALSE;
 
@@ -1669,6 +1674,7 @@ do_source_ext(
     if (sid > 0 && ret_sid != NULL
 			  && SCRIPT_ITEM(sid)->sn_state != SN_STATE_NOT_LOADED)
     {
+	HH_ch_log("fname:\"%s\", sid:%d, sn_state:%d. Already loaded", fname_exp, sid, SCRIPT_ITEM(sid)->sn_state);
 	// Already loaded and no need to load again, return here.
 	*ret_sid = sid;
 	retval = OK;
@@ -1821,14 +1827,17 @@ do_source_ext(
 	// loading the same script again
 	current_sctx.sc_sid = sid;
 	si = SCRIPT_ITEM(sid);
+	HH_ch_log("sid:%d, seq:%d, sn_state:%d", sid, current_sctx.sc_seq, si->sn_state);
 	if (si->sn_state == SN_STATE_NOT_LOADED)
 	{
 	    // this script was found but not loaded yet
 	    si->sn_state = SN_STATE_NEW;
+	    HH_ch_log("sn_state:%d", si->sn_state);
 	}
 	else
 	{
 	    si->sn_state = SN_STATE_RELOAD;
+	    HH_ch_log("sn_state:%d, clearvars:%d", si->sn_state, clearvars);
 
 	    if (!clearvars)
 	    {
@@ -1863,6 +1872,7 @@ do_source_ext(
 	// It's new, generate a new SID and initialize the scriptitem.
 	sid = get_new_scriptitem(&error);
 	current_sctx.sc_sid = sid;
+	HH_ch_log("Post get_new_scriptitem(). fname_exp:\"%s\", current_sctx.sc_sid:%d, error:%d", fname_exp, current_sctx.sc_sid, error);
 	if (error == FAIL)
 	    goto almosttheend;
 	si = SCRIPT_ITEM(sid);
@@ -1922,9 +1932,11 @@ do_source_ext(
 	}
     }
 
+    HH_ch_log("Pre do_cmdline(). firstline:\"%s\"", firstline);
     // Call do_cmdline, which will call getsourceline() to get the lines.
     do_cmdline(firstline, getsourceline, (void *)&cookie,
 				     DOCMD_VERBOSE|DOCMD_NOWAIT|DOCMD_REPEAT);
+    HH_ch_log("Post do_cmdline()");
     retval = OK;
 
 #ifdef FEAT_PROFILE
@@ -2069,7 +2081,10 @@ do_source(
     int		is_vimrc,	    // DOSO_ value
     int		*ret_sid)
 {
-    return do_source_ext(fname, check_other, is_vimrc, ret_sid, NULL, FALSE);
+    HH_ch_log("in. fname:\"%s\"", fname);
+    int ret = do_source_ext(fname, check_other, is_vimrc, ret_sid, NULL, FALSE);
+    HH_ch_log("out. ret:%d, *ret_sid:%d", ret, ret_sid == NULL ? -1 : *ret_sid);
+    return ret;
 }
 
 
@@ -2895,14 +2910,18 @@ script_autoload(
     int		i;
     int		ret_sid;
 
+    g_sourced_sid = 0;
+    HH_ch_log("in. name:\"%s\", reload:%d", name, reload);
     // If the name starts with "<SNR>123_" then "123" is the script ID.
     if (name[0] == K_SPECIAL && name[1] == KS_EXTRA && name[2] == KE_SNR)
     {
 	p = name + 3;
 	ret_sid = (int)getdigits(&p);
+	HH_ch_log("ret_sid:%d", ret_sid);
 	if (*p == '_' && SCRIPT_ID_VALID(ret_sid))
 	{
 	    may_load_script(ret_sid, &ret);
+	    HH_ch_log("out. ret:%d", ret);
 	    return ret;
 	}
     }
@@ -2910,24 +2929,39 @@ script_autoload(
     // If there is no '#' after name[0] there is no package name.
     p = vim_strchr(name, AUTOLOAD_CHAR);
     if (p == NULL || p == name)
+    {
+	HH_ch_log("out. FALSE");
 	return FALSE;
+    }
 
     tofree = scriptname = autoload_name(name);
+    HH_ch_log("scriptname:\"%s\"", scriptname);
     if (scriptname == NULL)
+    {
+	HH_ch_log("out2. FALSE");
 	return FALSE;
+    }
 
     // Find the name in the list of previously loaded package names.  Skip
     // "autoload/", it's always the same.
     for (i = 0; i < ga_loaded.ga_len; ++i)
+    {
+	HH_ch_log("ga_loaded.ga_data[%d]:\"%s\"", i, ((char_u **)ga_loaded.ga_data)[i]);
 	if (STRCMP(((char_u **)ga_loaded.ga_data)[i] + 9, scriptname + 9) == 0)
 	    break;
+    }
+    HH_ch_log("i:%d, ga_loaded.ga_len:%d", i, ga_loaded.ga_len);
     if (!reload && i < ga_loaded.ga_len)
+    {
+	HH_ch_log("was loaded already");
 	ret = FALSE;	    // was loaded already
+    }
     else
     {
 	// Remember the name if it wasn't loaded already.
 	if (i == ga_loaded.ga_len && ga_grow(&ga_loaded, 1) == OK)
 	{
+	    HH_ch_log("ga_len++");
 	    ((char_u **)ga_loaded.ga_data)[ga_loaded.ga_len++] = scriptname;
 	    tofree = NULL;
 	}
@@ -2935,10 +2969,15 @@ script_autoload(
 	// Try loading the package from $VIMRUNTIME/autoload/<name>.vim
 	// Use "ret_sid" to avoid loading the same script again.
 	if (source_in_path(p_rtp, scriptname, DIP_START, &ret_sid) == OK)
+	{
+	    HH_ch_log("source_in_path() is OK. ret_sid:%d", ret_sid);
+	    g_sourced_sid = ret_sid;
 	    ret = TRUE;
+	}
     }
 
     vim_free(tofree);
+    HH_ch_log("out. ret:%d", ret);
     return ret;
 }
 #endif

@@ -29,18 +29,14 @@ typedef enum {
     ISN_ECHOERR,    // :echoerr with isn_arg.number items on top of stack
     ISN_RANGE,	    // compute range from isn_arg.string, push to stack
     ISN_SUBSTITUTE, // :s command with expression
-
     ISN_SOURCE,	    // source autoload script, isn_arg.number is the script ID
     ISN_INSTR,	    // instructions compiled from expression
     ISN_CONSTRUCT,  // construct an object, using construct_T
     ISN_GET_OBJ_MEMBER, // object member, index is isn_arg.number
     ISN_GET_ITF_MEMBER, // interface member, index is isn_arg.classmember
-    ISN_STORE_THIS, // store value in "this" object member, index is
-		    // isn_arg.number
+    ISN_STORE_THIS, // store value in "this" object member, index is // isn_arg.number
     ISN_LOAD_CLASSMEMBER,  // load class member, using isn_arg.classmember
     ISN_STORE_CLASSMEMBER,  // store in class member, using isn_arg.classmember
-
-    // get and set variables
     ISN_LOAD,	    // push local variable isn_arg.number
     ISN_LOADV,	    // push v: variable isn_arg.number
     ISN_LOADG,	    // push g: variable isn_arg.string
@@ -59,7 +55,6 @@ typedef enum {
     ISN_LOADOPT,    // push option isn_arg.string
     ISN_LOADENV,    // push environment variable isn_arg.string
     ISN_LOADREG,    // push register isn_arg.number
-
     ISN_STORE,	    // pop into local variable isn_arg.number
     ISN_STOREV,	    // pop into v: variable isn_arg.number
     ISN_STOREG,	    // pop into global variable isn_arg.string
@@ -74,24 +69,16 @@ typedef enum {
     ISN_STOREOPT,    // pop into option isn_arg.storeopt
     ISN_STOREFUNCOPT, // pop into option isn_arg.storeopt
     ISN_STOREENV,    // pop into environment variable isn_arg.string
-    ISN_STOREREG,    // pop into register isn_arg.number
-    // ISN_STOREOTHER, // pop into other script variable isn_arg.other.
-
+    ISN_STOREREG,    // pop into register isn_arg.number // ISN_STOREOTHER, // pop into other script variable isn_arg.other.
     ISN_STORENR,    // store number into local variable isn_arg.storenr.stnr_idx
-    ISN_STOREINDEX,	// store into list or dictionary, using
-			// isn_arg.storeindex; value/index/variable on stack
-    ISN_STORERANGE,	// store into blob,
-			// value/index 1/index 2/variable on stack
-
+    ISN_STOREINDEX,	// store into list or dictionary, using // isn_arg.storeindex; value/index/variable on stack
+    ISN_STORERANGE,	// store into blob, // value/index 1/index 2/variable on stack
     ISN_UNLET,		// unlet variable isn_arg.unlet.ul_name
     ISN_UNLETENV,	// unlet environment variable isn_arg.unlet.ul_name
     ISN_UNLETINDEX,	// unlet item of list or dict
     ISN_UNLETRANGE,	// unlet items of list
-
     ISN_LOCKUNLOCK,	// :lock and :unlock for local variable member
     ISN_LOCKCONST,	// lock constant value
-
-    // constants
     ISN_PUSHNR,		// push number isn_arg.number
     ISN_PUSHBOOL,	// push bool value isn_arg.number
     ISN_PUSHSPEC,	// push special value isn_arg.number
@@ -103,17 +90,11 @@ typedef enum {
     ISN_PUSHJOB,	// push NULL job
     ISN_PUSHOBJ,	// push NULL object
     ISN_PUSHCLASS,	// push class, uses isn_arg.classarg
-    ISN_NEWLIST,	// push list from stack items, size is isn_arg.number
-			// -1 for null_list
-    ISN_NEWTUPLE,	// push tuple from stack items, size is isn_arg.number
-			// -1 for null_list
-    ISN_NEWDICT,	// push dict from stack items, size is isn_arg.number
-			// -1 for null_dict
+    ISN_NEWLIST,	// push list from stack items, size is isn_arg.number // -1 for null_list
+    ISN_NEWTUPLE,	// push tuple from stack items, size is isn_arg.number // -1 for null_list
+    ISN_NEWDICT,	// push dict from stack items, size is isn_arg.number // -1 for null_dict
     ISN_NEWPARTIAL,	// push NULL partial
-
     ISN_AUTOLOAD,	// get item from autoload import, function or variable
-
-    // function call
     ISN_BCALL,	    // call builtin function isn_arg.bfunc
     ISN_DCALL,	    // call def function isn_arg.dfunc
     ISN_METHODCALL, // call method on interface, uses isn_arg.mfunc
@@ -127,20 +108,12 @@ typedef enum {
     ISN_NEWFUNC,    // create a global function from a lambda function
     ISN_DEF,	    // list functions
     ISN_DEFER,	    // :defer  argument count is isn_arg.number
-
-    // expression operations
     ISN_JUMP,	    // jump if condition is matched isn_arg.jump
-    ISN_JUMP_IF_ARG_SET, // jump if argument is already set, uses
-			 // isn_arg.jumparg
-    ISN_JUMP_IF_ARG_NOT_SET, // jump if argument is not set, uses
-			 // isn_arg.jumparg
-
-    // loop
+    ISN_JUMP_IF_ARG_SET, // jump if argument is already set, uses // isn_arg.jumparg
+    ISN_JUMP_IF_ARG_NOT_SET, // jump if argument is not set, uses // isn_arg.jumparg
     ISN_FOR,	    // get next item from a list, uses isn_arg.forloop
-    ISN_WHILE,	    // jump if condition false, store funcref count, uses
-		    // isn_arg.whileloop
+    ISN_WHILE,	    // jump if condition false, store funcref count, uses // isn_arg.whileloop
     ISN_ENDLOOP,    // handle variables for closures, uses isn_arg.endloop
-
     ISN_TRY,	    // add entry to ec_trystack, uses isn_arg.tryref
     ISN_THROW,	    // pop value of stack, store in v:exception
     ISN_PUSHEXC,    // push v:exception
@@ -148,18 +121,12 @@ typedef enum {
     ISN_FINALLY,    // start of :finally block
     ISN_ENDTRY,	    // take entry off from ec_trystack
     ISN_TRYCONT,    // handle :continue or :break inside a :try statement
-
-    // more expression operations
     ISN_ADDLIST,    // add two lists
     ISN_ADDTUPLE,   // add two tuples
     ISN_ADDBLOB,    // add two blobs
-
-    // operation with two arguments; isn_arg.op.op_type is exprtype_T
     ISN_OPNR,
     ISN_OPFLOAT,
     ISN_OPANY,
-
-    // comparative operations; isn_arg.op.op_type is exprtype_T, op_ic used
     ISN_COMPAREBOOL,
     ISN_COMPARESPECIAL,
     ISN_COMPARENULL,
@@ -173,8 +140,6 @@ typedef enum {
     ISN_COMPAREFUNC,
     ISN_COMPAREANY,
     ISN_COMPAREOBJECT,
-
-    // expression operations
     ISN_CONCAT,     // concatenate isn_arg.number strings
     ISN_STRINDEX,   // [expr] string index
     ISN_STRSLICE,   // [expr:expr] string slice
@@ -197,37 +162,26 @@ typedef enum {
     ISN_2STRING,    // convert value to string at isn_arg.tostring on stack
     ISN_2STRING_ANY, // like ISN_2STRING but check type
     ISN_NEGATENR,   // apply "-" to number
-
     ISN_CHECKTYPE,  // check value type is isn_arg.type.ct_type
     ISN_CHECKLEN,   // check list length is isn_arg.checklen.cl_min_len
     ISN_SETTYPE,    // set dict type to isn_arg.type.ct_type
-
     ISN_CLEARDICT,  // clear dict saved by ISN_MEMBER/ISN_STRINGMEMBER
     ISN_USEDICT,    // use or clear dict saved by ISN_MEMBER/ISN_STRINGMEMBER
-
     ISN_PUT,	    // ":put", uses isn_arg.put
     ISN_IPUT,	    // ":iput", uses isn_arg.put
-
     ISN_CMDMOD,	    // set cmdmod
     ISN_CMDMOD_REV, // undo ISN_CMDMOD
-
     ISN_PROF_START, // start a line for profiling
     ISN_PROF_END,   // end a line for profiling
-
     ISN_DEBUG,	    // check for debug breakpoint, uses isn_arg.debug
-
     ISN_UNPACK,	    // unpack list into items, uses isn_arg.unpack
     ISN_SHUFFLE,    // move item on stack up or down
     ISN_DROP,	    // pop stack and discard value
-
     ISN_REDIRSTART, // :redir =>
     ISN_REDIREND,   // :redir END, isn_arg.number == 1 for append
-
     ISN_CEXPR_AUCMD, // first part of :cexpr  isn_arg.number is cmdidx
     ISN_CEXPR_CORE,  // second part of :cexpr, uses isn_arg.cexpr
-
     ISN_SCRIPTCTX_SET, // set script context for expression evaluation
-
     ISN_FINISH	    // end marker in list of instructions
 } isntype_T;
 
