@@ -352,6 +352,7 @@ validate_extends_class(
 	++extends_cl->class_refcount;
 	*extends_clp = extends_cl;
 	success = TRUE;
+	HH_ch_log("extends_cl->class_name:\"%s\"", extends_cl->class_name);
     }
     clear_tv(&tv);
 
@@ -976,6 +977,7 @@ check_func_arg_names(
     garray_T	*objmethods_gap,
     garray_T	*classmembers_gap)
 {
+    HH_ch_log("in.");
     // loop 1: class functions, loop 2: object methods
     for (int loop = 1; loop <= 2; ++loop)
     {
@@ -984,7 +986,9 @@ check_func_arg_names(
 	for (int fi = 0; fi < gap->ga_len; ++fi)
 	{
 	    ufunc_T *uf = ((ufunc_T **)gap->ga_data)[fi];
+	    char_u *cn = (uf->uf_class == NULL) ? (char_u *)"NULL" : uf->uf_class->class_name;
 
+	    HH_ch_log("uf->uf_classname:\"%s\", uf->uf_name:\"%s\", sid:%d", cn, uf->uf_name, uf->uf_script_ctx.sc_sid);
 	    for (int i = 0; i < uf->uf_args.ga_len; ++i)
 	    {
 		char_u *aname = ((char_u **)uf->uf_args.ga_data)[i];
@@ -1003,6 +1007,7 @@ check_func_arg_names(
 			semsg(_(e_argument_already_declared_in_class_str),
 				aname);
 
+			HH_ch_log("out. FALSE");
 			return FALSE;
 		    }
 		}
@@ -1010,6 +1015,7 @@ check_func_arg_names(
 	}
     }
 
+    HH_ch_log("out. TRUE");
     return TRUE;
 }
 
@@ -1894,6 +1900,7 @@ ex_class(exarg_T *eap)
     long	start_lnum = SOURCING_LNUM;
     char_u	*arg = eap->arg;
 
+    HH_ch_log("in. arg:\"%s\"", arg);
     if (is_abstract)
     {
 	if (STRNCMP(arg, "class", 5) != 0 || !VIM_ISWHITE(arg[5]))
@@ -2040,6 +2047,7 @@ ex_class(exarg_T *eap)
 	{
 	    semsg(_(e_trailing_characters_str), arg);
 early_ret:
+	    HH_ch_log("out. early_ret");
 	    vim_free(extends);
 	    ga_clear_strings(&ga_impl);
 	    return;
@@ -2070,6 +2078,7 @@ early_ret:
     class_T **intf_classes = NULL;
     int	    num_enum_values = 0;
 
+    HH_ch_log("ALLOC");
     cl = ALLOC_CLEAR_ONE(class_T);
     if (cl == NULL)
 	goto cleanup;
@@ -2691,6 +2700,7 @@ early_ret:
 	// TODO:
 	// - Fill hashtab with object members and methods ?
 
+	HH_ch_log("out. normal");
 	return;
     }
 
@@ -2736,6 +2746,7 @@ cleanup:
     ga_clear(&classfunctions);
 
     clear_type_list(&type_list);
+    HH_ch_log("out. cleanup");
 }
 
 /*

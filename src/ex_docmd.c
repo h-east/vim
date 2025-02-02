@@ -2648,7 +2648,10 @@ do_one_cmd(
 	    && ea.cmdidx != CMD_endif
 	    && (cstack->cs_idx < 0
 		    || (cstack->cs_flags[cstack->cs_idx] & CSF_ACTIVE)))
+    {
+	HH_ch_log("current_sctx.sc_sid:%d, sn_state:%d", current_sctx.sc_sid, SCRIPT_ITEM(current_sctx.sc_sid)->sn_state);
 	SCRIPT_ITEM(current_sctx.sc_sid)->sn_state = SN_STATE_HAD_COMMAND;
+    }
 
     /*
      * If the command just executed called do_cmdline(), any throw or ":return"

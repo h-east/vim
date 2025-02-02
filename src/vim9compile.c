@@ -40,6 +40,9 @@ lookup_local(char_u *name, size_t len, lvar_T *lvar, cctx_T *cctx)
     int	    idx;
     lvar_T  *lvp;
 
+    HH_ch_log("in. name:\"%s\", len:%ld", name, len);
+    if (len == 5 && STRNCMP(name, "items[0].F()", 12) == 0)
+	HH_ch_log("VINGO");
     if (len == 0)
 	return FAIL;
 
@@ -84,6 +87,7 @@ lookup_local(char_u *name, size_t len, lvar_T *lvar, cctx_T *cctx)
 		}
 	    }
 	}
+	HH_ch_log("out. OK");
 	return OK;
     }
 
@@ -103,6 +107,7 @@ lookup_local(char_u *name, size_t len, lvar_T *lvar, cctx_T *cctx)
 		// lvar->lv_loop_idx and lvar->lv_loop_depth.
 		get_loop_var_idx(cctx, idx, lvar);
 	    }
+	    HH_ch_log("out. OK");
 	    return OK;
 	}
     }
@@ -117,10 +122,12 @@ lookup_local(char_u *name, size_t len, lvar_T *lvar, cctx_T *cctx)
 		cctx->ctx_outer_used = TRUE;
 		++lvar->lv_from_outer;
 	    }
+	    HH_ch_log("out. OK");
 	    return OK;
 	}
     }
 
+    HH_ch_log("out. FAIL");
     return FAIL;
 }
 
@@ -143,6 +150,11 @@ arg_exists(
     int	    idx;
     char_u  *va_name;
 
+    HH_ch_log("in. name:\"%s\", len:%ld", name, len);
+    if (STRNCMP(name, "aaaa.P", 6) == 0 && len == 4)
+    {
+	HH_ch_log("Bingo");
+    }
     if (len == 0)
 	return FAIL;
     for (idx = 0; idx < cctx->ctx_ufunc->uf_args_visible; ++idx)
@@ -164,6 +176,7 @@ arg_exists(
 		else
 		    *type = &t_any;
 	    }
+	    HH_ch_log("out. OK");
 	    return OK;
 	}
     }
@@ -178,6 +191,7 @@ arg_exists(
 	    *idxp = -STACK_FRAME_SIZE - 1;
 	    *type = cctx->ctx_ufunc->uf_va_type;
 	}
+	HH_ch_log("out. OK");
 	return OK;
     }
 
@@ -189,10 +203,12 @@ arg_exists(
 	{
 	    if (gen_load_outer != NULL)
 		++*gen_load_outer;
+	    HH_ch_log("out. OK");
 	    return OK;
 	}
     }
 
+    HH_ch_log("out. FAIL");
     return FAIL;
 }
 
@@ -447,6 +463,7 @@ check_defined(
     int		c = p[len];
     ufunc_T	*ufunc = NULL;
 
+    HH_ch_log("in. p:\"%s\", len:%ld", p, len);
     // underscore argument is OK
     if (len == 1 && *p == '_')
 	return OK;
@@ -476,6 +493,7 @@ check_defined(
 	    || find_imported(p, len, FALSE) != NULL
 	    || (ufunc = find_func_even_dead(p, 0)) != NULL)
     {
+	HH_ch_log("mid.");
 	// A local or script-local function can shadow a global function.
 	if (ufunc == NULL || ((ufunc->uf_flags & FC_DEAD) == 0
 		    && (!func_is_global(ufunc)
@@ -490,6 +508,7 @@ check_defined(
 	}
     }
     p[len] = c;
+    HH_ch_log("out. OK");
     return OK;
 }
 
@@ -774,6 +793,7 @@ find_imported_in_script(char_u *name, size_t len, int sid)
     scriptitem_T    *si;
     int		    idx;
 
+    HH_ch_log("in. name:\"%s\", len:%ld, sid:%d", name, len, sid);
     if (!SCRIPT_ID_VALID(sid))
 	return NULL;
     si = SCRIPT_ITEM(sid);
@@ -784,8 +804,12 @@ find_imported_in_script(char_u *name, size_t len, int sid)
 	if (len == 0 ? STRCMP(name, import->imp_name) == 0
 		     : STRLEN(import->imp_name) == len
 				  && STRNCMP(name, import->imp_name, len) == 0)
+	{
+	    HH_ch_log("out. ret:%p", import);
 	    return import;
+	}
     }
+    HH_ch_log("out. ret:NULLp");
     return NULL;
 }
 
@@ -793,10 +817,16 @@ find_imported_in_script(char_u *name, size_t len, int sid)
  * Find "name" in imported items of the current script.
  * If "len" is 0 use any length that works.
  * If "load" is TRUE and the script was not loaded yet, load it now.
+ * If "recurse" is TRUE, find recursively.
  */
     imported_T *
 find_imported(char_u *name, size_t len, int load)
 {
+    HH_ch_log("in. name:\"%s\", len:%ld, load:%d", name, len, load);
+    if (STRNCMP(name, "bbbb", len) == 0 && load == 1)
+    {
+	HH_ch_log("Bingogo!!");
+    }
     if (!SCRIPT_ID_VALID(current_sctx.sc_sid))
 	return NULL;
 
@@ -804,7 +834,7 @@ find_imported(char_u *name, size_t len, int load)
     int off = name[0] == 's' && name[1] == ':' ? 2 : 0;
 
     imported_T *ret = find_imported_in_script(name + off, len - off,
-							  current_sctx.sc_sid);
+							current_sctx.sc_sid);
     if (ret != NULL && load && (ret->imp_flags & IMP_FLAGS_AUTOLOAD))
     {
 	scid_T	actual_sid = 0;
@@ -826,6 +856,7 @@ find_imported(char_u *name, size_t len, int load)
 
 	emsg_off = save_emsg_off;
     }
+    HH_ch_log("out. ret:%p", ret);
     return ret;
 }
 
@@ -4051,6 +4082,7 @@ obj_constructor_prologue(ufunc_T *ufunc, cctx_T *cctx)
 		generate_SCRIPTCTX_SET(cctx, current_sctx);
 	    }
 
+	    HH_ch_log("Pre compile_expr0(): expr:\"%s\", i:%d, change_sctx:%d, current_sctx.sc_sid:%d, save_current_sctx.sc_sid:%d", expr, i, change_sctx, current_sctx.sc_sid, save_current_sctx.sc_sid);
 	    int r = compile_expr0(&expr, cctx);
 
 	    if (change_sctx)
@@ -4059,10 +4091,12 @@ obj_constructor_prologue(ufunc_T *ufunc, cctx_T *cctx)
 		current_sctx = save_current_sctx;
 		generate_SCRIPTCTX_SET(cctx, current_sctx);
 	    }
+	    HH_ch_log("Post compile_expr0()");
 
 	    if (r == FAIL)
 		return FAIL;
 
+	    HH_ch_log("Post2 compile_expr0()");
 	    if (!ends_excmd2(m->ocm_init, expr))
 	    {
 		semsg(_(e_trailing_characters_str), expr);
@@ -4120,6 +4154,7 @@ obj_method_prologue(ufunc_T *ufunc, cctx_T *cctx)
 {
     dfunc_T *dfunc = ((dfunc_T *)def_functions.ga_data) + ufunc->uf_dfunc_idx;
 
+    HH_ch_log("in. ufunc->uf_name:\"%s\"", ufunc->uf_name);
     if (GA_GROW_FAILS(&dfunc->df_var_names, 1))
 	return FAIL;
 
@@ -4130,8 +4165,13 @@ obj_method_prologue(ufunc_T *ufunc, cctx_T *cctx)
     // In the constructor allocate memory for the object and initialize the
     // object members.
     if (IS_CONSTRUCTOR_METHOD(ufunc))
-	return obj_constructor_prologue(ufunc, cctx);
+    {
+	int ret = obj_constructor_prologue(ufunc, cctx);
+	HH_ch_log("out. ret:%d", ret);
+	return ret;
+    }
 
+    HH_ch_log("out. OK");
     return OK;
 }
 
@@ -4967,6 +5007,7 @@ compile_def_function(
     int		do_estack_push;
     int		new_def_function = FALSE;
 
+    HH_ch_log("in. ufunc->uf_name:\"%s\", sid:%d", ufunc->uf_name, ufunc->uf_script_ctx.sc_sid);
     // allocated lines are freed at the end
     ga_init2(&lines_to_free, sizeof(char_u *), 50);
 
