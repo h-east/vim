@@ -485,6 +485,7 @@ get_new_scriptitem_for_fname(int *error, char_u *fname)
 	si->sn_name = vim_strsave(fname);
 	si->sn_state = SN_STATE_NOT_LOADED;
     }
+    HH_ch_log("sid:%d, fname:\"%s\", *error:%d", sid, fname, *error);
     return sid;
 }
 
@@ -2032,7 +2033,10 @@ do_source(
     int		is_vimrc,	    // DOSO_ value
     int		*ret_sid)
 {
-    return do_source_ext(fname, check_other, is_vimrc, ret_sid, NULL, FALSE);
+    HH_ch_log("in. fname:\"%s\"", fname);
+    int ret = do_source_ext(fname, check_other, is_vimrc, ret_sid, NULL, FALSE);
+    HH_ch_log("out. ret:%d, ret_sid:%p", ret, ret_sid);
+    return ret;
 }
 
 

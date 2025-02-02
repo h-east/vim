@@ -1989,7 +1989,7 @@ deref_func_name(
 	    p = name + 2;
 	    len -= 2;
 	}
-	import = find_imported(p, len, FALSE);
+	import = find_imported(p, len, FALSE, FALSE);
 
 	// imported function from another script
 	if (import != NULL)
@@ -2329,10 +2329,13 @@ find_func_with_prefix(char_u *name, int sid)
     char_u	    buffer[MAX_FUNC_NAME_LEN];
     scriptitem_T    *si;
 
+    HH_ch_log("in. name:\"%s\", sid:%d", name, sid);
     if (vim_strchr(name, AUTOLOAD_CHAR) != NULL)
-	return NULL;	// already has the prefix
+	goto theend;
+	//return NULL;	// already has the prefix
     if (!SCRIPT_ID_VALID(sid))
-	return NULL;	// not in a script
+	goto theend;
+	//return NULL;	// not in a script
     si = SCRIPT_ITEM(sid);
     if (si->sn_autoload_prefix != NULL)
     {
@@ -2359,10 +2362,15 @@ find_func_with_prefix(char_u *name, int sid)
 	    if (auto_name != buffer)
 		vim_free(auto_name);
 	    if (!HASHITEM_EMPTY(hi))
+	    {
+		HH_ch_log("out. auto_name:\"%s\"", auto_name);
 		return HI2UF(hi);
+	    }
 	}
     }
 
+theend:
+    HH_ch_log("out. NULL");
     return NULL;
 }
 
@@ -2379,6 +2387,7 @@ find_func_even_dead(char_u *name, int flags)
     hashitem_T	*hi;
     ufunc_T	*func;
 
+    HH_ch_log("in. name:\"%s\"", name);
     if ((flags & FFED_IS_GLOBAL) == 0)
     {
 	// Find script-local function before global one.
@@ -2388,7 +2397,10 @@ find_func_even_dead(char_u *name, int flags)
 	    func = find_func_with_sid(name[0] == 's' && name[1] == ':'
 				       ? name + 2 : name, current_sctx.sc_sid);
 	    if (func != NULL)
+	    {
+		HH_ch_log("out. func:%p", func);
 		return func;
+	    }
 	}
 	if (in_vim9script() && STRNCMP(name, "<SNR>", 5) == 0)
 	{
@@ -2401,7 +2413,10 @@ find_func_even_dead(char_u *name, int flags)
 	    {
 		func = find_func_with_sid(p + 1, (int)sid);
 		if (func != NULL)
+		{
+		    HH_ch_log("out. func:%p", func);
 		    return func;
+		}
 	    }
 	}
     }
@@ -2411,7 +2426,10 @@ find_func_even_dead(char_u *name, int flags)
 	hi = hash_find(&func_hashtab,
 				STRNCMP(name, "g:", 2) == 0 ? name + 2 : name);
 	if (!HASHITEM_EMPTY(hi))
+	{
+	    HH_ch_log("out. hi:%p", hi);
 	    return HI2UF(hi);
+	}
     }
 
     // Find autoload function if this is an autoload script.
@@ -5393,7 +5411,8 @@ define_function(
 	{
 	    char_u *uname = untrans_function_name(name);
 
-	    import = find_imported(uname == NULL ? name : uname, 0, FALSE);
+	    import = find_imported(uname == NULL ? name : uname, 0, FALSE,
+									FALSE);
 	}
 
 	if (fp != NULL || import != NULL)

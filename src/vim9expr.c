@@ -733,6 +733,7 @@ compile_load(
     int		res = FAIL;
     int		prev_called_emsg = called_emsg;
 
+    HH_ch_log("in. *arg:\"%s\", end_arg:\"%s\", cctx:%p, is_expr:%d, error:%d", *arg, end_arg, cctx, is_expr, error);
     if (*(*arg + 1) == ':')
     {
 	if (end <= *arg + 2)
@@ -924,6 +925,7 @@ compile_load(
     *arg = end;
 
 theend:
+    HH_ch_log("out. res:%d", res);
     if (res == FAIL && error && called_emsg == prev_called_emsg)
 	semsg(_(e_variable_not_found_str), name);
     vim_free(name);
@@ -1130,7 +1132,7 @@ compile_call(
     }
     vim_strncpy(namebuf, *arg, varlen);
 
-    import = find_imported(name, varlen, FALSE);
+    import = find_imported(name, varlen, FALSE, FALSE);
     if (import != NULL)
     {
 	semsg(_(e_cannot_use_str_itself_it_is_imported), namebuf);
