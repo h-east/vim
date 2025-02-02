@@ -3250,13 +3250,17 @@ eval_variable_import(
     char_u	*name,
     typval_T	*rettv)
 {
+    HH_ch_log("in. name:\"%s\"", name);
     char_u  *s = name;
     while (ASCII_ISALNUM(*s) || *s == '_')
 	++s;
     int	    len = (int)(s - name);
 
     if (eval_variable(name, len, 0, rettv, NULL, EVAL_VAR_IMPORT) == FAIL)
+    {
+	HH_ch_log("out. FAIL");
 	return FAIL;
+    }
     if (rettv->v_type == VAR_ANY && *s == '.')
     {
 	char_u *ns = s + 1;
@@ -3264,8 +3268,11 @@ eval_variable_import(
 	while (ASCII_ISALNUM(*s) || *s == '_')
 	    ++s;
 	int sid = rettv->vval.v_number;
-	return eval_variable(ns, (int)(s - ns), sid, rettv, NULL, 0);
+	int ret = eval_variable(ns, (int)(s - ns), sid, rettv, NULL, 0);
+	HH_ch_log("out. ret:%d, sid:%d, rettv->{v_type:%d, vval.v_number:%lld", ret, sid, rettv->v_type, rettv->vval.v_number);
+	return ret;
     }
+    HH_ch_log("out. OK");
     return OK;
 }
 
@@ -3362,6 +3369,7 @@ find_var_autoload_prefix(char_u *name, int sid, hashtab_T **htp,
     // When using "vim9script autoload" script-local items are prefixed but can
     // be used with s:name.
     int check_sid = sid > 0 ? sid : current_sctx.sc_sid;
+    HH_ch_log("in. name:\"%s\", sid:%d", name, sid);
     if (SCRIPT_ID_VALID(check_sid)
 		   && (in_vim9script() || (name[0] == 's' && name[1] == ':')))
     {
@@ -3394,6 +3402,7 @@ find_var_autoload_prefix(char_u *name, int sid, hashtab_T **htp,
 	}
     }
 
+    HH_ch_log("out. ret:%p", ret);
     return ret;
 }
 
@@ -3516,8 +3525,12 @@ lookup_scriptitem(
     int		is_global = FALSE;
     char_u	*fname = name;
 
+    HH_ch_log("in. name:\"%s\", len:%ld, ht:%p", name, len, ht);
     if (ht == NULL)
+    {
+	HH_ch_log("out. FAIL");
 	return FAIL;
+    }
     if (len < sizeof(buffer) - 1)
     {
 	// avoid an alloc/free for short names
@@ -3534,16 +3547,19 @@ lookup_scriptitem(
     hi = hash_find(ht, p);
     res = HASHITEM_EMPTY(hi) ? FAIL : OK;
 
+    HH_ch_log("res:%d, hi:%p, p:\"%s\"", res, hi, p);
     // if not script-local, then perhaps autoload-exported
     if (res == FAIL && find_var_autoload_prefix(p, 0, NULL, NULL) != NULL)
 	res = OK;
 
+    HH_ch_log("res2:%d", res);
     // if not script-local or autoload, then perhaps imported
     if (res == FAIL && find_imported(p, 0, FALSE) != NULL)
 	res = OK;
     if (p != buffer)
 	vim_free(p);
 
+    HH_ch_log("res3:%d", res);
     // Find a function, so that a following "->" works.
     // When used as a command require "(" or "->" to follow, "Cmd" is a user
     // command while "Cmd()" is a function call.
@@ -3566,6 +3582,7 @@ lookup_scriptitem(
 	}
     }
 
+    HH_ch_log("out. res:%d", res);
     return res;
 }
 
@@ -3932,6 +3949,7 @@ set_var_const(
     int		free_tv_arg = !copy;  // free tv_arg if not used
     int		rc = FAIL;
 
+    HH_ch_log("in. name:\"%s\", sid:%d, flags:%#x", name, sid, flags);
     if (sid != 0)
     {
 	varname = NULL;
@@ -3943,6 +3961,7 @@ set_var_const(
 		var_in_autoload = TRUE;
 		varname = auto_name;
 		name_tofree = varname;
+		HH_ch_log("var_in_autoload:%d, varname:\"%s\"", var_in_autoload, varname);
 	    }
 	    else
 		ht = &SCRIPT_VARS(sid);
@@ -3955,6 +3974,7 @@ set_var_const(
 	scriptitem_T	*si;
 	char_u		*auto_name = NULL;
 
+	HH_ch_log("sid is 0");
 	if (in_vim9script()
 	    && SCRIPT_ID_VALID(current_sctx.sc_sid)
 	    && (si = SCRIPT_ITEM(current_sctx.sc_sid))
@@ -3968,13 +3988,17 @@ set_var_const(
 	    var_in_autoload = TRUE;
 	    varname = auto_name != NULL ? auto_name
 		      : concat_str(si->sn_autoload_prefix, name);
+	    HH_ch_log("var_in_autoload:%d, varname:\"%s\"", var_in_autoload, varname);
 	    if (varname == NULL)
 		goto failed;
 	    name_tofree = varname;
 	    ht = &globvarht;
 	}
 	else
+	{
 	    ht = find_var_ht(name, &varname);
+	    HH_ch_log("ht:%p", ht);
+	}
     }
     if (ht == NULL || *varname == NUL)
     {
@@ -3983,6 +4007,7 @@ set_var_const(
     }
     is_script_local = ht == get_script_local_ht() || sid != 0
 							    || var_in_autoload;
+    HH_ch_log("is_script_local:%d", is_script_local);
 
     if (vim9script
 	    && !is_script_local
@@ -4007,6 +4032,7 @@ set_var_const(
     }
 
     di = find_var_in_ht(ht, 0, varname, TRUE);
+    HH_ch_log("di:%p", di);
 
     if (di == NULL && var_in_vim9script)
     {
@@ -4031,6 +4057,7 @@ set_var_const(
 	}
     }
 
+    HH_ch_log("di:%p", di);
     // Search in parent scope which is possible to reference from lambda
     if (di == NULL)
 	di = find_var_in_scoped_ht(name, TRUE);
@@ -4049,6 +4076,7 @@ set_var_const(
 	tv = &bool_tv;
     }
 
+    HH_ch_log("di:%p", di);
     if (di != NULL)
     {
 	// Item already exists.  Allowed to replace when reloading.
@@ -4191,6 +4219,7 @@ set_var_const(
 	if (flags & (ASSIGN_CONST | ASSIGN_FINAL))
 	    di->di_flags |= DI_FLAGS_LOCK;
 
+	HH_ch_log("aaa");
 	// A Vim9 script-local variable is also added to sn_all_vars and
 	// sn_var_vals. It may set "type" from "tv".
 	if (var_in_vim9script || var_in_autoload)
@@ -4199,6 +4228,7 @@ set_var_const(
 			  tv, &type, (flags & ASSIGN_NO_MEMBER_TYPE) == 0);
     }
 
+    HH_ch_log("copy:%d, tv->v_type:%d", copy, tv->v_type);
     dest_tv = &di->di_tv;
     if (copy || tv->v_type == VAR_NUMBER || tv->v_type == VAR_FLOAT)
 	copy_tv(tv, dest_tv);
@@ -4228,6 +4258,7 @@ failed:
     if (free_tv_arg)
 	clear_tv(tv_arg);
 
+    HH_ch_log("out. rc::%d, tv->v_type:%d", rc, tv->v_type);
     return rc;
 }
 

@@ -954,9 +954,13 @@ generate_PUSHFUNC(cctx_T *cctx, char_u *name, type_T *type, int may_prefix)
     isn_T	*isn;
     char_u	*funcname;
 
+    HH_ch_log("in. name:\"%s\", may_prefix:%d", name, may_prefix);
     RETURN_OK_IF_SKIP(cctx);
     if ((isn = generate_instr_type(cctx, ISN_PUSHFUNC, type)) == NULL)
+    {
+	HH_ch_log("out. FAIL");
 	return FAIL;
+    }
     if (name == NULL)
 	funcname = NULL;
     else if (!may_prefix
@@ -974,6 +978,7 @@ generate_PUSHFUNC(cctx_T *cctx, char_u *name, type_T *type, int may_prefix)
     }
 
     isn->isn_arg.string = funcname;
+    HH_ch_log("out. OK. isn->isn_arg.string:\"%s\"", isn->isn_arg.string);
     return OK;
 }
 
@@ -985,12 +990,20 @@ generate_AUTOLOAD(cctx_T *cctx, char_u *name, type_T *type)
 {
     isn_T	*isn;
 
+    HH_ch_log("in. name:\"%s\"", name);
     RETURN_OK_IF_SKIP(cctx);
     if ((isn = generate_instr_type(cctx, ISN_AUTOLOAD, type)) == NULL)
+    {
+	HH_ch_log("out. FAIL");
 	return FAIL;
+    }
     isn->isn_arg.string = vim_strsave(name);
     if (isn->isn_arg.string == NULL)
+    {
+	HH_ch_log("out. FAIL2");
 	return FAIL;
+    }
+    HH_ch_log("out. OK");
     return OK;
 }
 
@@ -2032,6 +2045,7 @@ generate_PCALL(
     isn_T	*isn;
     type_T	*ret_type;
 
+    HH_ch_log("in. name:\"%s\"", name);
     RETURN_OK_IF_SKIP(cctx);
 
     if (type->tt_type == VAR_ANY || type->tt_type == VAR_UNKNOWN)
@@ -2069,6 +2083,7 @@ generate_PCALL(
     if (at_top && generate_instr(cctx, ISN_PCALL_END) == NULL)
 	return FAIL;
 
+    HH_ch_log("out.");
     return OK;
 }
 
