@@ -35,6 +35,9 @@ lookup_local(char_u *name, size_t len, lvar_T *lvar, cctx_T *cctx)
     int	    idx;
     lvar_T  *lvp;
 
+    HH_ch_log("in. name:\"%s\", len:%ld", name, len);
+    if (len == 5 && STRNCMP(name, "items[0].F()", 12) == 0)
+	HH_ch_log("VINGO");
     if (len == 0)
 	return FAIL;
 
@@ -79,6 +82,7 @@ lookup_local(char_u *name, size_t len, lvar_T *lvar, cctx_T *cctx)
 		}
 	    }
 	}
+	HH_ch_log("out. OK");
 	return OK;
     }
 
@@ -98,6 +102,7 @@ lookup_local(char_u *name, size_t len, lvar_T *lvar, cctx_T *cctx)
 		// lvar->lv_loop_idx and lvar->lv_loop_depth.
 		get_loop_var_idx(cctx, idx, lvar);
 	    }
+	    HH_ch_log("out. OK");
 	    return OK;
 	}
     }
@@ -112,10 +117,12 @@ lookup_local(char_u *name, size_t len, lvar_T *lvar, cctx_T *cctx)
 		cctx->ctx_outer_used = TRUE;
 		++lvar->lv_from_outer;
 	    }
+	    HH_ch_log("out. OK");
 	    return OK;
 	}
     }
 
+    HH_ch_log("out. FAIL");
     return FAIL;
 }
 
@@ -138,6 +145,11 @@ arg_exists(
     int	    idx;
     char_u  *va_name;
 
+    HH_ch_log("in. name:\"%s\", len:%ld", name, len);
+    if (STRNCMP(name, "aaaa.P", 6) == 0 && len == 4)
+    {
+	HH_ch_log("Bingo");
+    }
     if (len == 0)
 	return FAIL;
     for (idx = 0; idx < cctx->ctx_ufunc->uf_args_visible; ++idx)
@@ -159,6 +171,7 @@ arg_exists(
 		else
 		    *type = &t_any;
 	    }
+	    HH_ch_log("out. OK");
 	    return OK;
 	}
     }
@@ -173,6 +186,7 @@ arg_exists(
 	    *idxp = -STACK_FRAME_SIZE - 1;
 	    *type = cctx->ctx_ufunc->uf_va_type;
 	}
+	HH_ch_log("out. OK");
 	return OK;
     }
 
@@ -184,10 +198,12 @@ arg_exists(
 	{
 	    if (gen_load_outer != NULL)
 		++*gen_load_outer;
+	    HH_ch_log("out. OK");
 	    return OK;
 	}
     }
 
+    HH_ch_log("out. FAIL");
     return FAIL;
 }
 
@@ -447,6 +463,7 @@ check_defined(
     int		c = p[len];
     ufunc_T	*ufunc = NULL;
 
+    HH_ch_log("in. p:\"%s\", len:%ld", p, len);
     // underscore argument is OK
     if (len == 1 && *p == '_')
 	return OK;
@@ -476,6 +493,7 @@ check_defined(
 	    || find_imported(p, len, FALSE) != NULL
 	    || (ufunc = find_func_even_dead(p, 0)) != NULL)
     {
+	HH_ch_log("mid.");
 	// A local or script-local function can shadow a global function.
 	if (ufunc == NULL || ((ufunc->uf_flags & FC_DEAD) == 0
 		    && (!func_is_global(ufunc)
@@ -490,6 +508,7 @@ check_defined(
 	}
     }
     p[len] = c;
+    HH_ch_log("out. OK");
     return OK;
 }
 
@@ -778,6 +797,7 @@ find_imported_in_script(char_u *name, size_t len, int sid)
     scriptitem_T    *si;
     int		    idx;
 
+    HH_ch_log("in. name:\"%s\", len:%ld, sid:%d", name, len, sid);
     if (!SCRIPT_ID_VALID(sid))
 	return NULL;
     si = SCRIPT_ITEM(sid);
@@ -788,8 +808,12 @@ find_imported_in_script(char_u *name, size_t len, int sid)
 	if (len == 0 ? STRCMP(name, import->imp_name) == 0
 		     : STRLEN(import->imp_name) == len
 				  && STRNCMP(name, import->imp_name, len) == 0)
+	{
+	    HH_ch_log("out. ret:%p", import);
 	    return import;
+	}
     }
+    HH_ch_log("out. ret:NULLp");
     return NULL;
 }
 
@@ -797,10 +821,16 @@ find_imported_in_script(char_u *name, size_t len, int sid)
  * Find "name" in imported items of the current script.
  * If "len" is 0 use any length that works.
  * If "load" is TRUE and the script was not loaded yet, load it now.
+ * If "recurse" is TRUE, find recursively.
  */
     imported_T *
 find_imported(char_u *name, size_t len, int load)
 {
+    HH_ch_log("in. name:\"%s\", len:%ld, load:%d", name, len, load);
+    if (STRNCMP(name, "bbbb", len) == 0 && load == 1)
+    {
+	HH_ch_log("Bingogo!!");
+    }
     if (!SCRIPT_ID_VALID(current_sctx.sc_sid))
 	return NULL;
 
@@ -808,7 +838,7 @@ find_imported(char_u *name, size_t len, int load)
     int off = name[0] == 's' && name[1] == ':' ? 2 : 0;
 
     imported_T *ret = find_imported_in_script(name + off, len - off,
-							  current_sctx.sc_sid);
+							current_sctx.sc_sid);
     if (ret != NULL && load && (ret->imp_flags & IMP_FLAGS_AUTOLOAD))
     {
 	scid_T	actual_sid = 0;
@@ -830,6 +860,7 @@ find_imported(char_u *name, size_t len, int load)
 
 	emsg_off = save_emsg_off;
     }
+    HH_ch_log("out. ret:%p", ret);
     return ret;
 }
 
@@ -4134,6 +4165,7 @@ obj_constructor_prologue(ufunc_T *ufunc, cctx_T *cctx)
 		generate_SCRIPTCTX_SET(cctx, current_sctx);
 	    }
 
+	    HH_ch_log("Pre compile_expr0(): expr:\"%s\", i:%d, change_sctx:%d, current_sctx.sc_sid:%d, save_current_sctx.sc_sid:%d", expr, i, change_sctx, current_sctx.sc_sid, save_current_sctx.sc_sid);
 	    int r = compile_expr0(&expr, cctx);
 
 	    if (change_sctx)
@@ -4142,10 +4174,12 @@ obj_constructor_prologue(ufunc_T *ufunc, cctx_T *cctx)
 		current_sctx = save_current_sctx;
 		generate_SCRIPTCTX_SET(cctx, current_sctx);
 	    }
+	    HH_ch_log("Post compile_expr0()");
 
 	    if (r == FAIL)
 		return FAIL;
 
+	    HH_ch_log("Post2 compile_expr0()");
 	    if (!ends_excmd2(m->ocm_init, expr))
 	    {
 		semsg(_(e_trailing_characters_str), expr);
@@ -4203,6 +4237,7 @@ obj_method_prologue(ufunc_T *ufunc, cctx_T *cctx)
 {
     dfunc_T *dfunc = ((dfunc_T *)def_functions.ga_data) + ufunc->uf_dfunc_idx;
 
+    HH_ch_log("in. ufunc->uf_name:\"%s\"", ufunc->uf_name);
     if (GA_GROW_FAILS(&dfunc->df_var_names, 1))
 	return FAIL;
 
@@ -4213,8 +4248,13 @@ obj_method_prologue(ufunc_T *ufunc, cctx_T *cctx)
     // In the constructor allocate memory for the object and initialize the
     // object members.
     if (IS_CONSTRUCTOR_METHOD(ufunc))
-	return obj_constructor_prologue(ufunc, cctx);
+    {
+	int ret = obj_constructor_prologue(ufunc, cctx);
+	HH_ch_log("out. ret:%d", ret);
+	return ret;
+    }
 
+    HH_ch_log("out. OK");
     return OK;
 }
 
@@ -4312,6 +4352,7 @@ compile_def_function_body(
 #endif
     int		debug_lnum = -1;
 
+    HH_ch_log("in. last_func_lnum:%d", last_func_lnum);
     for (;;)
     {
 	exarg_T	    ea;
@@ -4341,6 +4382,8 @@ compile_def_function_body(
 	else
 	{
 	    line = next_line_from_context(cctx, FALSE);
+	    HH_ch_log("line:\"%s\"", line);
+	    HH_ch_log("ctx_lnum:%d, last_func_lnum:%d", cctx->ctx_lnum, last_func_lnum);
 	    if (cctx->ctx_lnum >= last_func_lnum)
 	    {
 		// beyond the last line
@@ -4395,6 +4438,7 @@ compile_def_function_body(
 	}
 	cctx->ctx_prev_lnum = cctx->ctx_lnum + 1;
 
+	HH_ch_log("*ea.cmd:'%c'", *ea.cmd);
 	// Some things can be recognized by the first character.
 	switch (*ea.cmd)
 	{
@@ -4519,6 +4563,7 @@ compile_def_function_body(
 
 	if (p == NULL)
 	{
+
 	    if (cctx->ctx_skip != SKIP_YES)
 		semsg(_(e_ambiguous_use_of_user_defined_command_str), ea.cmd);
 	    goto linefail;
@@ -4622,6 +4667,7 @@ compile_def_function_body(
 	    }
 	}
 
+	HH_ch_log("ea.cmdidx: %d", ea.cmdidx);
 	switch (ea.cmdidx)
 	{
 	    case CMD_def:
@@ -4732,6 +4778,7 @@ compile_def_function_body(
 
 	    case CMD_eval:
 		    line = compile_eval(p, cctx);
+		    HH_ch_log("CMD_eval: line:\"%s\"", line);
 		    break;
 
 	    case CMD_defer:
@@ -4874,6 +4921,7 @@ compile_def_function_body(
 		    line = compile_exec(line, &ea, cctx);
 		    break;
 	}
+	HH_ch_log("nextline");
 nextline:
 	if (line == NULL)
 	    goto linefail;
@@ -4905,6 +4953,7 @@ linefail:
 	line = (char_u *)"";
     } // END of the loop over all the function body lines.
 
+    HH_ch_log("out. %d", failed ? FAIL : OK);
     return failed ? FAIL : OK;
 }
 
@@ -4915,9 +4964,11 @@ linefail:
     static int
 compile_dfunc_scope_end_missing(cctx_T *cctx)
 {
+    HH_ch_log("in.");
     if (cctx->ctx_scope == NULL)
 	return FALSE;
 
+    HH_ch_log("cctx->ctx_scope->se_type:%d", cctx->ctx_scope->se_type);
     switch (cctx->ctx_scope->se_type)
     {
 	case IF_SCOPE:
@@ -4930,6 +4981,7 @@ compile_dfunc_scope_end_missing(cctx_T *cctx)
 	    emsg(_(e_missing_endfor));
 	    break;
 	case TRY_SCOPE:
+	    HH_ch_log("TRY_SCOPE");
 	    emsg(_(e_missing_endtry));
 	    break;
 	case BLOCK_SCOPE:
@@ -4998,6 +5050,7 @@ compile_dfunc_epilogue(
     dfunc->df_deleted = FALSE;
     dfunc->df_script_seq = current_sctx.sc_seq;
 
+    HH_ch_log("in. ufunc->uf_name:\"%s\", sid:%d", ufunc->uf_name, ufunc->uf_script_ctx.sc_sid);
 #ifdef FEAT_PROFILE
     if (cctx->ctx_compile_type == CT_PROFILE)
     {
@@ -5019,6 +5072,7 @@ compile_dfunc_epilogue(
     dfunc->df_varcount = dfunc->df_var_names.ga_len;
     dfunc->df_has_closure = cctx->ctx_has_closure;
 
+    HH_ch_log("ctx_outer_used: %d", cctx->ctx_outer_used);
     if (cctx->ctx_outer_used)
     {
 	ufunc->uf_flags |= FC_CLOSURE;
@@ -5027,6 +5081,7 @@ compile_dfunc_epilogue(
     }
 
     ufunc->uf_def_status = UF_COMPILED;
+    HH_ch_log("out.");
 }
 
 /*
@@ -5045,6 +5100,7 @@ compile_dfunc_ufunc_cleanup(
 
     dfunc = ((dfunc_T *)def_functions.ga_data) + ufunc->uf_dfunc_idx;
 
+    HH_ch_log("in. ufunc->uf_name:\"%s\", sid:%d", ufunc->uf_name, ufunc->uf_script_ctx.sc_sid);
     // Compiling aborted, free the generated instructions.
     clear_instr_ga(instr);
     VIM_CLEAR(dfunc->df_name);
@@ -5067,6 +5123,7 @@ compile_dfunc_ufunc_cleanup(
 	emsg(errormsg);
     else if (did_emsg == did_emsg_before)
 	emsg(_(e_compiling_def_function_failed));
+    HH_ch_log("out.");
 }
 
 /*
@@ -5102,13 +5159,17 @@ compile_def_function(
     int		do_estack_push;
     int		new_def_function = FALSE;
 
+    HH_ch_log("in. ufunc->uf_name:\"%s\", sid:%d", ufunc->uf_name, ufunc->uf_script_ctx.sc_sid);
     // allocated lines are freed at the end
     ga_init2(&lines_to_free, sizeof(char_u *), 50);
 
     // Initialize the ufunc and the compilation context
     if (compile_dfunc_ufunc_init(ufunc, outer_cctx, compile_type,
 						&new_def_function) == FAIL)
+    {
+	HH_ch_log("out. ret:FAIL");
 	return FAIL;
+    }
 
     compile_dfunc_cctx_init(&cctx, outer_cctx, ufunc, compile_type);
 
@@ -5131,17 +5192,26 @@ compile_def_function(
 
     // Make sure arguments don't shadow variables in the context
     if (check_args_shadowing(ufunc, &cctx) == FAIL)
+    {
+	HH_ch_log("goto erret");
 	goto erret;
+    }
 
     // For an object method and a constructor generate instructions to
     // initialize "this" and the object variables.
     if (ufunc->uf_flags & (FC_OBJECT|FC_NEW))
 	if (obj_method_prologue(ufunc, &cctx) == FAIL)
+	{
+	    HH_ch_log("goto erret");
 	    goto erret;
+	}
 
     if (ufunc->uf_def_args.ga_len > 0)
 	if (compile_def_function_default_args(ufunc, instr, &cctx) == FAIL)
+	{
+	    HH_ch_log("goto erret");
 	    goto erret;
+	}
     ufunc->uf_args_visible = ufunc->uf_args.ga_len;
 
     // Compiling an abstract method or a function in an interface is done to
@@ -5151,25 +5221,36 @@ compile_def_function(
     {
 	ufunc->uf_def_status = UF_NOT_COMPILED;
 	ret = OK;
+	HH_ch_log("goto erret OK");
 	goto erret;
     }
 
     // compile the function body
     if (compile_def_function_body(ufunc->uf_lines.ga_len, check_return_type,
 				&lines_to_free, &errormsg, &cctx) == FAIL)
+    {
+	HH_ch_log("goto erret");
 	goto erret;
+    }
 
     if (compile_dfunc_scope_end_missing(&cctx))
+    {
+	HH_ch_log("goto erret");
 	goto erret;
+    }
 
     if (compile_dfunc_generate_default_return(ufunc, &cctx) == FAIL)
+    {
+	HH_ch_log("goto erret");
 	goto erret;
+    }
 
     // When compiled with ":silent!" and there was an error don't consider the
     // function compiled.
     if (emsg_silent == 0 || did_emsg_silent == did_emsg_silent_before)
 	compile_dfunc_epilogue(outer_cctx, ufunc, instr, &cctx);
 
+    HH_ch_log("ret = OK");
     ret = OK;
 
 erret:
@@ -5200,6 +5281,7 @@ erret:
     ga_clear_strings(&lines_to_free);
     free_locals(&cctx);
     ga_clear(&cctx.ctx_type_stack);
+    HH_ch_log("out. ret:%d", ret);
     return ret;
 }
 

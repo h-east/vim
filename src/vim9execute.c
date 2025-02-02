@@ -2110,6 +2110,7 @@ fill_partial_and_closure(
 	loopvarinfo_T	*lvi,
 	ectx_T		*ectx)
 {
+    HH_ch_log("in. ufunc->uf_name:\"%s\", sid:%d, ufunc->uf_flags:0x%08x", ufunc->uf_name, ufunc->uf_script_ctx.sc_sid, ufunc->uf_flags);
     pt->pt_func = ufunc;
     pt->pt_refcount = 1;
 
@@ -2171,6 +2172,7 @@ fill_partial_and_closure(
 	++ectx->ec_funcrefs.ga_len;
     }
     ++ufunc->uf_refcount;
+    HH_ch_log("out. OK");
     return OK;
 }
 
@@ -2204,15 +2206,18 @@ may_load_script(int sid, int *loaded)
 {
     scriptitem_T *si = SCRIPT_ITEM(sid);
 
+    HH_ch_log("in. sid:%d, *loaded:%d, si->sn_state:%d", sid, *loaded, si->sn_state);
     if (si->sn_state == SN_STATE_NOT_LOADED)
     {
 	*loaded = TRUE;
 	if (do_source(si->sn_name, FALSE, DOSO_NONE, NULL) == FAIL)
 	{
 	    semsg(_(e_cant_open_file_str), si->sn_name);
+	    HH_ch_log("out. FAIL");
 	    return FAIL;
 	}
     }
+    HH_ch_log("out. sid:%d, *loaded:%d, si->sn_state:%d", sid, *loaded, si->sn_state);
     return OK;
 }
 
@@ -2627,6 +2632,8 @@ execute_storeindex(isn_T *iptr, ectx_T *ectx)
     clear_tv(tv_idx);
     clear_tv(tv_dest);
     ectx->ec_stack.ga_len -= 3;
+
+    HH_ch_log("out. status:%d", status);
     if (status == FAIL)
     {
 	clear_tv(tv);
@@ -3623,6 +3630,7 @@ exec_instructions(ectx_T *ectx)
     int		save_trylevel_at_start = ectx->ec_trylevel_at_start;
     int		dict_stack_len_at_start = dict_stack.ga_len;
 
+    HH_ch_log("in.");
     // Start execution at the first instruction.
     ectx->ec_iidx = 0;
 
@@ -3757,6 +3765,7 @@ exec_instructions(ectx_T *ectx)
 	 * most efficient way.
 	 */
 	iptr = &ectx->ec_instr[ectx->ec_iidx++];
+	HH_ch_log("ectx->ec_iidx:%d, iptr->isn_type:%d", ectx->ec_iidx, iptr->isn_type);
 	switch (iptr->isn_type)
 	{
 	    // Constructor, first instruction in a new() method.
@@ -3864,6 +3873,7 @@ exec_instructions(ectx_T *ectx)
 		{
 		    int notused;
 
+		    HH_ch_log("ISN_SOURCE.");
 		    SOURCING_LNUM = iptr->isn_lnum;
 		    if (may_load_script((int)iptr->isn_arg.number, &notused)
 								       == FAIL)
@@ -4752,6 +4762,7 @@ exec_instructions(ectx_T *ectx)
 			tv->vval.v_blob = blob_copy(iptr->isn_arg.blob);
 			break;
 		    case ISN_PUSHFUNC:
+			HH_ch_log("ISN_PUSHFUNC. iptr->isn_arg.string:\"%s\"", iptr->isn_arg.string);
 			tv->v_type = VAR_FUNC;
 			if (iptr->isn_arg.string == NULL)
 			    tv->vval.v_string = NULL;
@@ -4789,12 +4800,24 @@ exec_instructions(ectx_T *ectx)
 	    case ISN_AUTOLOAD:
 		{
 		    char_u  *name = iptr->isn_arg.string;
+//		    extern int g_sourced_sid;
+
+		    HH_ch_log("ISN_AUTOLOAD. name:\"%s\"", name);
+#if 1
+//		    int sc_sid_save = current_sctx.sc_sid;
+//		    if (g_sourced_sid > 0)
+//			current_sctx.sc_sid = g_sourced_sid;
 
 		    (void)script_autoload(name, FALSE);
+		    HH_ch_log("name:\"%s\", current_sctx.sc_sid:%d", name, current_sctx.sc_sid);
 		    if (find_func(name, TRUE))
 		    {
+			HH_ch_log("find_func() is TRUE");
 			if (GA_GROW_FAILS(&ectx->ec_stack, 1))
+			{
+//			    current_sctx.sc_sid = sc_sid_save;
 			    goto theend;
+			}
 			tv = STACK_TV_BOT(0);
 			tv->v_lock = 0;
 			++ectx->ec_stack.ga_len;
@@ -4803,13 +4826,23 @@ exec_instructions(ectx_T *ectx)
 		    }
 		    else
 		    {
+			HH_ch_log("find_func() is FALSE");
 			int res = load_namespace_var(ectx, ISN_LOADG, iptr);
+			HH_ch_log("res:%d", res);
 
 			if (res == NOTDONE)
+			{
+//			    current_sctx.sc_sid = sc_sid_save;
 			    goto theend;
+			}
 			if (res == FAIL)
+			{
+//			    current_sctx.sc_sid = sc_sid_save;
 			    goto on_error;
+			}
 		    }
+//		    current_sctx.sc_sid = sc_sid_save;
+#endif
 		}
 		break;
 
@@ -6526,6 +6559,7 @@ exec_instructions(ectx_T *ectx)
 	continue;
 
 func_return:
+	HH_ch_log("func_return");
 	// Restore previous function. If the frame pointer is where we started
 	// then there is none and we are done.
 	if (ectx->ec_frame_idx == ectx->ec_initial_frame_idx)
@@ -6537,6 +6571,7 @@ func_return:
 	continue;
 
 on_error:
+	HH_ch_log("on_error");
 	// Jump here for an error that does not require aborting execution.
 	// If "emsg_silent" is set then ignore the error, unless it was set
 	// when calling the function.
@@ -6560,6 +6595,7 @@ on_error:
 	    continue;
 	}
 on_fatal_error:
+	HH_ch_log("on_fatal_error.");
 	// Jump here for an error that messes up the stack.
 	// If we are not inside a try-catch started here, abort execution.
 	if (trylevel <= ectx->ec_trylevel_at_start)
@@ -6573,6 +6609,7 @@ theend:
 
     dict_stack_clear(dict_stack_len_at_start);
     ectx->ec_trylevel_at_start = save_trylevel_at_start;
+    HH_ch_log("theend. ret:%d", ret);
     return ret;
 }
 
@@ -6655,6 +6692,7 @@ call_def_function(
     funccall_T	*funccal,
     typval_T	*rettv)		// return value
 {
+    HH_ch_log("in. ufunc->uf_name:\"%s\"", ufunc->uf_name);
     ectx_T	ectx;		// execution context
     int		argc = argc_arg;
     int		partial_argc = partial == NULL
@@ -7041,6 +7079,7 @@ failed_early:
 	semsg(_(e_unknown_error_while_executing_str),
 						   printable_func_name(ufunc));
     funcdepth_restore(orig_funcdepth);
+    HH_ch_log("out. ret:%d", ret);
     return ret;
 }
 
