@@ -1590,6 +1590,7 @@ lambda_function_body(
     ufunc = alloc_ufunc(name.string, name.length);
     if (ufunc == NULL)
 	goto erret;
+    HH_ch_log("mod func_hashtab. name:\"%s\"", name.string);
     if (hash_add(&func_hashtab, UF2HIKEY(ufunc), "add function") == FAIL)
 	goto erret;
     ufunc->uf_flags = FC_LAMBDA;
@@ -1892,6 +1893,7 @@ get_lambda_tv(
 	rettv->vval.v_partial = pt;
 	rettv->v_type = VAR_PARTIAL;
 
+	HH_ch_log("mod func_hashtab.");
 	hash_add(&func_hashtab, UF2HIKEY(fp), "add lambda");
     }
 
@@ -2317,11 +2319,19 @@ find_func_with_prefix(char_u *name, int sid)
     char_u	    buffer[MAX_FUNC_NAME_LEN];
     scriptitem_T    *si;
 
+    HH_ch_log("in. name:\"%s\", sid:%d", name, sid);
+    if (STRCMP(name, "mytest#bar#baz#Baz") == 0 && sid == 35)
+    {
+	HH_ch_log("Bingoro.");
+    }
     if (vim_strchr(name, AUTOLOAD_CHAR) != NULL)
-	return NULL;	// already has the prefix
+	goto theend;
+	//return NULL;	// already has the prefix
     if (!SCRIPT_ID_VALID(sid))
-	return NULL;	// not in a script
+	goto theend;
+	//return NULL;	// not in a script
     si = SCRIPT_ITEM(sid);
+    HH_ch_log("si->sn_autoload_prefix:\"%s\"", si->sn_autoload_prefix);
     if (si->sn_autoload_prefix != NULL)
     {
 	size_t	len = STRLEN(si->sn_autoload_prefix) + STRLEN(name) + 1;
@@ -2343,14 +2353,20 @@ find_func_with_prefix(char_u *name, int sid)
 	{
 	    vim_snprintf((char *)auto_name, len, "%s%s",
 						si->sn_autoload_prefix, namep);
+	    HH_ch_log("auto_name:\"%s\"", auto_name);
 	    hi = hash_find(&func_hashtab, auto_name);
 	    if (auto_name != buffer)
 		vim_free(auto_name);
 	    if (!HASHITEM_EMPTY(hi))
+	    {
+		HH_ch_log("out. ret:%p", HI2UF(hi));
 		return HI2UF(hi);
+	    }
 	}
     }
 
+theend:
+    HH_ch_log("out. NULL");
     return NULL;
 }
 
@@ -2367,6 +2383,13 @@ find_func_even_dead(char_u *name, int flags)
     hashitem_T	*hi;
     ufunc_T	*func;
 
+    HH_ch_log("in. name:\"%s\", flags:%#x", name, flags);
+    if (STRCMP(name, "Baz") == 0)
+	HH_ch_log("Yoooo");
+    else if (STRCMP(name, "mytest#foo#MyTestFoo") == 0)
+	HH_ch_log("Zoooo");
+    else if (STRCMP(name, "mytest#bar#baz#Baz") == 0)
+	HH_ch_log("Xoooo");
     if ((flags & FFED_IS_GLOBAL) == 0)
     {
 	// Find script-local function before global one.
@@ -2376,7 +2399,10 @@ find_func_even_dead(char_u *name, int flags)
 	    func = find_func_with_sid(name[0] == 's' && name[1] == ':'
 				       ? name + 2 : name, current_sctx.sc_sid);
 	    if (func != NULL)
+	    {
+		HH_ch_log("out. func:%p", func);
 		return func;
+	    }
 	}
 	if (in_vim9script() && STRNCMP(name, "<SNR>", 5) == 0)
 	{
@@ -2389,7 +2415,10 @@ find_func_even_dead(char_u *name, int flags)
 	    {
 		func = find_func_with_sid(p + 1, (int)sid);
 		if (func != NULL)
+		{
+		    HH_ch_log("out. func:%p", func);
 		    return func;
+		}
 	    }
 	}
     }
@@ -2399,12 +2428,17 @@ find_func_even_dead(char_u *name, int flags)
 	hi = hash_find(&func_hashtab,
 				STRNCMP(name, "g:", 2) == 0 ? name + 2 : name);
 	if (!HASHITEM_EMPTY(hi))
+	{
+	    HH_ch_log("out. OK hash_find! hi:%p, name:\"%s\"", hi, name);
 	    return HI2UF(hi);
+	}
     }
 
     // Find autoload function if this is an autoload script.
-    return find_func_with_prefix(name[0] == 's' && name[1] == ':'
+    ufunc_T *rrr = find_func_with_prefix(name[0] == 's' && name[1] == ':'
 				       ? name + 2 : name, current_sctx.sc_sid);
+    HH_ch_log("out. rrr:%p", rrr);
+    return rrr;
 }
 
 /*
@@ -2852,6 +2886,7 @@ copy_lambda_to_global_func(
 
     fp->uf_refcount = 1;
 
+    HH_ch_log("mod func_hashtab.");
     hash_add(&func_hashtab, UF2HIKEY(fp), "copy lambda");
 
     // the referenced dfunc_T is now used one more time
@@ -5122,6 +5157,7 @@ define_function(
 	goto ret_free;
     }
 
+    HH_ch_log("in. name:\"%s\", class_flags:%d, current_sctx.sc_sid:%d", name, class_flags, current_sctx.sc_sid);
     /*
      * ":function name(arg1, arg2)" Define function.
      */
@@ -5408,11 +5444,13 @@ define_function(
 	}
 
 	fp = find_func_even_dead(find_name, ffed_flags);
+	HH_ch_log("post find_func_even_dead(). fp:%p, current_sctx.sc_sid:%d, uf_ctx_sid:%d", fp, current_sctx.sc_sid, fp ? fp->uf_script_ctx.sc_sid: -1);
 	if (vim9script)
 	{
 	    char_u *uname = untrans_function_name(name);
 
 	    import = find_imported(uname == NULL ? name : uname, 0, FALSE);
+	    HH_ch_log("uname:\"%s\", mame:\"%s\", import:%p", uname, name, import);
 	}
 
 	if (fp != NULL || import != NULL)
@@ -5481,6 +5519,7 @@ define_function(
 	    if (SOURCING_NAME != NULL)
 	    {
 		scriptname = autoload_name(name);
+		HH_ch_log("scriptname:\"%s\"", scriptname);
 		if (scriptname != NULL)
 		{
 		    p = vim_strchr(scriptname, '/');
@@ -5491,6 +5530,7 @@ define_function(
 			j = OK;
 		    vim_free(scriptname);
 		}
+		HH_ch_log("j:%d", j);
 	    }
 	    if (j == FAIL)
 	    {
@@ -5544,6 +5584,7 @@ define_function(
     fp->uf_ret_type = &t_any;
     fp->uf_func_type = &t_func_any;
 
+    HH_ch_log("fp_allocated:%d", fp_allocated);
     if (eap->cmdidx == CMD_def)
     {
 	int	    lnum_save = SOURCING_LNUM;
@@ -5590,6 +5631,8 @@ define_function(
 
     if (fp_allocated)
     {
+	if (!overwrite && class_flags)
+	    HH_ch_log("mod func_hashtab. fp->uf_name:\"%s\", hikey:\"%s\"", fp->uf_name, UF2HIKEY(fp));
 	// insert the new function in the function list
 	if (overwrite)
 	{
@@ -5680,6 +5723,7 @@ ret_free:
     vim_free(ret_type);
     did_emsg |= saved_did_emsg;
 
+    HH_ch_log("out. fp:%p", fp);
     return fp;
 }
 

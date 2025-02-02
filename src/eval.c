@@ -5173,6 +5173,7 @@ eval9(
     }
     ++recurse;
 
+    HH_ch_log("*arg:\"%s\"", *arg);
     switch (**arg)
     {
     /*
@@ -5269,6 +5270,7 @@ eval9(
 
     if (ret == NOTDONE)
     {
+	HH_ch_log("ret:%d", ret);
 	/*
 	 * Must be a variable or function name.
 	 * Can also be a curly-braces kind of name: {expr}.
@@ -5281,12 +5283,14 @@ eval9(
     if (ret == OK)
 	ret = handle_subscript(arg, name_start, rettv, evalarg, evaluate);
 
+    HH_ch_log("ret2:%d", ret);
     /*
      * Apply logical NOT and unary '-', from right to left, ignore '+'.
      */
     if (ret == OK && evaluate && end_leader > start_leader)
 	ret = eval9_leader(rettv, FALSE, start_leader, &end_leader);
 
+    HH_ch_log("ret3:%d", ret);
     --recurse;
     return ret;
 }
@@ -7298,6 +7302,7 @@ handle_subscript(
     int		getnext;
     char_u	*p;
 
+    HH_ch_log("in. *arg:\"%s\", name_start:\"%s\", rettv->v_type:%d", *arg, name_start, rettv->v_type);
     while (ret == OK)
     {
 	// When at the end of the line and ".name" or "->{" or "->X" follows in
@@ -7465,6 +7470,7 @@ handle_subscript(
 	selfdict = make_partial(selfdict, rettv);
 
     dict_unref(selfdict);
+    HH_ch_log("out. ret:%d, rettv->v_type:%d", ret, rettv->v_type);
     return ret;
 }
 
