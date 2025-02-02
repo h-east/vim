@@ -557,7 +557,7 @@ compile_load_scriptvar(
 	return OK;
     }
 
-    import = end == NULL ? NULL : find_imported(name, 0, FALSE);
+    import = end == NULL ? NULL : find_imported(name, 0, FALSE, TRUE);
     if (import != NULL)
     {
 	char_u	*p = skipwhite(*end);
@@ -706,6 +706,7 @@ compile_load(
     int		res = FAIL;
     int		prev_called_emsg = called_emsg;
 
+    HH_ch_log("in. *arg:\"%s\", end_arg:\"%s\", cctx:%p, is_expr:%d, error:%d", *arg, end_arg, cctx, is_expr, error);
     if (*(*arg + 1) == ':')
     {
 	if (end <= *arg + 2)
@@ -872,7 +873,7 @@ compile_load(
 		// "var" can be script-local even without using "s:" if it
 		// already exists in a Vim9 script or when it's imported.
 		if (script_var_exists(*arg, len, cctx, NULL) == OK
-				      || find_imported(name, 0, FALSE) != NULL)
+				|| find_imported(name, 0, FALSE, TRUE) != NULL)
 		   res = compile_load_scriptvar(cctx, name, *arg, &end);
 
 		// When evaluating an expression and the name starts with an
@@ -895,6 +896,7 @@ compile_load(
     *arg = end;
 
 theend:
+    HH_ch_log("out. res:%d", res);
     if (res == FAIL && error && called_emsg == prev_called_emsg)
 	semsg(_(e_variable_not_found_str), name);
     vim_free(name);
@@ -1101,7 +1103,7 @@ compile_call(
     }
     vim_strncpy(namebuf, *arg, varlen);
 
-    import = find_imported(name, varlen, FALSE);
+    import = find_imported(name, varlen, FALSE, FALSE);
     if (import != NULL)
     {
 	semsg(_(e_cannot_use_str_itself_it_is_imported), namebuf);

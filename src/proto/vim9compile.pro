@@ -11,7 +11,7 @@ int need_type_where(type_T *actual, type_T *expected, int number_ok, int offset,
 int need_type(type_T *actual, type_T *expected, int number_ok, int offset, int arg_idx, cctx_T *cctx, int silent, int actual_is_const);
 lvar_T *reserve_local(cctx_T *cctx, char_u *name, size_t len, int assign, type_T *type);
 int get_script_item_idx(int sid, char_u *name, int check_writable, cctx_T *cctx, cstack_T *cstack);
-imported_T *find_imported(char_u *name, size_t len, int load);
+imported_T *find_imported(char_u *name, size_t len, int load, int recurse);
 char_u *may_peek_next_line(cctx_T *cctx, char_u *arg, char_u **nextp);
 char_u *peek_next_line_from_context(cctx_T *cctx);
 char_u *next_line_from_context(cctx_T *cctx, int skip_comment);

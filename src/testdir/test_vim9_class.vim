@@ -3662,6 +3662,103 @@ def Test_extend_imported_class()
   v9.CheckScriptSuccess(lines)
 enddef
 
+" Test for multi level import
+def Test_multi_level_import_normal()
+  var lines =<< trim END
+    vim9script
+    export class Property
+      public var value: string
+    endclass
+  END
+  writefile(lines, 'aa.vim', 'D')
+
+  lines =<< trim END
+    vim9script
+    import './aa.vim'
+    export class View
+      var content = aa.Property.new('')
+    endclass
+  END
+  writefile(lines, 'bb.vim', 'D')
+
+  lines =<< trim END
+    vim9script
+    import './bb.vim'
+    class MyView extends bb.View
+      def new(value: string)
+        this.content.value = value
+      enddef
+    endclass
+    var myView = MyView.new('This should be ok')
+  END
+  v9.CheckScriptSuccess(lines)
+enddef
+
+" Test for multi level import
+def Test_multi_level_import_normal2()
+  var lines =<< trim END
+    vim9script
+    export interface A
+    endinterface
+    export const TEXT: string = 'a'
+  END
+  writefile(lines, 'a.vim', 'D')
+
+  lines =<< trim END
+    vim9script
+    import './a.vim' as acme
+    export class B implements acme.A
+    endclass
+    const a: string = acme.TEXT
+  END
+  writefile(lines, 'b.vim', 'D')
+
+  lines =<< trim END
+    vim9script
+    import './b.vim'
+    import './a.vim'
+    class C extends b.B
+    endclass
+    export const acme: string = repeat(a.TEXT, 4)
+    echo acme
+  END
+  v9.CheckScriptSuccess(lines)
+enddef
+
+"" Test for multi level import
+"def Test_multi_level_import_nest_over()
+"  var lines =<< trim END
+"    vim9script
+"    import './xbb.vim'
+"    export class Property
+"      public var value: string
+"    endclass
+"  END
+"  writefile(lines, 'xaa.vim', 'D')
+"
+"  lines =<< trim END
+"    vim9script
+"    import './xaa.vim'
+"    export class View
+"      var content = aa.Property.new('')
+"    endclass
+"  END
+"  writefile(lines, 'xbb.vim', 'D')
+"
+"  lines =<< trim END
+"    vim9script
+"    set maxfuncdepth=100
+"    import './xbb.vim'
+"    class MyView extends bb.View
+"      def new(value: string)
+"        this.content.value = value
+"      enddef
+"    endclass
+"    var myView = MyView.new('This should be ok')
+"  END
+"  v9.CheckSourceFailure(lines, 'E1045: Import nesting too deep', 3)
+"enddef
+
 def Test_abstract_class()
   var lines =<< trim END
     vim9script

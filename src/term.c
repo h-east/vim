@@ -6728,7 +6728,8 @@ replace_termcodes(
 		    if (in_vim9script()
 				       && (dot = vim_strchr(src, '.')) != NULL)
 		    {
-			imported_T *imp = find_imported(src, dot - src, FALSE);
+			imported_T *imp = find_imported(src, dot - src, FALSE,
+									FALSE);
 
 			if (imp != NULL)
 			{
