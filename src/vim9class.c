@@ -937,6 +937,7 @@ check_func_arg_names(
     garray_T	*objmethods_gap,
     garray_T	*classmembers_gap)
 {
+    HH_ch_log("XXXXXX");
     // loop 1: class functions, loop 2: object methods
     for (int loop = 1; loop <= 2; ++loop)
     {
@@ -945,7 +946,9 @@ check_func_arg_names(
 	for (int fi = 0; fi < gap->ga_len; ++fi)
 	{
 	    ufunc_T *uf = ((ufunc_T **)gap->ga_data)[fi];
+	    char_u *cn = (uf->uf_class == NULL) ? (char_u *)"NULL" : uf->uf_class->class_name;
 
+	    HH_ch_log("uf->uf_classname:\"%s\", uf->uf_name:\"%s\", sid:%d", cn, uf->uf_name, uf->uf_script_ctx.sc_sid);
 	    for (int i = 0; i < uf->uf_args.ga_len; ++i)
 	    {
 		char_u *aname = ((char_u **)uf->uf_args.ga_data)[i];

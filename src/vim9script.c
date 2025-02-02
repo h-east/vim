@@ -363,11 +363,13 @@ mark_imports_for_reload(int sid)
     static int
 handle_import_fname(char_u *fname, int is_autoload, int *sid)
 {
+    HH_ch_log("in. fname:\"%s\", is_autoload:%d", fname, is_autoload);
     if (is_autoload)
     {
 	scriptitem_T	*si;
 
 	*sid = find_script_by_name(fname);
+	HH_ch_log("sid:%d", *sid);
 	if (*sid < 0)
 	{
 	    int error = OK;
@@ -395,7 +397,9 @@ handle_import_fname(char_u *fname, int is_autoload, int *sid)
 	if (!override_autoload || si->sn_state != SN_STATE_NOT_LOADED)
 	    return OK;
     }
-    return do_source(fname, FALSE, DOSO_NONE, sid);
+    int ret = do_source(fname, FALSE, DOSO_NONE, sid);
+    HH_ch_log("out. ret:%d", ret);
+    return ret;
 }
 
 /*
@@ -431,6 +435,7 @@ handle_import(
 	is_autoload = TRUE;
 	arg = skipwhite(arg + 8);
     }
+    HH_ch_log("in. arg:\"%s\", import_sid:%d, is_autoload:%d", arg, import_sid, is_autoload);
 
     // The name of the file can be an expression, which must evaluate to a
     // string.
@@ -458,6 +463,7 @@ handle_import(
 	char_u		*from_name;
 	int		sourced_from_nofile_buf = FALSE;
 
+	HH_ch_log("sn_name:\"%s\"", si->sn_name);
 	if (STRNCMP(si->sn_name, ":source buffer=", 15) == 0)
 	    sourced_from_nofile_buf = TRUE;
 
@@ -471,10 +477,15 @@ handle_import(
 	    vim_strncpy(from_name, si->sn_name, tail - si->sn_name);
 	    add_pathsep(from_name);
 	    STRCAT(from_name, tv.vval.v_string);
+	    HH_ch_log("from_name:\"%s\"", from_name);
 	}
 	else
+	{
 	    from_name = vim_strsave(tv.vval.v_string);
+	    HH_ch_log("from_name2:\"%s\"", from_name);
+	}
 	simplify_filename(from_name);
+	HH_ch_log("simpl fname:\"%s\"", from_name);
 
 	res = handle_import_fname(from_name, is_autoload, &sid);
 	vim_free(from_name);
@@ -510,6 +521,7 @@ handle_import(
 	    if (si->sn_autoload_prefix == NULL)
 		si->sn_autoload_prefix = get_autoload_prefix(si);
 	    res = OK;
+	    HH_ch_log("sn_autoload_prefix:\"%s\"", si->sn_autoload_prefix);
 	    if (override_autoload && si->sn_state == SN_STATE_NOT_LOADED)
 		// testing override: load autoload script right away
 		(void)do_source(si->sn_name, FALSE, DOSO_NONE, NULL);
@@ -527,6 +539,7 @@ handle_import(
 	if (from_name == NULL)
 	    goto erret;
 	vim_snprintf((char *)from_name, len, "import/%s", tv.vval.v_string);
+	HH_ch_log("from_name:\"%s\"", from_name);
 	res = source_in_path(p_rtp, from_name, DIP_NOAFTER, &sid);
 	vim_free(from_name);
     }
@@ -545,15 +558,18 @@ handle_import(
 	goto erret;
     }
 
+    HH_ch_log("sid:%d", sid);
     import_gap = gap != NULL ? gap : &SCRIPT_ITEM(import_sid)->sn_imports;
     for (i = 0; i < import_gap->ga_len; ++i)
     {
 	imported_T *import = (imported_T *)import_gap->ga_data + i;
 
+	HH_ch_log("import->imp_sid:%d", import->imp_sid);
 	if (import->imp_sid == sid)
 	{
 	    if (import->imp_flags & IMP_FLAGS_RELOAD)
 	    {
+		HH_ch_log("reload");
 		// encountering same script first time on a reload is OK
 		import->imp_flags &= ~IMP_FLAGS_RELOAD;
 		break;
@@ -588,6 +604,7 @@ handle_import(
 	}
 	as_name = vim_strnsave(p, arg - p);
 	arg = skipwhite(arg);
+	HH_ch_log("as_name:\"%s\"", as_name);
     }
     else
     {
@@ -610,13 +627,15 @@ handle_import(
 	    goto erret;
 	}
 	as_name = vim_strnsave(p, end - p);
+	HH_ch_log("as_name2:\"%s\"", as_name);
     }
 
     if (as_name != NULL)
     {
 	imported_T  *imported;
 
-	imported = find_imported(as_name, STRLEN(as_name), FALSE);
+	imported = find_imported(as_name, STRLEN(as_name), FALSE, FALSE);
+	HH_ch_log("find import. ret:%p", imported);
 	if (imported != NULL && imported->imp_sid != sid)
 	{
 	    semsg(_(e_name_already_defined_str), as_name);
@@ -630,6 +649,7 @@ handle_import(
 	if (imported == NULL)
 	{
 	    imported = new_imported(import_gap);
+	    HH_ch_log("new import. as_name:\"%s\", sid:%d, ret:%p", as_name, sid, imported);
 	    if (imported == NULL)
 		goto erret;
 	    imported->imp_name = as_name;
@@ -643,6 +663,7 @@ handle_import(
 erret:
     clear_tv(&tv);
     vim_free(as_name);
+    HH_ch_log("out. ret:\"%s\"", arg);
     return arg;
 }
 
@@ -656,6 +677,7 @@ ex_import(exarg_T *eap)
     char_u	*cmd_end;
     evalarg_T	evalarg;
 
+    HH_ch_log("in.");
     if (!sourcing_a_script(eap))
     {
 	emsg(_(e_import_can_only_be_used_in_script));
@@ -668,6 +690,7 @@ ex_import(exarg_T *eap)
     if (cmd_end != NULL)
 	set_nextcmd(eap, cmd_end);
     clear_evalarg(&evalarg, eap);
+    HH_ch_log("out. cmd_end:\"%s\"", cmd_end);
 }
 
 /*
