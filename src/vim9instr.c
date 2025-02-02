@@ -38,6 +38,7 @@ generate_instr(cctx_T *cctx, isntype_T isn_type)
     isn = ((isn_T *)instr->ga_data) + instr->ga_len;
     isn->isn_type = isn_type;
     isn->isn_lnum = cctx->ctx_lnum + 1;
+    HH_ch_log("out. instr->(da_data:%p, ga_len:%d), isn_type:%d, lnum:%d", ((isn_T *)instr->ga_data), instr->ga_len, isn_type, cctx->ctx_lnum + 1);
     ++instr->ga_len;
 
     return isn;
@@ -53,6 +54,7 @@ generate_instr_drop(cctx_T *cctx, isntype_T isn_type, int drop)
 {
     RETURN_NULL_IF_SKIP(cctx);
     cctx->ctx_type_stack.ga_len -= drop;
+    HH_ch_log("out. cctx->ctx_type_stack.ga_len:%d, drop:%d", cctx->ctx_type_stack.ga_len, drop);
     return generate_instr(cctx, isn_type);
 }
 
@@ -1024,9 +1026,13 @@ generate_PUSHFUNC(cctx_T *cctx, char_u *name, type_T *type, int may_prefix)
     isn_T	*isn;
     char_u	*funcname;
 
+    HH_ch_log("in. name:\"%s\", may_prefix:%d", name, may_prefix);
     RETURN_OK_IF_SKIP(cctx);
     if ((isn = generate_instr_type(cctx, ISN_PUSHFUNC, type)) == NULL)
+    {
+	HH_ch_log("out. FAIL");
 	return FAIL;
+    }
     if (name == NULL)
 	funcname = NULL;
     else if (!may_prefix
@@ -1044,6 +1050,7 @@ generate_PUSHFUNC(cctx_T *cctx, char_u *name, type_T *type, int may_prefix)
     }
 
     isn->isn_arg.string = funcname;
+    HH_ch_log("out. OK. isn->isn_arg.string:\"%s\"", isn->isn_arg.string);
     return OK;
 }
 
@@ -1055,12 +1062,20 @@ generate_AUTOLOAD(cctx_T *cctx, char_u *name, type_T *type)
 {
     isn_T	*isn;
 
+    HH_ch_log("in. name:\"%s\"", name);
     RETURN_OK_IF_SKIP(cctx);
     if ((isn = generate_instr_type(cctx, ISN_AUTOLOAD, type)) == NULL)
+    {
+	HH_ch_log("out. FAIL");
 	return FAIL;
+    }
     isn->isn_arg.string = vim_strsave(name);
     if (isn->isn_arg.string == NULL)
+    {
+	HH_ch_log("out. FAIL2");
 	return FAIL;
+    }
+    HH_ch_log("out. OK");
     return OK;
 }
 
@@ -1259,6 +1274,7 @@ generate_LOAD(
     else
 	isn->isn_arg.number = idx;
 
+    HH_ch_log("out. name:\"%s\", idx:%d", name, idx);
     return OK;
 }
 
@@ -1387,24 +1403,32 @@ generate_VIM9SCRIPT(
     scriptref_T	*sref;
     scriptitem_T *si = SCRIPT_ITEM(sid);
 
+    HH_ch_log("in. isn_type:%d, sid:%d, idx:%d", isn_type, sid, idx);
     RETURN_OK_IF_SKIP(cctx);
     if (isn_type == ISN_LOADSCRIPT)
 	isn = generate_instr_type2(cctx, isn_type, type, type);
     else
 	isn = generate_instr_drop(cctx, isn_type, 1);
     if (isn == NULL)
+    {
+	HH_ch_log("out. isn FAIL");
 	return FAIL;
+    }
 
     // This requires three arguments, which doesn't fit in an instruction, thus
     // we need to allocate a struct for this.
     sref = ALLOC_ONE(scriptref_T);
     if (sref == NULL)
+    {
+	HH_ch_log("out. sref FAIL");
 	return FAIL;
+    }
     isn->isn_arg.script.scriptref = sref;
     sref->sref_sid = sid;
     sref->sref_idx = idx;
     sref->sref_seq = si->sn_script_seq;
     sref->sref_type = type;
+    HH_ch_log("out. OK");
     return OK;
 }
 
@@ -2141,6 +2165,7 @@ generate_PCALL(
     isn_T	*isn;
     type_T	*ret_type;
 
+    HH_ch_log("in. name:\"%s\"", name);
     RETURN_OK_IF_SKIP(cctx);
 
     if (type->tt_type == VAR_ANY || type->tt_type == VAR_UNKNOWN
@@ -2179,6 +2204,7 @@ generate_PCALL(
     if (at_top && generate_instr(cctx, ISN_PCALL_END) == NULL)
 	return FAIL;
 
+    HH_ch_log("out.");
     return OK;
 }
 

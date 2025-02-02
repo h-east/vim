@@ -650,16 +650,22 @@ compile_load_scriptvar(
     int		    idx;
     imported_T	    *imp;
 
+    HH_ch_log("in. name:\"%s\", start:\"%s\", import:%p", name, start, import);
     if (!SCRIPT_ID_VALID(current_sctx.sc_sid))
+    {
+	HH_ch_log("out. FAIL");
 	return FAIL;
+    }
     si = SCRIPT_ITEM(current_sctx.sc_sid);
     idx = get_script_item_idx(current_sctx.sc_sid, name, 0, cctx, NULL);
+    HH_ch_log("current_sctx.sc_sid:%d", current_sctx.sc_sid);
     if (idx >= 0)
     {
 	svar_T		*sv = ((svar_T *)si->sn_var_vals.ga_data) + idx;
 
 	generate_VIM9SCRIPT(cctx, ISN_LOADSCRIPT,
 					current_sctx.sc_sid, idx, sv->sv_type);
+	HH_ch_log("out. OK. idx:%d", idx);
 	return OK;
     }
 
@@ -670,6 +676,7 @@ compile_load_scriptvar(
     else
 	imp = import;
 
+    HH_ch_log("imp:%p", imp);
     if (imp != NULL)
     {
 	char_u	*p = skipwhite(*end);
@@ -683,6 +690,7 @@ compile_load_scriptvar(
 	check_script_symlink(imp->imp_sid);
 	import_check_sourced_sid(&imp->imp_sid);
 
+	HH_ch_log("imp->imp_sid:%d", imp->imp_sid);
 	// Need to lookup the member.
 	if (*p != '.')
 	{
@@ -703,12 +711,18 @@ compile_load_scriptvar(
 	cc = *p;
 	*p = NUL;
 
+	HH_ch_log("exp_name:\"%s\"", exp_name);
 	si = SCRIPT_ITEM(imp->imp_sid);
+	HH_ch_log("si->sn_import_autoload:%d, si->sn_state:%d", si->sn_import_autoload, si->sn_state);
 	if (si->sn_import_autoload && si->sn_state == SN_STATE_NOT_LOADED)
+	{
 	    // "import autoload './dir/script.vim'" or
 	    // "import autoload './autoload/script.vim'" - load script first
 	    res = generate_SOURCE(cctx, imp->imp_sid);
+	    HH_ch_log("res:%d. post generate_SOURCE()", res);
+	}
 
+	HH_ch_log("res:%d", res);
 	if (res == OK)
 	{
 	    if (si->sn_autoload_prefix != NULL
@@ -717,6 +731,7 @@ compile_load_scriptvar(
 		char_u  *auto_name =
 				  concat_str(si->sn_autoload_prefix, exp_name);
 
+		HH_ch_log("auto_name:\"%s\", paren_follows_after_expr:%d", auto_name, paren_follows_after_expr);
 		// autoload script must be loaded later, access by the autoload
 		// name.  If a '(' follows it must be a function.  Otherwise we
 		// don't know, it can be "script.Func".
@@ -726,35 +741,47 @@ compile_load_scriptvar(
 		    res = generate_AUTOLOAD(cctx, auto_name, &t_any);
 		vim_free(auto_name);
 		done = TRUE;
+		HH_ch_log("res:%d, done:%d", res, done);
 	    }
 	    else if (si->sn_import_autoload
 					&& si->sn_state == SN_STATE_NOT_LOADED)
 	    {
+		HH_ch_log("'autoload' and SN_STATE_NOT_LOADED");
 		// If a '(' follows it must be a function.  Otherwise we don't
 		// know, it can be "script.Func".
 		if (cc == '(' || paren_follows_after_expr)
 		{
 		    char_u sid_name[MAX_FUNC_NAME_LEN];
 
+		    HH_ch_log("aaa2");
 		    func_name_with_sid(exp_name, imp->imp_sid, sid_name);
 		    res = generate_PUSHFUNC(cctx, sid_name, &t_func_any, TRUE);
+		    HH_ch_log("aaas3. res:%d", res);
 		}
 		else
+		{
+		    HH_ch_log("aaa4");
 		    res = generate_OLDSCRIPT(cctx, ISN_LOADEXPORT, exp_name,
 						      imp->imp_sid, &t_any);
+		    HH_ch_log("aaas5. res:%d", res);
+		}
 		done = TRUE;
 	    }
 	    else
 	    {
 		idx = find_exported(imp->imp_sid, exp_name, &ufunc, &type,
 							     cctx, NULL, TRUE);
+		HH_ch_log("idx:%d", idx);
 	    }
 	}
 
 	*p = cc;
 	*end = p;
 	if (done)
+	{
+	    HH_ch_log("out. done:%d, res:%d", done, res);
 	    return res;
+	}
 
 	if (idx < 0)
 	{
@@ -799,22 +826,30 @@ compile_load_scriptvar(
 
 		// function call or function reference
 		generate_PUSHFUNC(cctx, ufunc->uf_name, NULL, TRUE);
+		HH_ch_log("out. OK");
 		return OK;
 	    }
+	    HH_ch_log("out. FAIL");
 	    return FAIL;
 	}
 
+	HH_ch_log("pre generate_VIM9SCRIPT()");
 	generate_VIM9SCRIPT(cctx, ISN_LOADSCRIPT,
 		imp->imp_sid,
 		idx,
 		type);
+	HH_ch_log("out. OK");
 	return OK;
     }
 
+    HH_ch_log("aaa9");
     // Can only get here if we know "name" is a script variable and not in a
     // Vim9 script (variable is not in sn_var_vals): old style script.
-    return generate_OLDSCRIPT(cctx, ISN_LOADS, name, current_sctx.sc_sid,
+    int xxxxx = generate_OLDSCRIPT(cctx, ISN_LOADS, name, current_sctx.sc_sid,
 								       &t_any);
+
+    HH_ch_log("out. xxxxx:%d", xxxxx);
+    return xxxxx;
 }
 
     static int
@@ -897,6 +932,7 @@ compile_load(
 	*(*arg + namelen) = NUL;
     }
 
+    HH_ch_log("in. *arg:\"%s\", end_arg:\"%s\", cctx->ctx_ufunc->{uf_name:\"%s\", sc_sid:%d}, is_expr:%d, error:%d", *arg, end_arg, cctx->ctx_ufunc->uf_name, cctx->ctx_ufunc->uf_script_ctx.sc_sid, is_expr, error);
     if (*(*arg + 1) == ':')
     {
 	if (end <= *arg + 2)
@@ -991,6 +1027,7 @@ compile_load(
 	if (name == NULL)
 	    goto theend;
 
+	HH_ch_log("name:\"%s\"", name);
 	if (STRCMP(name, "super") == 0 && compiling_a_class_method(cctx))
 	{
 	    // super.SomeFunc() in a class function: push &t_super type, this
@@ -1007,6 +1044,7 @@ compile_load(
 	else if (arg_exists(*arg, namelen, &idx, &type, &gen_load_outer, cctx)
 									 == OK)
 	{
+	    HH_ch_log("arg_exists() is OK");
 	    if (gen_load_outer == 0)
 		gen_load = TRUE;
 	}
@@ -1015,10 +1053,12 @@ compile_load(
 	    lvar_T  lvar;
 	    class_T *cl = NULL;
 
+	    HH_ch_log("arg_exists() is not OK");
 	    if (lookup_local(*arg, namelen, &lvar, cctx) == OK)
 	    {
 		type = lvar.lv_type;
 		idx = lvar.lv_idx;
+		HH_ch_log("lookup_local() is OK, type->tt_type:%d, idx:%d", type->tt_type, idx);
 		if (lvar.lv_from_outer != 0)
 		{
 		    gen_load_outer = lvar.lv_from_outer;
@@ -1034,6 +1074,7 @@ compile_load(
 		     || ((method_idx =
 			     cctx_class_method_idx(cctx, *arg, namelen, &cl)) >= 0)))
 	    {
+		HH_ch_log("class?");
 		// Referencing a class variable or method without the class
 		// name.  A class variable or method can be referenced without
 		// the class name only in the class where the function is
@@ -1059,20 +1100,26 @@ compile_load(
 	    else
 	    {
 		imported_T *imp = NULL;
-
+		HH_ch_log("Pre script_var_exists()");
 		// "var" can be script-local even without using "s:" if it
 		// already exists in a Vim9 script or when it's imported.
 		if (script_var_exists(*arg, namelen, cctx, NULL) == OK
 			    || (imp = find_imported(name, 0, FALSE)) != NULL)
+		{
+		    HH_ch_log("if true");
 		    res = compile_load_scriptvar(cctx, name, *arg, &end, imp);
+		}
 
+		HH_ch_log("Pre 2nd if");
 		// When evaluating an expression and the name starts with an
 		// uppercase letter it can be a user defined function.
 		// generate_funcref() will fail if the function can't be found.
 		if (res == FAIL && is_expr && ASCII_ISUPPER(*name))
 		    res = generate_funcref(cctx, name, &gfatab, FALSE);
+		HH_ch_log("Post 2nd if");
 	    }
 	}
+	HH_ch_log("gen_load:%d", gen_load);
 	if (gen_load)
 	    res = generate_LOAD(cctx, ISN_LOAD, idx, NULL, type);
 	if (gen_load_outer > 0)
@@ -1086,6 +1133,7 @@ compile_load(
     *arg = end;
 
 theend:
+    HH_ch_log("out. res:%d", res);
     if (res == FAIL && error && called_emsg == prev_called_emsg)
 	semsg(_(e_variable_not_found_str), name);
     vim_free(name);
@@ -2913,7 +2961,13 @@ compile_expr9(
     int		ret = OK;
     typval_T	*rettv = &ppconst->pp_tv[ppconst->pp_used];
     int		used_before = ppconst->pp_used;
+    int bingo = 0;
 
+    if (STRCMP(*arg, "aaaa.Property.new('')") == 0)
+    {
+	HH_ch_log("in. Bingo. *arg:\"%s\"", *arg);
+	bingo = 1;
+    }
     ppconst->pp_is_const = FALSE;
 
     /*
@@ -3084,6 +3138,8 @@ compile_expr9(
 
     if (rettv->v_type != VAR_UNKNOWN && used_before == ppconst->pp_used)
     {
+	if (bingo)
+	    HH_ch_log("rettv->v_type:%d, ppconst->pp_used:%d, ctx_skip:%d", rettv->v_type, ppconst->pp_used, cctx->ctx_skip);
 	if (cctx->ctx_skip == SKIP_YES)
 	    clear_tv(rettv);
 	else
@@ -3096,6 +3152,8 @@ compile_expr9(
 	char_u	    *p;
 	int	    r;
 
+	if (bingo)
+	    HH_ch_log("NOTDONE");
 	if (!eval_isnamec1(**arg))
 	{
 	    if (!vim9_bad_comment(*arg))
@@ -3105,14 +3163,20 @@ compile_expr9(
 		else
 		    semsg(_(e_name_expected_str), *arg);
 	    }
+	    if (bingo)
+		HH_ch_log("out. FAIL");
 	    return FAIL;
 	}
 
 	// "name" or "name()"
 	p = to_name_end(*arg, TRUE);
+	if (bingo)
+	    HH_ch_log("p:\"%s\"", p);
 	if (p - *arg == (size_t)1 && **arg == '_')
 	{
 	    emsg(_(e_cannot_use_underscore_here));
+	    if (bingo)
+		HH_ch_log("out. FAIL2");
 	    return FAIL;
 	}
 
@@ -3126,33 +3190,63 @@ compile_expr9(
 	if (*p == '(')
 	{
 	    r = compile_call(arg, namelen, cctx, ppconst, 0);
+	    if (bingo)
+		HH_ch_log("*p is (");
 	}
 	else
 	{
+	    if (bingo)
+		HH_ch_log("*p is not (");
 	    if (cctx->ctx_skip != SKIP_YES
 				    && generate_ppconst(cctx, ppconst) == FAIL)
 		return FAIL;
 	    r = compile_load(arg, namelen, p, cctx, TRUE, TRUE);
 	}
+	if (bingo)
+	    HH_ch_log("r:%d", r);
 	if (r == FAIL)
+	{
+	    if (bingo)
+		HH_ch_log("out. FAIL3");
 	    return FAIL;
+	}
     }
 
+    if (bingo)
+	HH_ch_log("Pre compile_subscript()");
     // Handle following "[]", ".member", etc.
     // Then deal with prefixed '-', '+' and '!', if not done already.
     if (compile_subscript(arg, cctx, start_leader, &end_leader,
 							     ppconst) == FAIL)
+    {
+	if (bingo)
+	    HH_ch_log("out. FAIL4");
 	return FAIL;
+    }
     if ((ppconst->pp_used > 0) && (cctx->ctx_skip != SKIP_YES))
     {
+	if (bingo)
+	    HH_ch_log("constant");
 	// apply the '!', '-' and '+' before the constant
 	rettv = &ppconst->pp_tv[ppconst->pp_used - 1];
 	if (apply_leader(rettv, FALSE, start_leader, &end_leader) == FAIL)
+	{
+	    if (bingo)
+		HH_ch_log("out. FAIL5");
 	    return FAIL;
+	}
+	if (bingo)
+	    HH_ch_log("out. OK");
 	return OK;
     }
     if (compile_leader(cctx, FALSE, start_leader, &end_leader) == FAIL)
+    {
+	if (bingo)
+	    HH_ch_log("out. FAIL6");
 	return FAIL;
+    }
+    if (bingo)
+	HH_ch_log("out. last OK");
     return OK;
 }
 
