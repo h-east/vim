@@ -733,7 +733,7 @@ compile_load(
     int		res = FAIL;
     int		prev_called_emsg = called_emsg;
 
-    HH_ch_log("in. *arg:\"%s\", end_arg:\"%s\", cctx:%p, is_expr:%d, error:%d", *arg, end_arg, cctx, is_expr, error);
+    HH_ch_log("in. *arg:\"%s\", end_arg:\"%s\", cctx->ctx_ufunc->{uf_name:\"%s\", sc_sid:%d}, is_expr:%d, error:%d", *arg, end_arg, cctx->ctx_ufunc->uf_name, cctx->ctx_ufunc->uf_script_ctx.sc_sid, is_expr, error);
     if (*(*arg + 1) == ':')
     {
 	if (end <= *arg + 2)
