@@ -4026,7 +4026,7 @@ compile_dfunc_cctx_init(
     static int
 obj_constructor_prologue(ufunc_T *ufunc, cctx_T *cctx)
 {
-    HH_ch_log("in. ufunc->uf_name:\"%s\", uf_sid:%d", ufunc->uf_name, ufunc->uf_script_ctx.sc_sid);
+    HH_ch_log("in. ufunc->uf_name:\"%s\", uf_sid:%d, cctx->ctx_ufunc->{uf_name:\"%s\", sc_sid:%d}", ufunc->uf_name, ufunc->uf_script_ctx.sc_sid, cctx->ctx_ufunc->uf_name, cctx->ctx_ufunc->uf_script_ctx.sc_sid);
     generate_CONSTRUCT(cctx, ufunc->uf_class);
 
     for (int i = 0; i < ufunc->uf_class->class_obj_member_count; ++i)
