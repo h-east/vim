@@ -2387,7 +2387,7 @@ find_func_even_dead(char_u *name, int flags)
     hashitem_T	*hi;
     ufunc_T	*func;
 
-    HH_ch_log("in. name:\"%s\"", name);
+    HH_ch_log("in. name:\"%s\", flags:%#x", name, flags);
     if ((flags & FFED_IS_GLOBAL) == 0)
     {
 	// Find script-local function before global one.
