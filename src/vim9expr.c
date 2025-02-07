@@ -801,6 +801,7 @@ compile_load(
 	if (name == NULL)
 	    return FAIL;
 
+	HH_ch_log("name:\"%s\"", name);
 	if (STRCMP(name, "super") == 0
 		&& cctx->ctx_ufunc != NULL
 		&& (cctx->ctx_ufunc->uf_flags & (FC_OBJECT|FC_NEW)) == 0)
@@ -819,6 +820,7 @@ compile_load(
 	else if (arg_exists(*arg, len, &idx, &type, &gen_load_outer, cctx)
 									 == OK)
 	{
+	    HH_ch_log("arg_exists() is OK");
 	    if (gen_load_outer == 0)
 		gen_load = TRUE;
 	}
@@ -827,8 +829,10 @@ compile_load(
 	    lvar_T  lvar;
 	    class_T *cl = NULL;
 
+	    HH_ch_log("arg_exists() is not OK");
 	    if (lookup_local(*arg, len, &lvar, cctx) == OK)
 	    {
+		HH_ch_log("lookup_local() is OK");
 		type = lvar.lv_type;
 		idx = lvar.lv_idx;
 		if (lvar.lv_from_outer != 0)
@@ -846,6 +850,7 @@ compile_load(
 		     || ((method_idx =
 			     cctx_class_method_idx(cctx, *arg, len, &cl)) >= 0)))
 	    {
+		HH_ch_log("class?");
 		// Referencing a class variable or method without the class
 		// name.  A class variable or method can be referenced without
 		// the class name only in the class where the function is
@@ -870,6 +875,7 @@ compile_load(
 	    }
 	    else
 	    {
+		HH_ch_log("Pre script_var_exists()");
 		// "var" can be script-local even without using "s:" if it
 		// already exists in a Vim9 script or when it's imported.
 		if (script_var_exists(*arg, len, cctx, NULL) == OK
@@ -883,6 +889,7 @@ compile_load(
 		    res = generate_funcref(cctx, name, FALSE);
 	    }
 	}
+	HH_ch_log("gen_load:%d", gen_load);
 	if (gen_load)
 	    res = generate_LOAD(cctx, ISN_LOAD, idx, NULL, type);
 	if (gen_load_outer > 0)
@@ -2587,7 +2594,13 @@ compile_expr9(
     int		ret = OK;
     typval_T	*rettv = &ppconst->pp_tv[ppconst->pp_used];
     int		used_before = ppconst->pp_used;
+    int bingo = 0;
 
+    if (STRCMP(*arg, "aaaa.Property.new('')") == 0)
+    {
+	HH_ch_log("in. Bingo. *arg:\"%s\"", *arg);
+	bingo = 1;
+    }
     ppconst->pp_is_const = FALSE;
 
     /*
@@ -2758,6 +2771,8 @@ compile_expr9(
 
     if (rettv->v_type != VAR_UNKNOWN && used_before == ppconst->pp_used)
     {
+	if (bingo)
+	    HH_ch_log("rettv->v_type:%d, ppconst->pp_used:%d, ctx_skip:%d", rettv->v_type, ppconst->pp_used, cctx->ctx_skip);
 	if (cctx->ctx_skip == SKIP_YES)
 	    clear_tv(rettv);
 	else
@@ -2770,6 +2785,8 @@ compile_expr9(
 	char_u	    *p;
 	int	    r;
 
+	if (bingo)
+	    HH_ch_log("NOTDONE");
 	if (!eval_isnamec1(**arg))
 	{
 	    if (!vim9_bad_comment(*arg))
@@ -2779,47 +2796,83 @@ compile_expr9(
 		else
 		    semsg(_(e_name_expected_str), *arg);
 	    }
+	    if (bingo)
+		HH_ch_log("out. FAIL");
 	    return FAIL;
 	}
 
 	// "name" or "name()"
 	p = to_name_end(*arg, TRUE);
+	if (bingo)
+	    HH_ch_log("p:\"%s\"", p);
 	if (p - *arg == (size_t)1 && **arg == '_')
 	{
 	    emsg(_(e_cannot_use_underscore_here));
+	    if (bingo)
+		HH_ch_log("out. FAIL2");
 	    return FAIL;
 	}
 
 	if (*p == '(')
 	{
+	    if (bingo)
+		HH_ch_log("*p is (");
 	    r = compile_call(arg, p - *arg, cctx, ppconst, 0);
 	}
 	else
 	{
+	    if (bingo)
+		HH_ch_log("*p is not (");
 	    if (cctx->ctx_skip != SKIP_YES
 				    && generate_ppconst(cctx, ppconst) == FAIL)
 		return FAIL;
 	    r = compile_load(arg, p, cctx, TRUE, TRUE);
 	}
+	if (bingo)
+	    HH_ch_log("r:%d", r);
 	if (r == FAIL)
+	{
+	    if (bingo)
+		HH_ch_log("out. FAIL3");
 	    return FAIL;
+	}
     }
 
+    if (bingo)
+	HH_ch_log("Pre compile_subscript()");
     // Handle following "[]", ".member", etc.
     // Then deal with prefixed '-', '+' and '!', if not done already.
     if (compile_subscript(arg, cctx, start_leader, &end_leader,
 							     ppconst) == FAIL)
+    {
+	if (bingo)
+	    HH_ch_log("out. FAIL4");
 	return FAIL;
+    }
     if ((ppconst->pp_used > 0) && (cctx->ctx_skip != SKIP_YES))
     {
+	if (bingo)
+	    HH_ch_log("constant");
 	// apply the '!', '-' and '+' before the constant
 	rettv = &ppconst->pp_tv[ppconst->pp_used - 1];
 	if (apply_leader(rettv, FALSE, start_leader, &end_leader) == FAIL)
+	{
+	    if (bingo)
+		HH_ch_log("out. FAIL5");
 	    return FAIL;
+	}
+	if (bingo)
+	    HH_ch_log("out. OK");
 	return OK;
     }
     if (compile_leader(cctx, FALSE, start_leader, &end_leader) == FAIL)
+    {
+	if (bingo)
+	    HH_ch_log("out. FAIL6");
 	return FAIL;
+    }
+    if (bingo)
+	HH_ch_log("out. last OK");
     return OK;
 }
 
