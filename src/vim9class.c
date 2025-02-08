@@ -346,6 +346,7 @@ validate_extends_class(
 	++extends_cl->class_refcount;
 	*extends_clp = extends_cl;
 	success = TRUE;
+	HH_ch_log("extends_cl->class_name:\"%s\"", extends_cl->class_name);
     }
     clear_tv(&tv);
 
