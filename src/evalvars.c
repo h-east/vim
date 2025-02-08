@@ -3250,13 +3250,17 @@ eval_variable_import(
     char_u	*name,
     typval_T	*rettv)
 {
+    HH_ch_log("in. name:\"%s\"", name);
     char_u  *s = name;
     while (ASCII_ISALNUM(*s) || *s == '_')
 	++s;
     int	    len = (int)(s - name);
 
     if (eval_variable(name, len, 0, rettv, NULL, EVAL_VAR_IMPORT) == FAIL)
+    {
+	HH_ch_log("out. FAIL");
 	return FAIL;
+    }
     if (rettv->v_type == VAR_ANY && *s == '.')
     {
 	char_u *ns = s + 1;
@@ -3264,8 +3268,11 @@ eval_variable_import(
 	while (ASCII_ISALNUM(*s) || *s == '_')
 	    ++s;
 	int sid = rettv->vval.v_number;
-	return eval_variable(ns, (int)(s - ns), sid, rettv, NULL, 0);
+	int ret = eval_variable(ns, (int)(s - ns), sid, rettv, NULL, 0);
+	HH_ch_log("out. ret:%d, sid:%d, rettv->{v_type:%d, vval.v_number:%lld", ret, sid, rettv->v_type, rettv->vval.v_number);
+	return ret;
     }
+    HH_ch_log("out. OK");
     return OK;
 }
 
