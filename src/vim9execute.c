@@ -2249,6 +2249,7 @@ execute_storeindex(isn_T *iptr, ectx_T *ectx)
     int		status = OK;
     int		check_rhs_type = FALSE;
 
+    HH_ch_log("in. tv_idx->v_type:%d", tv_idx->v_type);
     if (tv_idx->v_type == VAR_NUMBER)
 	lidx = (long)tv_idx->vval.v_number;
 
@@ -2329,6 +2330,7 @@ execute_storeindex(isn_T *iptr, ectx_T *ectx)
 	}
     }
 
+    HH_ch_log("status:%d, dest_type:%d", status, dest_type);
     if (status == OK)
     {
 	if (dest_type == VAR_LIST)
@@ -2461,8 +2463,16 @@ execute_storeindex(isn_T *iptr, ectx_T *ectx)
 		otv = class->class_members_tv;
 	    }
 
-	    clear_tv(&otv[lidx]);
-	    otv[lidx] = *tv;
+	    if (otv == NULL)
+	    {
+		HH_ch_log("otv is NULL");
+		status = FAIL;
+	    }
+	    else
+	    {
+		clear_tv(&otv[lidx]);
+		otv[lidx] = *tv;
+	    }
 	}
 	else
 	{
@@ -2474,6 +2484,8 @@ execute_storeindex(isn_T *iptr, ectx_T *ectx)
     clear_tv(tv_idx);
     clear_tv(tv_dest);
     ectx->ec_stack.ga_len -= 3;
+
+    HH_ch_log("out. status:%d", status);
     if (status == FAIL)
     {
 	clear_tv(tv);
