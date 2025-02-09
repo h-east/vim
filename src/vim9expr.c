@@ -880,13 +880,18 @@ compile_load(
 		// already exists in a Vim9 script or when it's imported.
 		if (script_var_exists(*arg, len, cctx, NULL) == OK
 				|| find_imported(name, 0, FALSE, TRUE) != NULL)
-		   res = compile_load_scriptvar(cctx, name, *arg, &end);
+		{
+		    HH_ch_log("if true");
+		    res = compile_load_scriptvar(cctx, name, *arg, &end);
+		}
 
+		HH_ch_log("Pre 2nd if");
 		// When evaluating an expression and the name starts with an
 		// uppercase letter it can be a user defined function.
 		// generate_funcref() will fail if the function can't be found.
 		if (res == FAIL && is_expr && ASCII_ISUPPER(*name))
 		    res = generate_funcref(cctx, name, FALSE);
+		HH_ch_log("Post 2nd if");
 	    }
 	}
 	HH_ch_log("gen_load:%d", gen_load);
