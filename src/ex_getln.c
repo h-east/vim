@@ -3969,6 +3969,7 @@ compute_cmdrow(void)
     else
 	cmdline_row = W_WINROW(lastwin) + lastwin->w_height
 						    + lastwin->w_status_height;
+    HH_ch_log("cmdline_row:%d", cmdline_row);
 }
 
     void

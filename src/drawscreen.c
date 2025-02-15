@@ -93,6 +93,7 @@ update_screen(int type_arg)
     int		no_update = FALSE;
     int		save_pum_will_redraw = pum_will_redraw;
 
+    HH_ch_log("in. type_arg:%d, ScreenLines:%p", type_arg, ScreenLines);
     // Don't do anything if the screen structures are (not yet) valid.
     if (!screen_valid(TRUE))
 	return FAIL;
@@ -102,6 +103,7 @@ update_screen(int type_arg)
 	no_update = TRUE;
 	type = 0;
     }
+    HH_ch_log("no_update:%d, type:%d", no_update, type);
 
 #ifdef FEAT_EVAL
     {
@@ -128,6 +130,7 @@ update_screen(int type_arg)
 	// reason to redraw while busy redrawing (e.g., asynchronous
 	// scrolling), or update_topline() in win_update() will cause a
 	// scroll, the screen will be redrawn later or in win_update().
+	HH_ch_log("must_redraw:%d, type:%d", must_redraw, type);
 	must_redraw = 0;
     }
 
@@ -147,8 +150,10 @@ update_screen(int type_arg)
 	must_redraw = type;
 	if (type > UPD_INVERTED_ALL)
 	    curwin->w_lines_valid = 0;	// don't use w_lines[].wl_size now
+	HH_ch_log("return FAIL");
 	return FAIL;
     }
+    HH_ch_log("updating_screen:%d", updating_screen);
     updating_screen = TRUE;
 
 #ifdef FEAT_PROP_POPUP
@@ -221,6 +226,7 @@ update_screen(int type_arg)
     if (need_highlight_changed)
 	highlight_changed();
 
+    HH_ch_log("type:%d", type);
     if (type == UPD_CLEAR)		// first clear screen
     {
 	screenclear();		// will reset clear_cmdline
@@ -229,6 +235,7 @@ update_screen(int type_arg)
 	must_redraw = 0;
     }
 
+    HH_ch_log("clear_cmdline:%d", clear_cmdline);
     if (clear_cmdline)		// going to clear cmdline (done below)
 	check_for_delay(FALSE);
 
@@ -3163,6 +3170,7 @@ redraw_win_later(
     win_T	*wp,
     int		type)
 {
+    HH_ch_log("in. redraw_not_allowed:%d, wp->w_redr_type:%d, type:%d, wp->w_lines_valid:%d, must_redraw:%d", redraw_not_allowed, wp->w_redr_type, type, wp->w_lines_valid, must_redraw);
     if (!exiting && !redraw_not_allowed && wp->w_redr_type < type)
     {
 	wp->w_redr_type = type;
@@ -3171,6 +3179,7 @@ redraw_win_later(
 	if (must_redraw < type)	// must_redraw is the maximum of all windows
 	    must_redraw = type;
     }
+    HH_ch_log("out. redraw_not_allowed:%d, wp->w_redr_type:%d, type:%d, wp->w_lines_valid:%d, must_redraw:%d", redraw_not_allowed, wp->w_redr_type, type, wp->w_lines_valid, must_redraw);
 }
 
 /*

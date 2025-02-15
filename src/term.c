@@ -2363,6 +2363,7 @@ set_termname(char_u *term)
     }
 
 #ifdef FEAT_TERMRESPONSE
+    HH_ch_log("Pre may_req_termresponse()");
     may_req_termresponse();
 #endif
 
@@ -2957,6 +2958,15 @@ out_str_cf(char_u *s)
     void
 out_str(char_u *s)
 {
+    if (s == T_CL)
+    {
+	HH_ch_log("XXX T_CL");
+//	if (g_do_ex_pwd)
+//	{
+//	    HH_ch_log("XXX g_do_ex_pwd:%d", g_do_ex_pwd);
+//	    return;
+//	}
+    }
     if (s == NULL || *s == NUL)
 	return;
 
@@ -3951,6 +3961,7 @@ settmode(tmode_T tmode)
 	out_flush();
     }
 #ifdef FEAT_TERMRESPONSE
+    HH_ch_log("Pre may_req_termresponse()");
     may_req_termresponse();
 #endif
 }
@@ -3982,6 +3993,7 @@ starttermcap(void)
     if (!gui.in_use && !gui.starting)
 # endif
     {
+	HH_ch_log("Pre may_req_termresponse()");
 	may_req_termresponse();
 	// Immediately check for a response.  If t_Co changes, we don't
 	// want to redraw with wrong colors first.
@@ -3994,12 +4006,14 @@ starttermcap(void)
     void
 stoptermcap(void)
 {
+    HH_ch_log("in. termcap_active:%d", termcap_active);
     screen_stop_highlight();
     reset_cterm_colors();
 
     if (!termcap_active)
 	return;
 
+    HH_ch_log("gui.in_use:%d, gui.starting:%d", gui.in_use, gui.starting);
 #ifdef FEAT_TERMRESPONSE
 # ifdef FEAT_GUI
     if (!gui.in_use && !gui.starting)
@@ -4008,6 +4022,7 @@ stoptermcap(void)
 	// May need to discard T_CRV, T_U7 or T_RBG response.
 	if (termrequest_any_pending())
 	{
+	    HH_ch_log("termrequest_any_pending is TRUE");
 # ifdef UNIX
 	    // Give the terminal a chance to respond.
 	    mch_delay(100L, 0);
@@ -4054,6 +4069,7 @@ stoptermcap(void)
 					// Kitty keyboard protocol
     screen_start();			// don't know where cursor is now
     out_flush();
+    HH_ch_log("out.");
 }
 
 #if defined(FEAT_TERMRESPONSE) || defined(PROTO)
@@ -4101,6 +4117,7 @@ check_terminal_behavior(void)
 {
     int	    did_send = FALSE;
 
+    HH_ch_log("in. can_get_termresponse():%d, starting:%d, *T_U7 is %sNUL", can_get_termresponse(), starting, (*T_U7 == NUL) ? "": "not ");
     if (!can_get_termresponse() || starting != 0 || *T_U7 == NUL)
 	return;
 
@@ -4109,6 +4126,7 @@ check_terminal_behavior(void)
     {
 	char_u	buf[16];
 
+	HH_ch_log("aa");
 	// Ambiguous width check.
 	// Check how the terminal treats ambiguous character width (UAX #11).
 	// First, we move the cursor to (1, 0) and print a test ambiguous
@@ -4140,6 +4158,7 @@ check_terminal_behavior(void)
 
     if (xcc_status.tr_progress == STATUS_GET && Rows > 2)
     {
+	HH_ch_log("aaa");
 	// 2. Check compatibility with xterm.
 	// We move the cursor to (2, 0), print a test sequence and then query
 	// the current cursor position.  If the terminal properly handles
@@ -4171,6 +4190,7 @@ check_terminal_behavior(void)
 
     if (did_send)
     {
+	HH_ch_log("did_send is true");
 	term_windgoto(0, 0);
 
 	// Need to reset the known cursor position.
@@ -4181,6 +4201,7 @@ check_terminal_behavior(void)
 	out_flush();
 	(void)vpeekc_nomap();
     }
+    HH_ch_log("out.");
 }
 
 /*
@@ -4190,6 +4211,7 @@ check_terminal_behavior(void)
     void
 may_req_bg_color(void)
 {
+    HH_ch_log("in.");
     if (can_get_termresponse() && starting == 0)
     {
 	int didit = FALSE;
@@ -4224,6 +4246,7 @@ may_req_bg_color(void)
 	    (void)vpeekc_nomap();
 	}
     }
+    HH_ch_log("out.");
 }
 
 #endif

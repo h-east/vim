@@ -3228,9 +3228,11 @@ nv_ctrlh(cmdarg_T *cap)
     static void
 nv_clear(cmdarg_T *cap)
 {
+    HH_ch_log("in.");
     if (checkclearop(cap->oap))
 	return;
 
+    HH_ch_log("aa");
 #ifdef FEAT_SYN_HL
     // Clear all syntax states to force resyncing.
     syn_stack_free_all(curwin->w_s);
@@ -3243,13 +3245,16 @@ nv_clear(cmdarg_T *cap)
     }
 # endif
 #endif
+    HH_ch_log("pre redraw_later()");
     redraw_later(UPD_CLEAR);
+    HH_ch_log("post redraw_later()");
 #if defined(MSWIN) && (!defined(FEAT_GUI_MSWIN) || defined(VIMDLL))
 # ifdef VIMDLL
     if (!gui.in_use)
 # endif
 	resize_console_buf();
 #endif
+    HH_ch_log("out.");
 }
 
 /*
