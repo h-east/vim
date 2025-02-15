@@ -117,6 +117,7 @@ static int  did_warn_clipboard = FALSE;
     int
 msg(char *s)
 {
+    HH_ch_log("in.");
     return msg_attr_keep(s, 0, FALSE);
 }
 
@@ -151,10 +152,14 @@ msg_attr_keep(
     int		retval;
     char_u	*buf = NULL;
 
+    HH_ch_log("in. s:\"%s\", emsg_on_display:%d, attr:%d", s, emsg_on_display, attr);
     // Skip messages not matching ":filter pattern".
     // Don't filter when there is an error.
     if (!emsg_on_display && message_filtered((char_u *)s))
+    {
+	HH_ch_log("ret TRUE");
 	return TRUE;
+    }
 
 #ifdef FEAT_EVAL
     if (attr == 0)
@@ -166,10 +171,12 @@ msg_attr_keep(
      * when redrawing the window), which causes another message, etc..	To
      * break this loop, limit the recursiveness to 3 levels.
      */
+    HH_ch_log("entered:%d", entered);
     if (entered >= 3)
 	return TRUE;
     ++entered;
 
+    HH_ch_log("zz");
     // Add message to history (unless it's a repeated kept message or a
     // truncated message)
     if ((char_u *)s != keep_msg
@@ -179,30 +186,41 @@ msg_attr_keep(
 		&& STRCMP(s, last_msg_hist->msg)))
 	add_msg_hist((char_u *)s, -1, attr);
 
+    HH_ch_log("zz2. emsg_to_channel_log:%d", emsg_to_channel_log);
 #ifdef FEAT_EVAL
     if (emsg_to_channel_log)
 	// Write message in the channel log.
 	ch_log(NULL, "ERROR: %s", s);
 #endif
 
+    HH_ch_log("zz3.");
     // Truncate the message if needed.
     msg_start();
     buf = msg_strtrunc((char_u *)s, FALSE);
     if (buf != NULL)
+    {
+	HH_ch_log("zz3.5. buf:\"%s\"", buf);
 	s = (char *)buf;
+    }
 
+    HH_ch_log("zz4. s:\"%s\"", s);
     msg_outtrans_attr((char_u *)s, attr);
     msg_clr_eos();
     retval = msg_end();
 
+    HH_ch_log("keep:%d, retval:%d", keep, retval);
     if (keep && retval && vim_strsize((char_u *)s)
 			    < (int)(Rows - cmdline_row - 1) * Columns + sc_col)
+    {
+	HH_ch_log("zz5");
 	set_keep_msg((char_u *)s, 0);
+    }
 
     need_fileinfo = FALSE;
 
     vim_free(buf);
     --entered;
+    HH_ch_log("out.");
     return retval;
 }
 
@@ -1732,12 +1750,14 @@ msg_outtrans_len_attr(char_u *msgstr, int len, int attr)
     int		c;
     int		save_got_int = got_int;
 
+    HH_ch_log("in. msgstr:\"%s\", len:%d, attr:%d", msgstr, len, attr);
     // Only quit when got_int was set in here.
     got_int = FALSE;
 
     if (attr == 0)
 	attr = HL_ATTR(HLF_MSG);
 
+    HH_ch_log("attr:%d", attr);
     // if MSG_HIST flag set, add message to history
     if (attr & MSG_HIST)
     {
@@ -1750,6 +1770,7 @@ msg_outtrans_len_attr(char_u *msgstr, int len, int attr)
     if (msg_silent == 0 && len > 0 && msg_row >= cmdline_row && msg_col == 0)
     {
 	clear_cmdline = FALSE;
+	HH_ch_log("clear_cmdline:%d", clear_cmdline);
 	mode_displayed = FALSE;
     }
 
@@ -1762,6 +1783,7 @@ msg_outtrans_len_attr(char_u *msgstr, int len, int attr)
      * Go over the string.  Special characters are translated and printed.
      * Normal characters are printed several at a time.
      */
+    HH_ch_log("pre while");
     while (--len >= 0 && !got_int)
     {
 	if (enc_utf8)
@@ -1813,8 +1835,10 @@ msg_outtrans_len_attr(char_u *msgstr, int len, int attr)
     }
 
     if (str > plain_start && !got_int)
+    {
 	// print the printable chars at the end
 	msg_puts_attr_len((char *)plain_start, (int)(str - plain_start), attr);
+    }
 
     got_int |= save_got_int;
 
@@ -2320,6 +2344,7 @@ msg_puts_attr(char *s, int attr)
     static void
 msg_puts_attr_len(char *str, int maxlen, int attr)
 {
+    HH_ch_log("in. msg_silent:%d", msg_silent);
     /*
      * If redirection is on, also write to the redirection file.
      */
@@ -2357,12 +2382,22 @@ msg_puts_attr_len(char *str, int maxlen, int attr)
      * different, e.g. for Win32 console) or we just don't know where the
      * cursor is.
      */
+    HH_ch_log("str:\"%s\", maxlen:%d, attr:%d", str, maxlen, attr);
     if (msg_use_printf())
+    {
+	HH_ch_log("msg_use_printf true");
 	msg_puts_printf((char_u *)str, maxlen);
+    }
     else
+    {
+	HH_ch_log("msg_use_printf false");
 	msg_puts_display((char_u *)str, maxlen, attr, FALSE);
+    }
 
     need_fileinfo = FALSE;
+//    if (*str == '/')
+//	g_do_ex_pwd = TRUE;
+    HH_ch_log("out. g_do_ex_pwd:%d", g_do_ex_pwd);
 }
 
 // values for "where"
@@ -2448,6 +2483,7 @@ msg_puts_display(
     win_T	*msg_win = NULL;
     linenr_T    lnum = 1;
 
+    HH_ch_log("in. in_echowindow:%d", in_echowindow);
     if (in_echowindow)
     {
 	msg_win = popup_get_message_win();
@@ -2481,6 +2517,7 @@ msg_puts_display(
     }
 #endif
 
+    HH_ch_log("pre while");
     did_wait_return = FALSE;
     while ((maxlen < 0 || (int)(s - str) < maxlen) && *s != NUL)
     {
@@ -2508,6 +2545,7 @@ msg_puts_display(
 	     * scroll automatically, some don't.  To avoid problems we scroll
 	     * ourselves).
 	     */
+	    HH_ch_log("in judge. t_col:%d, msg_win:%p", t_col, msg_win);
 	    if (t_col > 0)
 	    {
 		// output postponed text
@@ -2519,13 +2557,18 @@ msg_puts_display(
 		    where = PUT_BELOW;
 		}
 		else
+		{
 #endif
 		    t_puts(&t_col, t_s, s, attr);
+		}
 	    }
 
 	    // When no more prompt and no more room, truncate here
 	    if (msg_no_more && lines_left == 0)
+	    {
+		HH_ch_log("break");
 		break;
+	    }
 
 #ifdef HAS_MESSAGE_WINDOW
 	    if (msg_win == NULL)
@@ -2613,13 +2656,17 @@ msg_puts_display(
 #ifdef HAS_MESSAGE_WINDOW
 	    if (msg_win != NULL)
 	    {
+		HH_ch_log("zz");
 		put_msg_win(msg_win, where, t_s, s, lnum);
 		t_col = 0;
 		where = PUT_BELOW;
 	    }
 	    else
+	    {
 #endif
+		HH_ch_log("zzz");
 		t_puts(&t_col, t_s, s, attr);
+	    }
 	}
 
 	if (wrap && p_more && !recurse)
@@ -2640,8 +2687,11 @@ msg_puts_display(
 		}
 	    }
 	    else
+	    {
 #endif
 		msg_didout = FALSE;	    // remember that line is empty
+		HH_ch_log("msg_didout is FALSE");
+	    }
 #ifdef FEAT_RIGHTLEFT
 	    if (cmdmsg_rl)
 		msg_col = Columns - 1;
@@ -2705,7 +2755,10 @@ msg_puts_display(
 		if (l > 1)
 		    s = screen_puts_mbyte(s, l, attr) - 1;
 		else
+		{
+		    HH_ch_log("msg_screen_putchar");
 		    msg_screen_putchar(*s, attr);
+		}
 	    }
 	    else
 	    {
@@ -2726,8 +2779,11 @@ msg_puts_display(
 	if (msg_win != NULL)
 	    put_msg_win(msg_win, where, t_s, s, lnum);
 	else
+	{
 #endif
+	    HH_ch_log("t_puts. t_col:%d, t_s:\"%s\", s:\"%s\"", t_col, t_s, s);
 	    t_puts(&t_col, t_s, s, attr);
+	}
     }
 
 #ifdef HAS_MESSAGE_WINDOW
@@ -2739,6 +2795,7 @@ msg_puts_display(
 	store_sb_text(&sb_str, s, attr, &sb_col, FALSE);
 
     msg_check();
+    HH_ch_log("out.");
 }
 
 /*
@@ -3849,9 +3906,11 @@ msg_clr_eos_force(void)
     void
 msg_clr_cmdline(void)
 {
+    HH_ch_log("in. g_do_ex_pwd:%d", g_do_ex_pwd);
     msg_row = cmdline_row;
     msg_col = 0;
     msg_clr_eos_force();
+    HH_ch_log("out.");
 }
 
 /*
