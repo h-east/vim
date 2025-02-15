@@ -2328,7 +2328,10 @@ screen_fill(
 	    redraw_cmdline = TRUE;
 	    if (start_col == 0 && end_col == Columns
 		    && c1 == ' ' && c2 == ' ' && attr == 0)
+	    {
 		clear_cmdline = FALSE;	// command line has been cleared
+		HH_ch_log("clear_cmdline:%d", clear_cmdline);
+	    }
 	    if (start_col == 0)
 		mode_displayed = FALSE; // mode cleared or overwritten
 	}
@@ -2831,6 +2834,7 @@ screenclear2(int doclear)
 	out_str(T_CL);		// clear the display
 	did_clear = TRUE;
 	clear_cmdline = FALSE;
+	HH_ch_log("clear_cmdline:%d", clear_cmdline);
 	mode_displayed = FALSE;
     }
     else
@@ -4206,6 +4210,7 @@ showmode(void)
     redraw_cmdline = FALSE;
     redraw_mode = FALSE;
     clear_cmdline = FALSE;
+    HH_ch_log("clear_cmdline:%d", clear_cmdline);
 
     return length;
 }
