@@ -11,6 +11,7 @@
  * ex_docmd.c: functions for executing an Ex command line.
  */
 
+#define HHHH_MAIN
 #include "vim.h"
 
 static int	quitmore = 0;
@@ -8148,6 +8149,9 @@ ex_cd(exarg_T *eap)
 {
     char_u	*new_dir;
 
+    HH_ch_log("g_do_ex_pwd:%d", g_do_ex_pwd);
+    g_do_ex_pwd = FALSE;
+#if 0
     new_dir = eap->arg;
 #if !defined(UNIX) && !defined(VMS)
     // for non-UNIX ":cd" means: print current directory unless 'cdhome' is set
@@ -8171,6 +8175,7 @@ ex_cd(exarg_T *eap)
 	if (KeyTyped || p_verbose >= 5)
 	    ex_pwd(eap);
     }
+#endif
 }
 
 /*
@@ -8179,6 +8184,7 @@ ex_cd(exarg_T *eap)
     static void
 ex_pwd(exarg_T *eap UNUSED)
 {
+    HH_ch_log("in. p_verbose:%ld", p_verbose);
     if (mch_dirname(NameBuff, MAXPATHL) == OK)
     {
 #ifdef BACKSLASH_IN_FILENAME
@@ -8201,6 +8207,8 @@ ex_pwd(exarg_T *eap UNUSED)
     }
     else
 	emsg(_(e_directory_unknown));
+    HH_ch_log("out.");
+    g_do_ex_pwd = TRUE;
 }
 
 /*
