@@ -68,7 +68,7 @@ static int term_7to8bit(char_u *p);
 static void accept_modifiers_for_function_keys(void);
 
     // Change this to "if 1" to debug what happens with termresponse.
-#  if 0
+#  if 1
 #   define DEBUG_TERMRESPONSE
 static void log_tr(const char *fmt, ...) ATTRIBUTE_FORMAT_PRINTF(1, 2);
 #   define LOG_TR(msg) log_tr msg
@@ -2362,6 +2362,7 @@ set_termname(char_u *term)
     }
 
 #ifdef FEAT_TERMRESPONSE
+    HH_ch_log("Pre may_req_termresponse()");
     may_req_termresponse();
 #endif
 
@@ -3959,6 +3960,7 @@ settmode(tmode_T tmode)
 	out_flush();
     }
 #ifdef FEAT_TERMRESPONSE
+    HH_ch_log("Pre may_req_termresponse()");
     may_req_termresponse();
 #endif
 }
@@ -3990,6 +3992,7 @@ starttermcap(void)
     if (!gui.in_use && !gui.starting)
 # endif
     {
+	HH_ch_log("Pre may_req_termresponse()");
 	may_req_termresponse();
 	// Immediately check for a response.  If t_Co changes, we don't
 	// want to redraw with wrong colors first.
@@ -4097,8 +4100,8 @@ may_req_termresponse(void)
 	termrequest_sent(&crv_status);
 	// check for the characters now, otherwise they might be eaten by
 	// get_keystroke()
-	out_flush();
-	(void)vpeekc_nomap();
+//	out_flush();
+//	(void)vpeekc_nomap();
     }
 }
 
@@ -4113,6 +4116,7 @@ check_terminal_behavior(void)
 {
     int	    did_send = FALSE;
 
+    HH_ch_log("in. can_get_termresponse():%d, starting:%d, *T_U7 is %sNUL", can_get_termresponse(), starting, (*T_U7 == NUL) ? "": "not ");
     if (!can_get_termresponse() || starting != 0 || *T_U7 == NUL)
 	return;
 
@@ -4121,6 +4125,7 @@ check_terminal_behavior(void)
     {
 	char_u	buf[16];
 
+	HH_ch_log("aa");
 	// Ambiguous width check.
 	// Check how the terminal treats ambiguous character width (UAX #11).
 	// First, we move the cursor to (1, 0) and print a test ambiguous
@@ -4152,6 +4157,7 @@ check_terminal_behavior(void)
 
     if (xcc_status.tr_progress == STATUS_GET && Rows > 2)
     {
+	HH_ch_log("aaa");
 	// 2. Check compatibility with xterm.
 	// We move the cursor to (2, 0), print a test sequence and then query
 	// the current cursor position.  If the terminal properly handles
@@ -4183,6 +4189,7 @@ check_terminal_behavior(void)
 
     if (did_send)
     {
+	HH_ch_log("did_send is true");
 	term_windgoto(0, 0);
 
 	// Need to reset the known cursor position.
@@ -4193,6 +4200,7 @@ check_terminal_behavior(void)
 	out_flush();
 	(void)vpeekc_nomap();
     }
+    HH_ch_log("out.");
 }
 
 /*
@@ -4202,6 +4210,7 @@ check_terminal_behavior(void)
     void
 may_req_bg_color(void)
 {
+    HH_ch_log("in.");
     if (can_get_termresponse() && starting == 0)
     {
 	int didit = FALSE;
@@ -4236,6 +4245,7 @@ may_req_bg_color(void)
 	    (void)vpeekc_nomap();
 	}
     }
+    HH_ch_log("out.");
 }
 
 # ifdef DEBUG_TERMRESPONSE
