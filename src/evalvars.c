@@ -3072,7 +3072,7 @@ eval_variable(
 	char_u	    *p = STRNCMP(name, "s:", 2) == 0 ? name + 2 : name;
 
 	if (sid == 0)
-	    import = find_imported(p, 0, TRUE, FALSE);
+	    import = find_imported(p, 0, TRUE);
 
 	// imported variable from another script
 	if (import != NULL || sid != 0)
@@ -3546,7 +3546,7 @@ lookup_scriptitem(
 	res = OK;
 
     // if not script-local or autoload, then perhaps imported
-    if (res == FAIL && find_imported(p, 0, FALSE, FALSE) != NULL)
+    if (res == FAIL && find_imported(p, 0, FALSE) != NULL)
 	res = OK;
     if (p != buffer)
 	vim_free(p);
@@ -4017,7 +4017,7 @@ set_var_const(
 
     if (di == NULL && var_in_vim9script)
     {
-	imported_T  *import = find_imported(varname, 0, FALSE, FALSE);
+	imported_T  *import = find_imported(varname, 0, FALSE);
 
 	if (import != NULL)
 	{
@@ -5220,7 +5220,7 @@ expand_autload_callback(callback_T *cb)
     if (p == NULL)
 	return;
 
-    import = find_imported(name, p - name, FALSE, FALSE);
+    import = find_imported(name, p - name, FALSE);
     if (import == NULL || !SCRIPT_ID_VALID(import->imp_sid))
 	return;
 

@@ -1989,7 +1989,7 @@ deref_func_name(
 	    p = name + 2;
 	    len -= 2;
 	}
-	import = find_imported(p, len, FALSE, FALSE);
+	import = find_imported(p, len, FALSE);
 
 	// imported function from another script
 	if (import != NULL)
@@ -5411,8 +5411,7 @@ define_function(
 	{
 	    char_u *uname = untrans_function_name(name);
 
-	    import = find_imported(uname == NULL ? name : uname, 0, FALSE,
-									FALSE);
+	    import = find_imported(uname == NULL ? name : uname, 0, FALSE);
 	}
 
 	if (fp != NULL || import != NULL)

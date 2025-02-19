@@ -8799,7 +8799,7 @@ option_set_callback_func(char_u *optval UNUSED, callback_T *optcb UNUSED)
 	if (optcb->cb_free_name)
 	    vim_free(optcb->cb_name);
 
-	imported_T *import = find_imported(optval, dot - optval, FALSE, FALSE);
+	imported_T *import = find_imported(optval, dot - optval, FALSE);
 	if (import != NULL && SCRIPT_ID_VALID(import->imp_sid)
 				&& !(import->imp_flags & IMP_FLAGS_AUTOLOAD))
 	{

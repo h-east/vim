@@ -437,7 +437,7 @@ variable_exists(char_u *name, size_t len, cctx_T *cctx)
 			&& STRNCMP(name, "this", 4) == 0)))
 	    || script_var_exists(name, len, cctx, NULL) == OK
 	    || cctx_class_member_idx(cctx, name, len, NULL) >= 0
-	    || find_imported(name, len, FALSE, FALSE) != NULL;
+	    || find_imported(name, len, FALSE) != NULL;
 }
 
 /*
@@ -497,7 +497,7 @@ check_defined(
     if ((cctx != NULL
 		&& (lookup_local(p, len, NULL, cctx) == OK
 		    || arg_exists(p, len, NULL, NULL, NULL, cctx) == OK))
-	    || find_imported(p, len, FALSE, FALSE) != NULL
+	    || find_imported(p, len, FALSE) != NULL
 	    || (ufunc = find_func_even_dead(p, 0)) != NULL)
     {
 	HH_ch_log("mid.");
@@ -793,13 +793,13 @@ get_script_item_idx(
 }
 
     static imported_T *
-find_imported_in_script(char_u *name, size_t len, int sid, int recurse)
+find_imported_in_script(char_u *name, size_t len, int sid)
 {
     static int	    nesting = 0;
     scriptitem_T    *si;
     int		    idx;
 
-    HH_ch_log("in. name:\"%s\", len:%ld, sid:%d, recurse:%d, nesting:%d", name, len, sid, recurse, nesting);
+    HH_ch_log("in. name:\"%s\", len:%ld, sid:%d, nesting:%d", name, len, sid, nesting);
     if (!SCRIPT_ID_VALID(sid))
 	return NULL;
     si = SCRIPT_ITEM(sid);
@@ -814,22 +814,6 @@ find_imported_in_script(char_u *name, size_t len, int sid, int recurse)
 	    HH_ch_log("out. ret:%p", import);
 	    return import;
 	}
-#if 0
-	else // if (recurse)
-	{
-	    if (nesting >= p_mfd)
-	    {
-		emsg(_(e_import_nesting_too_deep));
-		return NULL;
-	    }
-	    ++nesting;
-	    import = find_imported_in_script(name, len, import->imp_sid,
-								    recurse);
-	    --nesting;
-	    if (import != NULL)
-		return import;
-	}
-#endif
     }
     HH_ch_log("out. ret:NULLp");
     return NULL;
@@ -842,7 +826,7 @@ find_imported_in_script(char_u *name, size_t len, int sid, int recurse)
  * If "recurse" is TRUE, find recursively.
  */
     imported_T *
-find_imported(char_u *name, size_t len, int load, int recurse)
+find_imported(char_u *name, size_t len, int load)
 {
     HH_ch_log("in. name:\"%s\", len:%ld, load:%d", name, len, load);
     if (STRNCMP(name, "bbbb", len) == 0 && load == 1)
@@ -856,7 +840,7 @@ find_imported(char_u *name, size_t len, int load, int recurse)
     int off = name[0] == 's' && name[1] == ':' ? 2 : 0;
 
     imported_T *ret = find_imported_in_script(name + off, len - off,
-						current_sctx.sc_sid, recurse);
+						current_sctx.sc_sid);
     if (ret != NULL && load && (ret->imp_flags & IMP_FLAGS_AUTOLOAD))
     {
 	scid_T	actual_sid = 0;
@@ -1930,7 +1914,7 @@ compile_lhs_script_var(
     if (script_var_exists(var_name, var_name_len, cctx, NULL) == OK)
 	script_var = TRUE;
 
-    import = find_imported(var_start, lhs->lhs_varlen, FALSE, FALSE);
+    import = find_imported(var_start, lhs->lhs_varlen, FALSE);
 
     if (script_namespace || script_var || import != NULL)
     {
