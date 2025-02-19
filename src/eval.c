@@ -2114,8 +2114,7 @@ get_lval(
 
     if (*p == '.')
     {
-	imported_T *import = find_imported(lp->ll_name, p - lp->ll_name, TRUE,
-									FALSE);
+	imported_T *import = find_imported(lp->ll_name, p - lp->ll_name, TRUE);
 	if (import != NULL)
 	{
 	    p++;	// skip '.'
@@ -7104,7 +7103,7 @@ handle_subscript(
 		HH_ch_log("Pre find_imported(). sid:%d, exp_name:\"%s\"", (int)sid, exp_name);
 		scid_T sc_sid_save = current_sctx.sc_sid;
 		current_sctx.sc_sid = sid;
-		imp = find_imported(exp_name, 0, FALSE, FALSE);
+		imp = find_imported(exp_name, 0, FALSE);
 		current_sctx.sc_sid = sc_sid_save;
 		if (imp != NULL)
 		{

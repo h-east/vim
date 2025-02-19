@@ -634,7 +634,7 @@ handle_import(
     {
 	imported_T  *imported;
 
-	imported = find_imported(as_name, STRLEN(as_name), FALSE, FALSE);
+	imported = find_imported(as_name, STRLEN(as_name), FALSE);
 	HH_ch_log("find import. ret:%p", imported);
 	if (imported != NULL && imported->imp_sid != sid)
 	{

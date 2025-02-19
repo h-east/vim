@@ -828,8 +828,8 @@ compile_load(
 	if (name == NULL)
 	    return FAIL;
 
-	if (STRCMP(name, "super") == 0 && compiling_a_class_method(cctx))
 	HH_ch_log("name:\"%s\"", name);
+	if (STRCMP(name, "super") == 0 && compiling_a_class_method(cctx))
 	{
 	    // super.SomeFunc() in a class function: push &t_super type, this
 	    // is recognized in compile_subscript().
@@ -1143,7 +1143,7 @@ compile_call(
     }
     vim_strncpy(namebuf, *arg, varlen);
 
-    import = find_imported(name, varlen, FALSE, FALSE);
+    import = find_imported(name, varlen, FALSE);
     if (import != NULL)
     {
 	semsg(_(e_cannot_use_str_itself_it_is_imported), namebuf);
