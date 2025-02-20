@@ -985,12 +985,20 @@ generate_AUTOLOAD(cctx_T *cctx, char_u *name, type_T *type)
 {
     isn_T	*isn;
 
+    HH_ch_log("in. name:\"%s\"", name);
     RETURN_OK_IF_SKIP(cctx);
     if ((isn = generate_instr_type(cctx, ISN_AUTOLOAD, type)) == NULL)
+    {
+	HH_ch_log("out. FAIL");
 	return FAIL;
+    }
     isn->isn_arg.string = vim_strsave(name);
     if (isn->isn_arg.string == NULL)
+    {
+	HH_ch_log("out. FAIL2");
 	return FAIL;
+    }
+    HH_ch_log("out. OK");
     return OK;
 }
 

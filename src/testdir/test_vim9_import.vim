@@ -3494,7 +3494,37 @@ def Test_vim9_import_and_class_extends_2()
   &rtp = save_rtp
 enddef
 
-" Test for using an autoloaded class from another autoloaded script
+" Test for using an imported class as a type
+def Test_use_imported_class_as_type()
+  mkdir('Xdir', 'R')
+  mkdir('Xdir/autoload', 'D')
+  mkdir('Xdir/import', 'D')
+  var lines =<< trim END
+    vim9script
+    export class B
+      var foo: string
+      def new()
+        this.foo = 'bar'
+      enddef
+    endclass
+  END
+  writefile(lines, 'Xdir/autoload/b.vim')
+
+  lines =<< trim END
+    vim9script
+    import autoload '../autoload/b.vim'
+    export class A
+      final AO: b.B = b.B.new()
+    endclass
+    var a = A.new()
+    assert_equal('bar', a.AO.foo)
+  END
+  writefile(lines, 'Xdir/import/a.vim')
+  source Xdir/import/a.vim
+enddef
+
+" FIXME: The following test currently fails.
+" " Test for using an autoloaded class from another autoloaded script
 def Test_class_from_auloaded_script()
   mkdir('Xdir', 'R')
   var save_rtp = &rtp
