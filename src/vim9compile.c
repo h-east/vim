@@ -882,11 +882,13 @@ find_imported_from_extends(cctx_T *cctx, char_u *name, size_t len, int load)
 			|| cl_extends->class_class_function_count_child <= 0)
 	return NULL;
 
+    HH_ch_log("in.");
     sctx_T current_sctx_save = current_sctx;
     current_sctx = cl_extends->class_class_functions[0]->uf_script_ctx;
     imported_T *ret = find_imported(name, len, load);
     current_sctx = current_sctx_save;
 
+    HH_ch_log("out. ret:%p", ret);
     return ret;
 }
 

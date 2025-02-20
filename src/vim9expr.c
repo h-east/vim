@@ -545,16 +545,22 @@ compile_load_scriptvar(
     int		    idx;
     imported_T	    *imp;
 
+    HH_ch_log("in. name:\"%s\", start:\"%s\", import:%p", name, start, import);
     if (!SCRIPT_ID_VALID(current_sctx.sc_sid))
+    {
+	HH_ch_log("out. FAIL");
 	return FAIL;
+    }
     si = SCRIPT_ITEM(current_sctx.sc_sid);
     idx = get_script_item_idx(current_sctx.sc_sid, name, 0, cctx, NULL);
+    HH_ch_log("current_sctx.sc_sid:%d", current_sctx.sc_sid);
     if (idx >= 0)
     {
 	svar_T		*sv = ((svar_T *)si->sn_var_vals.ga_data) + idx;
 
 	generate_VIM9SCRIPT(cctx, ISN_LOADSCRIPT,
 					current_sctx.sc_sid, idx, sv->sv_type);
+	HH_ch_log("out. OK. idx:%d", idx);
 	return OK;
     }
 
@@ -565,6 +571,7 @@ compile_load_scriptvar(
     else
 	imp = import;
 
+    HH_ch_log("imp:%p", imp);
     if (imp != NULL)
     {
 	char_u	*p = skipwhite(*end);
@@ -578,6 +585,7 @@ compile_load_scriptvar(
 	check_script_symlink(imp->imp_sid);
 	import_check_sourced_sid(&imp->imp_sid);
 
+	HH_ch_log("imp->imp_sid:%d", imp->imp_sid);
 	// Need to lookup the member.
 	if (*p != '.')
 	{
@@ -598,12 +606,18 @@ compile_load_scriptvar(
 	cc = *p;
 	*p = NUL;
 
+	HH_ch_log("exp_name:\"%s\"", exp_name);
 	si = SCRIPT_ITEM(imp->imp_sid);
+	HH_ch_log("si->sn_import_autoload:%d, si->sn_state:%d", si->sn_import_autoload, si->sn_state);
 	if (si->sn_import_autoload && si->sn_state == SN_STATE_NOT_LOADED)
+	{
 	    // "import autoload './dir/script.vim'" or
 	    // "import autoload './autoload/script.vim'" - load script first
 	    res = generate_SOURCE(cctx, imp->imp_sid);
+	    HH_ch_log("res:%d. post generate_SOURCE()", res);
+	}
 
+	HH_ch_log("res:%d", res);
 	if (res == OK)
 	{
 	    if (si->sn_autoload_prefix != NULL
@@ -612,6 +626,7 @@ compile_load_scriptvar(
 		char_u  *auto_name =
 				  concat_str(si->sn_autoload_prefix, exp_name);
 
+		HH_ch_log("auto_name:\"%s\", paren_follows_after_expr:%d", auto_name, paren_follows_after_expr);
 		// autoload script must be loaded later, access by the autoload
 		// name.  If a '(' follows it must be a function.  Otherwise we
 		// don't know, it can be "script.Func".
@@ -621,35 +636,47 @@ compile_load_scriptvar(
 		    res = generate_AUTOLOAD(cctx, auto_name, &t_any);
 		vim_free(auto_name);
 		done = TRUE;
+		HH_ch_log("done:%d", done);
 	    }
 	    else if (si->sn_import_autoload
 					&& si->sn_state == SN_STATE_NOT_LOADED)
 	    {
+		HH_ch_log("aaa");
 		// If a '(' follows it must be a function.  Otherwise we don't
 		// know, it can be "script.Func".
 		if (cc == '(' || paren_follows_after_expr)
 		{
 		    char_u sid_name[MAX_FUNC_NAME_LEN];
 
+		    HH_ch_log("aaa2");
 		    func_name_with_sid(exp_name, imp->imp_sid, sid_name);
 		    res = generate_PUSHFUNC(cctx, sid_name, &t_func_any, TRUE);
+		    HH_ch_log("aaas3. res:%d", res);
 		}
 		else
+		{
+		    HH_ch_log("aaa4");
 		    res = generate_OLDSCRIPT(cctx, ISN_LOADEXPORT, exp_name,
 						      imp->imp_sid, &t_any);
+		    HH_ch_log("aaas5. res:%d", res);
+		}
 		done = TRUE;
 	    }
 	    else
 	    {
 		idx = find_exported(imp->imp_sid, exp_name, &ufunc, &type,
 							     cctx, NULL, TRUE);
+		HH_ch_log("idx:%d", idx);
 	    }
 	}
 
 	*p = cc;
 	*end = p;
 	if (done)
+	{
+	    HH_ch_log("out. done:%d, red:%d", done, res);
 	    return res;
+	}
 
 	if (idx < 0)
 	{
@@ -657,22 +684,29 @@ compile_load_scriptvar(
 	    {
 		// function call or function reference
 		generate_PUSHFUNC(cctx, ufunc->uf_name, NULL, TRUE);
+		HH_ch_log("out. OK");
 		return OK;
 	    }
+	    HH_ch_log("out. FAIL");
 	    return FAIL;
 	}
 
+	HH_ch_log("pre generate_VIM9SCRIPT()");
 	generate_VIM9SCRIPT(cctx, ISN_LOADSCRIPT,
 		imp->imp_sid,
 		idx,
 		type);
+	HH_ch_log("out. OK");
 	return OK;
     }
 
+    HH_ch_log("aaa9");
     // Can only get here if we know "name" is a script variable and not in a
     // Vim9 script (variable is not in sn_var_vals): old style script.
-    return generate_OLDSCRIPT(cctx, ISN_LOADS, name, current_sctx.sc_sid,
+    int xxxxx = generate_OLDSCRIPT(cctx, ISN_LOADS, name, current_sctx.sc_sid,
 								       &t_any);
+
+    HH_ch_log("out. xxxxx:%d", xxxxx);
 }
 
     static int
