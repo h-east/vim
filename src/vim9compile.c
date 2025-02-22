@@ -4012,16 +4012,8 @@ compile_dfunc_cctx_init(
     static int
 obj_constructor_prologue(ufunc_T *ufunc, cctx_T *cctx)
 {
-    HH_ch_log("in. ufunc->uf_name:\"%s\", uf_sid:%d, cctx->ctx_ufunc->{uf_name:\"%s\", sc_sid:%d}, current_sctx.sc_sid:%d", ufunc->uf_name, ufunc->uf_script_ctx.sc_sid, cctx->ctx_ufunc->uf_name, cctx->ctx_ufunc->uf_script_ctx.sc_sid, current_sctx.sc_sid);
     generate_CONSTRUCT(cctx, ufunc->uf_class);
 
-    class_T     *cl_extends = ufunc->uf_class->class_extends;
-
-    HH_ch_log("ufunc->uf_script_ctx.{sid:%d, seq:%d, lnum:%ld, ver:%d",
-	    ufunc->uf_script_ctx.sc_sid,
-	    ufunc->uf_script_ctx.sc_seq,
-	    ufunc->uf_script_ctx.sc_lnum,
-	    ufunc->uf_script_ctx.sc_version);
     for (int i = 0; i < ufunc->uf_class->class_obj_member_count; ++i)
     {
 	ocmember_T *m = &ufunc->uf_class->class_obj_members[i];
@@ -4036,58 +4028,10 @@ obj_constructor_prologue(ufunc_T *ufunc, cctx_T *cctx)
 	if (m->ocm_init != NULL)
 	{
 	    char_u *expr = m->ocm_init;
-	    int	    ret;
-	    int	    check_extends = FALSE;
 
-	    // An expression containing a dot may use the import namespace
-	    // name of the script on the extended base class.
-	    if (vim_strchr(expr, '.') != NULL && cl_extends != NULL
-		    && cl_extends->class_class_function_count_child > 0)
-		check_extends = TRUE;
+	    if (compile_expr0(&expr, cctx) == FAIL)
+		return FAIL;
 
-	    HH_ch_log("Pre compile_expr0(): expr:\"%s\", i:%d, check_extends;%d", expr, i, check_extends);
-
-	    if (check_extends)
-		++emsg_skip;
-	    ret = compile_expr0(&expr, cctx);
-	    if (check_extends)
-		--emsg_skip;
-	    if (ret == FAIL)
-	    {
-		HH_ch_log("Post compile_expr0()");
-#if 1
-		if (check_extends)
-		{
-		    //int sid_save = current_sctx.sc_sid;
-		    sctx_T current_sctx_save = current_sctx;
-		    expr = m->ocm_init;
-		    HH_ch_log("Orig current_sctx.{sid:%d, seq:%d, lnum:%ld, ver:%d",
-			    current_sctx.sc_sid,
-			    current_sctx.sc_seq,
-			    current_sctx.sc_lnum,
-			    current_sctx.sc_version);
-		    //current_sctx.sc_sid = ufunc->uf_class->class_extends->class_class_functions[0]->uf_script_ctx.sc_sid;
-		    current_sctx = ufunc->uf_class->class_extends->class_class_functions[0]->uf_script_ctx;
-		    HH_ch_log("Temp current_sctx.{sid:%d, seq:%d, lnum:%ld, ver:%d",
-			    current_sctx.sc_sid,
-			    current_sctx.sc_seq,
-			    current_sctx.sc_lnum,
-			    current_sctx.sc_version);
-		    HH_ch_log("snd Pre compile_expr0(): expr:\"%s\", i:%d", expr, i);
-		    HH_ch_log("2nd. current_sctx.sc_sid:%d", current_sctx.sc_sid);
-		    HH_ch_log("    ufunc->uf_name:\"%s\", uf_sid:%d, cctx->ctx_ufunc->{uf_name:\"%s\", sc_sid:%d}, current_sctx.sc_sid:%d", ufunc->uf_name, ufunc->uf_script_ctx.sc_sid, cctx->ctx_ufunc->uf_name, cctx->ctx_ufunc->uf_script_ctx.sc_sid, current_sctx.sc_sid);
-		    ret = compile_expr0(&expr, cctx);
-		    current_sctx = current_sctx_save;
-		    HH_ch_log("out2. ret:%d", ret);
-		    if (ret == FAIL)
-			return FAIL;
-		}
-		else
-#endif
-		    return FAIL;
-	    }
-
-	    HH_ch_log("Post2 compile_expr0()");
 	    if (!ends_excmd2(m->ocm_init, expr))
 	    {
 		semsg(_(e_trailing_characters_str), expr);
@@ -4130,7 +4074,6 @@ obj_constructor_prologue(ufunc_T *ufunc, cctx_T *cctx)
 	generate_STORE_THIS(cctx, i);
     }
 
-    HH_ch_log("out. OK");
     return OK;
 }
 

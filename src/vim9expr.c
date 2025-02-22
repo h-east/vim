@@ -641,7 +641,7 @@ compile_load_scriptvar(
 	    else if (si->sn_import_autoload
 					&& si->sn_state == SN_STATE_NOT_LOADED)
 	    {
-		HH_ch_log("aaa");
+		HH_ch_log("'autoload' and SN_STATE_NOT_LOADED");
 		// If a '(' follows it must be a function.  Otherwise we don't
 		// know, it can be "script.Func".
 		if (cc == '(' || paren_follows_after_expr)

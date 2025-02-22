@@ -7030,19 +7030,13 @@ handle_subscript(
     int		check_white = TRUE;
     int		getnext;
     char_u	*p;
-    scid_T	sid = rettv->v_type == VAR_ANY ? rettv->vval.v_number : 0;
 
     HH_ch_log("in. *arg:\"%s\", name_start:\"%s\", rettv->v_type:%d", *arg, name_start, rettv->v_type);
-    if (name_start != NULL && STRCMP(name_start, "bbbb.aaaa.aa") == 0)
-    {
-	HH_ch_log("BinBingo!");
-    }
     while (ret == OK)
     {
 	// When at the end of the line and ".name" or "->{" or "->X" follows in
 	// the next line then consume the line break.
 	p = eval_next_non_blank(*arg, evalarg, &getnext);
-	HH_ch_log("*arg:\"%s\", p:\"%s\", sid:%d, getnext:%d", *arg, p, sid, getnext);
 	if (getnext
 	    && ((*p == '.'
 		    && ((rettv->v_type == VAR_DICT && eval_isdictc(p[1]))
@@ -7055,7 +7049,6 @@ handle_subscript(
 	    *arg = eval_next_line(*arg, evalarg);
 	    p = *arg;
 	    check_white = FALSE;
-	    HH_ch_log("p2:\"%s\"", p);
 	}
 
 	if (rettv->v_type == VAR_ANY)
@@ -7065,68 +7058,38 @@ handle_subscript(
 	    int		idx;
 	    ufunc_T	*ufunc;
 	    type_T	*type;
-	    imported_T	*imp;
 
-	    HH_ch_log("VAR_ANY");
-#if 1
-	    do
+	    // Found script from "import {name} as name", script item name must
+	    // follow.  "rettv->vval.v_number" has the script ID.
+	    if (**arg != '.')
 	    {
-		HH_ch_log("do *arg:\"%s\", name_start:\"%s\"", *arg, name_start);
-		// Found script from "import {name} as name", script item name must
-		// follow.  "rettv->vval.v_number" has the script ID.
-		if (**arg != '.')
-		{
-		    HH_ch_log("FAIL");
-		    if (verbose)
-			semsg(_(e_expected_dot_after_name_str),
-					    name_start != NULL ? name_start: *arg);
-		    ret = FAIL;
-		    break;
-		}
-		++*arg;
-		if (IS_WHITE_OR_NUL(**arg))
-		{
-		    HH_ch_log("FAIL2");
-		    if (verbose)
-			emsg(_(e_no_white_space_allowed_after_dot));
-		    ret = FAIL;
-		    break;
-		}
-
-		// isolate the name
-		exp_name = *arg;
-		while (eval_isnamec(**arg))
-		    ++*arg;
-		cc = **arg;
-		**arg = NUL;
-
-		HH_ch_log("Pre find_imported(). sid:%d, exp_name:\"%s\"", (int)sid, exp_name);
-		scid_T sc_sid_save = current_sctx.sc_sid;
-		current_sctx.sc_sid = sid;
-		imp = find_imported(exp_name, 0, FALSE);
-		current_sctx.sc_sid = sc_sid_save;
-		if (imp != NULL)
-		{
-		    sid = imp->imp_sid;
-		    **arg = cc;
-		    HH_ch_log("Post find_imported(). imp:%p, sid:%d", imp, sid);
-		}
-		else
-		    HH_ch_log("Post2 find_imported(). imp:%p, sid:%d", imp, sid);
-	    }
-	    while (imp != NULL && ret == OK);
-#endif
-	    HH_ch_log("ret: %d", ret);
-	    if (ret != OK)
+		if (verbose)
+		    semsg(_(e_expected_dot_after_name_str),
+					name_start != NULL ? name_start: *arg);
+		ret = FAIL;
 		break;
+	    }
+	    ++*arg;
+	    if (IS_WHITE_OR_NUL(**arg))
+	    {
+		if (verbose)
+		    emsg(_(e_no_white_space_allowed_after_dot));
+		ret = FAIL;
+		break;
+	    }
 
-	    HH_ch_log("Pre find_exported(). sid:%d, exp_name:\"%s\"", (int)sid, exp_name);
-	    idx = find_exported(sid, exp_name, &ufunc, &type,
+	    // isolate the name
+	    exp_name = *arg;
+	    while (eval_isnamec(**arg))
+		++*arg;
+	    cc = **arg;
+	    **arg = NUL;
+
+	    idx = find_exported(rettv->vval.v_number, exp_name, &ufunc, &type,
 		       evalarg == NULL ? NULL : evalarg->eval_cctx,
 		       evalarg == NULL ? NULL : evalarg->eval_cstack, verbose);
 	    **arg = cc;
 
-	    HH_ch_log("Post find_exported(). idx:%d, ufunc:%p", idx, ufunc);
 	    if (idx < 0 && ufunc == NULL)
 	    {
 		ret = FAIL;
@@ -7134,7 +7097,7 @@ handle_subscript(
 	    }
 	    if (idx >= 0)
 	    {
-		scriptitem_T    *si = SCRIPT_ITEM(sid);
+		scriptitem_T    *si = SCRIPT_ITEM(rettv->vval.v_number);
 		svar_T		*sv = ((svar_T *)si->sn_var_vals.ga_data) + idx;
 
 		copy_tv(sv->sv_tv, rettv);

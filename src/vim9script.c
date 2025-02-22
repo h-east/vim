@@ -68,12 +68,14 @@ clear_vim9_scriptlocal_vars(int sid)
 {
     hashtab_T	*ht = &SCRIPT_VARS(sid);
 
+    HH_ch_log("in. sid:%d", sid);
     hashtab_free_contents(ht);
     hash_init(ht);
     delete_script_functions(sid);
 
     // old imports and script variables are no longer valid
     free_imports_and_script_vars(sid);
+    HH_ch_log("out.");
 }
 #endif
 
@@ -395,7 +397,10 @@ handle_import_fname(char_u *fname, int is_autoload, int *sid)
 
 	// with testing override: load autoload script right away
 	if (!override_autoload || si->sn_state != SN_STATE_NOT_LOADED)
+	{
+	    HH_ch_log("out OK. *sid:%d, override_autoload:%d, si->sn_state:%d", *sid, override_autoload, si->sn_state);
 	    return OK;
+	}
     }
     int ret = do_source(fname, FALSE, DOSO_NONE, sid);
     HH_ch_log("out. ret:%d", ret);
@@ -513,18 +518,22 @@ handle_import(
 	vim_snprintf((char *)from_name, len, "autoload/%s", tv.vval.v_string);
 	// we need a scriptitem without loading the script
 	sid = find_script_in_rtp(from_name);
+	HH_ch_log("sid:%d, from_name:\"%s\"", sid, from_name);
 	vim_free(from_name);
 	if (SCRIPT_ID_VALID(sid))
 	{
 	    scriptitem_T    *si = SCRIPT_ITEM(sid);
 
+	    HH_ch_log("1 si->{sn_state:%d, sn_import_autoload:%d, sn_autoload_prefix:%s}", si->sn_state, si->sn_import_autoload, si->sn_autoload_prefix);
+	    //si->sn_import_autoload = TRUE;	// H_EAST
 	    if (si->sn_autoload_prefix == NULL)
 		si->sn_autoload_prefix = get_autoload_prefix(si);
 	    res = OK;
-	    HH_ch_log("sn_autoload_prefix:\"%s\"", si->sn_autoload_prefix);
+	    HH_ch_log("override_autoload:%d", override_autoload);
 	    if (override_autoload && si->sn_state == SN_STATE_NOT_LOADED)
 		// testing override: load autoload script right away
 		(void)do_source(si->sn_name, FALSE, DOSO_NONE, NULL);
+	    HH_ch_log("2 si->{sn_state:%d, sn_import_autoload:%d, sn_autoload_prefix:%s}", si->sn_state, si->sn_import_autoload, si->sn_autoload_prefix);
 	}
 	else
 	    res = FAIL;
@@ -730,13 +739,16 @@ find_exported(
 
     *ufunc = NULL;
 
+    HH_ch_log("in. sid:%d, name:\"%s\", script->{sn_import_autoload:%d, sn_state:%d", sid, name, script->sn_import_autoload, script->sn_state);
     if (script->sn_import_autoload && script->sn_state == SN_STATE_NOT_LOADED)
     {
+	HH_ch_log("pre do_source()");
 	if (do_source(script->sn_name, FALSE, DOSO_NONE, NULL) == FAIL)
 	{
 	    semsg(_(e_cant_open_file_str), script->sn_name);
 	    return -1;
 	}
+	HH_ch_log("post do_source()");
     }
 
     // Find name in "script".

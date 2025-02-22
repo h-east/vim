@@ -2066,15 +2066,18 @@ may_load_script(int sid, int *loaded)
 {
     scriptitem_T *si = SCRIPT_ITEM(sid);
 
+    HH_ch_log("in. sid:%d, *loaded:%d, si->sn_state:%d", sid, *loaded, si->sn_state);
     if (si->sn_state == SN_STATE_NOT_LOADED)
     {
 	*loaded = TRUE;
 	if (do_source(si->sn_name, FALSE, DOSO_NONE, NULL) == FAIL)
 	{
 	    semsg(_(e_cant_open_file_str), si->sn_name);
+	    HH_ch_log("out. FAIL");
 	    return FAIL;
 	}
     }
+    HH_ch_log("out. sid:%d, *loaded:%d, si->sn_state:%d", sid, *loaded, si->sn_state);
     return OK;
 }
 
@@ -2249,7 +2252,6 @@ execute_storeindex(isn_T *iptr, ectx_T *ectx)
     int		status = OK;
     int		check_rhs_type = FALSE;
 
-    HH_ch_log("in. tv_idx->v_type:%d", tv_idx->v_type);
     if (tv_idx->v_type == VAR_NUMBER)
 	lidx = (long)tv_idx->vval.v_number;
 
@@ -2330,7 +2332,6 @@ execute_storeindex(isn_T *iptr, ectx_T *ectx)
 	}
     }
 
-    HH_ch_log("status:%d, dest_type:%d", status, dest_type);
     if (status == OK)
     {
 	if (dest_type == VAR_LIST)
@@ -2463,16 +2464,8 @@ execute_storeindex(isn_T *iptr, ectx_T *ectx)
 		otv = class->class_members_tv;
 	    }
 
-	    if (otv == NULL)
-	    {
-		HH_ch_log("otv is NULL");
-		status = FAIL;
-	    }
-	    else
-	    {
-		clear_tv(&otv[lidx]);
-		otv[lidx] = *tv;
-	    }
+	    clear_tv(&otv[lidx]);
+	    otv[lidx] = *tv;
 	}
 	else
 	{

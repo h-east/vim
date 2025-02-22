@@ -1603,6 +1603,7 @@ do_source_ext(
     ESTACK_CHECK_DECLARATION;
 #endif
 
+    HH_ch_log("in. fname:\"%s\"", fname);
     CLEAR_FIELD(cookie);
     if (fname == NULL)
     {
@@ -1625,6 +1626,7 @@ do_source_ext(
 	    goto theend;
 	}
     }
+    HH_ch_log("fname_exp:\"%s\"", fname_exp);
 #ifdef FEAT_EVAL
     estack_compiling = FALSE;
 
@@ -1633,6 +1635,7 @@ do_source_ext(
     if (sid > 0 && ret_sid != NULL
 			  && SCRIPT_ITEM(sid)->sn_state != SN_STATE_NOT_LOADED)
     {
+	HH_ch_log("fname:\"%s\", sid:%d, sn_state:%d. Already loaded", fname_exp, sid, SCRIPT_ITEM(sid)->sn_state);
 	// Already loaded and no need to load again, return here.
 	*ret_sid = sid;
 	retval = OK;
@@ -1785,14 +1788,17 @@ do_source_ext(
 	// loading the same script again
 	current_sctx.sc_sid = sid;
 	si = SCRIPT_ITEM(sid);
+	HH_ch_log("sid:%d, seq:%d, sn_state:%d", sid, current_sctx.sc_seq, si->sn_state);
 	if (si->sn_state == SN_STATE_NOT_LOADED)
 	{
 	    // this script was found but not loaded yet
 	    si->sn_state = SN_STATE_NEW;
+	    HH_ch_log("sn_state:%d", si->sn_state);
 	}
 	else
 	{
 	    si->sn_state = SN_STATE_RELOAD;
+	    HH_ch_log("sn_state:%d, clearvars:%d", si->sn_state, clearvars);
 
 	    if (!clearvars)
 	    {
@@ -1827,6 +1833,7 @@ do_source_ext(
 	// It's new, generate a new SID and initialize the scriptitem.
 	sid = get_new_scriptitem(&error);
 	current_sctx.sc_sid = sid;
+	HH_ch_log("Post get_new_scriptitem(). fname_exp:\"%s\", current_sctx.sc_sid:%d, error:%d", fname_exp, current_sctx.sc_sid, error);
 	if (error == FAIL)
 	    goto almosttheend;
 	si = SCRIPT_ITEM(sid);
@@ -1886,9 +1893,11 @@ do_source_ext(
 	}
     }
 
+    HH_ch_log("Pre do_cmdline(). firstline:\"%s\"", firstline);
     // Call do_cmdline, which will call getsourceline() to get the lines.
     do_cmdline(firstline, getsourceline, (void *)&cookie,
 				     DOCMD_VERBOSE|DOCMD_NOWAIT|DOCMD_REPEAT);
+    HH_ch_log("Post do_cmdline()");
     retval = OK;
 
 #ifdef FEAT_PROFILE

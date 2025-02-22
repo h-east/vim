@@ -2337,6 +2337,7 @@ find_func_with_prefix(char_u *name, int sid)
 	goto theend;
 	//return NULL;	// not in a script
     si = SCRIPT_ITEM(sid);
+    HH_ch_log("si->sn_autoload_prefix:\"%s\"", si->sn_autoload_prefix);
     if (si->sn_autoload_prefix != NULL)
     {
 	size_t	len = STRLEN(si->sn_autoload_prefix) + STRLEN(name) + 1;
@@ -2358,12 +2359,13 @@ find_func_with_prefix(char_u *name, int sid)
 	{
 	    vim_snprintf((char *)auto_name, len, "%s%s",
 						si->sn_autoload_prefix, namep);
+	    HH_ch_log("auto_name:\"%s\"", auto_name);
 	    hi = hash_find(&func_hashtab, auto_name);
 	    if (auto_name != buffer)
 		vim_free(auto_name);
 	    if (!HASHITEM_EMPTY(hi))
 	    {
-		HH_ch_log("out. auto_name:\"%s\"", auto_name);
+		HH_ch_log("out. ret:%p", HI2UF(hi));
 		return HI2UF(hi);
 	    }
 	}
