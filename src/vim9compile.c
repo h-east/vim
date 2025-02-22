@@ -795,11 +795,10 @@ get_script_item_idx(
     static imported_T *
 find_imported_in_script(char_u *name, size_t len, int sid)
 {
-    static int	    nesting = 0;
     scriptitem_T    *si;
     int		    idx;
 
-    HH_ch_log("in. name:\"%s\", len:%ld, sid:%d, nesting:%d", name, len, sid, nesting);
+    HH_ch_log("in. name:\"%s\", len:%ld, sid:%d", name, len, sid);
     if (!SCRIPT_ID_VALID(sid))
 	return NULL;
     si = SCRIPT_ITEM(sid);
@@ -840,7 +839,7 @@ find_imported(char_u *name, size_t len, int load)
     int off = name[0] == 's' && name[1] == ':' ? 2 : 0;
 
     imported_T *ret = find_imported_in_script(name + off, len - off,
-						current_sctx.sc_sid);
+							current_sctx.sc_sid);
     if (ret != NULL && load && (ret->imp_flags & IMP_FLAGS_AUTOLOAD))
     {
 	scid_T	actual_sid = 0;

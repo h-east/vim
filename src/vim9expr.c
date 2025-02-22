@@ -707,6 +707,7 @@ compile_load_scriptvar(
 								       &t_any);
 
     HH_ch_log("out. xxxxx:%d", xxxxx);
+    return xxxxx;
 }
 
     static int
