@@ -67,7 +67,7 @@ static int term_is_builtin(char_u *name);
 static int term_7to8bit(char_u *p);
 static void accept_modifiers_for_function_keys(void);
 
-#  if 0  // Change to 1 to enable ch_log() calls for termresponse debugging.
+#  if 1  // Change to 1 to enable ch_log() calls for termresponse debugging.
 #   define DEBUG_TERMRESPONSE
 #   define LOG_TR(fmt,...)  \
 		ch_log(NULL, "TermResp: %s " fmt,	    \
