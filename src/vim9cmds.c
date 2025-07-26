@@ -1652,6 +1652,8 @@ compile_try(char_u *arg, cctx_T *cctx)
     scope_T	*try_scope;
     scope_T	*scope;
 
+    HH_ch_log("in");
+
     if (misplaced_cmdmod(cctx))
 	return NULL;
 
@@ -1681,6 +1683,7 @@ compile_try(char_u *arg, cctx_T *cctx)
     if (scope == NULL)
 	return NULL;
 
+    HH_ch_log("out");
     return arg;
 }
 
