@@ -4267,6 +4267,7 @@ compile_def_function_body(
 #endif
     int		debug_lnum = -1;
 
+    HH_ch_log("in. last_func_lnum:%d", last_func_lnum);
     for (;;)
     {
 	exarg_T	    ea;
@@ -4294,6 +4295,8 @@ compile_def_function_body(
 	else
 	{
 	    line = next_line_from_context(cctx, FALSE);
+	    HH_ch_log("line:\"%s\"", line);
+	    HH_ch_log("ctx_lnum:%d, last_func_lnum:%d", cctx->ctx_lnum, last_func_lnum);
 	    if (cctx->ctx_lnum >= last_func_lnum)
 	    {
 		// beyond the last line
@@ -4345,6 +4348,7 @@ compile_def_function_body(
 	}
 	cctx->ctx_prev_lnum = cctx->ctx_lnum + 1;
 
+	HH_ch_log("*ea.cmd:'%c'", *ea.cmd);
 	// Some things can be recognized by the first character.
 	switch (*ea.cmd)
 	{
@@ -4469,6 +4473,7 @@ compile_def_function_body(
 
 	if (p == NULL)
 	{
+
 	    if (cctx->ctx_skip != SKIP_YES)
 		semsg(_(e_ambiguous_use_of_user_defined_command_str), ea.cmd);
 	    return FAIL;
@@ -4569,6 +4574,7 @@ compile_def_function_body(
 	    }
 	}
 
+	HH_ch_log("ea.cmdidx: %d", ea.cmdidx);
 	switch (ea.cmdidx)
 	{
 	    case CMD_def:
@@ -4812,6 +4818,7 @@ compile_def_function_body(
 		    line = compile_exec(line, &ea, cctx);
 		    break;
 	}
+	HH_ch_log("nextline");
 nextline:
 	if (line == NULL)
 	    return FAIL;
@@ -4827,6 +4834,7 @@ nextline:
 	}
     } // END of the loop over all the function body lines.
 
+    HH_ch_log("out.");
     return OK;
 }
 
@@ -4837,18 +4845,38 @@ nextline:
     static int
 compile_dfunc_scope_end_missing(cctx_T *cctx)
 {
+    HH_ch_log("in.");
     if (cctx->ctx_scope == NULL)
 	return FALSE;
 
-    if (cctx->ctx_scope->se_type == IF_SCOPE)
-	emsg(_(e_missing_endif));
-    else if (cctx->ctx_scope->se_type == WHILE_SCOPE)
-	emsg(_(e_missing_endwhile));
-    else if (cctx->ctx_scope->se_type == FOR_SCOPE)
-	emsg(_(e_missing_endfor));
-    else
-	emsg(_(e_missing_rcurly));
-
+    HH_ch_log("cctx->ctx_scope->se_type:%d", cctx->ctx_scope->se_type);
+    switch (cctx->ctx_scope->se_type)
+    {
+	case IF_SCOPE:
+	    emsg(_(e_missing_endif));
+	    break;
+	case WHILE_SCOPE:
+	    emsg(_(e_missing_endwhile));
+	    break;
+	case FOR_SCOPE:
+	    emsg(_(e_missing_endfor));
+	    break;
+	case TRY_SCOPE:
+	    HH_ch_log("TRY_SCOPE");
+	    emsg(_(e_missing_endtry));
+	    break;
+	case BLOCK_SCOPE:
+	    // end block scope from :try
+	    compile_endblock(cctx);
+	    if (cctx->ctx_scope != NULL
+		    && cctx->ctx_scope->se_type == TRY_SCOPE)
+		emsg(_(e_missing_endtry));
+	    else
+		emsg(_(e_missing_rcurly));
+	    break;
+	default:
+	    emsg(_(e_missing_rcurly));
+    }
     return TRUE;
 }
 
