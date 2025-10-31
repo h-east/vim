@@ -3070,7 +3070,8 @@ redraw_asap(int type)
 		    mch_memmove(ScreenLines2 + off,
 				screenline2 + r * cols,
 				(size_t)cols * sizeof(schar_T));
-		screen_line(curwin, cmdline_row + r, 0, cols, cols, -1, 0);
+		screen_line(curwin, cmdline_row + r, cmdline_col_off,
+			cols, cols, -1, 0);
 	    }
 	    ret = 4;
 	}

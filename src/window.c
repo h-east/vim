@@ -6247,6 +6247,9 @@ shell_new_columns(void)
 	    (firstwin->w_wincol != save_wincol ||
 	     topframe->fr_width != save_fr_width))
 	win_equal(curwin, FALSE, 0);
+    // Adjust offset for command line start column
+    cmdline_col_off = firstwin->w_wincol;
+    cmdline_width = topframe->fr_width;
 #endif
     if (!skip_win_fix_scroll)
 	win_fix_scroll(TRUE);

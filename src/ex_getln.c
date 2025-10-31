@@ -1167,7 +1167,7 @@ cmdline_erase_chars(
 	{
 #ifdef FEAT_RIGHTLEFT
 	    if (cmdmsg_rl)
-		msg_col = Columns;
+		msg_col = cmdline_width;
 	    else
 #endif
 		msg_col = 0;
@@ -2114,7 +2114,7 @@ getcmdline_int(
 		    goto cmdline_changed;
 		if (!cmd_silent)
 		{
-		    windgoto(msg_row, 0);
+		    windgoto(msg_row, cmdline_col_off);
 		    out_flush();
 		}
 		break;
@@ -3243,7 +3243,7 @@ redraw:
 		    }
 		}
 		msg_clr_eos();
-		windgoto(msg_row, msg_col);
+		windgoto(msg_row, cmdline_col_off + msg_col);
 		continue;
 	    }
 
@@ -3316,7 +3316,7 @@ redraw:
 	line_ga.ga_len += len;
 	escaped = FALSE;
 
-	windgoto(msg_row, msg_col);
+	windgoto(msg_row, cmdline_col_off + msg_col);
 	pend = (char_u *)(line_ga.ga_data) + line_ga.ga_len;
 
 	// We are done when a NL is entered, but not when it comes after a
@@ -3433,7 +3433,7 @@ redrawcmd_preedit(void)
 	}
 
 	msg_row = cmdline_row + (cmdspos / (int)Columns);
-	msg_col = cmdspos % (int)Columns;
+	msg_col = cmdspos % cmdline_width;
 	if (msg_row >= Rows)
 	    msg_row = Rows - 1;
 
@@ -3808,7 +3808,7 @@ put_on_cmdline(char_u *str, int len, int redraw)
 		msg_col -= i;
 		if (msg_col < 0)
 		{
-		    msg_col += Columns;
+		    msg_col += cmdline_width;
 		    --msg_row;
 		}
 	    }
@@ -4052,7 +4052,7 @@ redrawcmdprompt(void)
     if (ccline.cmdprompt != NULL)
     {
 	msg_puts_attr((char *)ccline.cmdprompt, ccline.cmdattr);
-	ccline.cmdindent = msg_col + (msg_row - cmdline_row) * Columns;
+	ccline.cmdindent = msg_col + (msg_row - cmdline_row) * cmdline_width;
 	// do the reverse of set_cmdspos()
 	if (ccline.cmdfirstc != NUL)
 	    --ccline.cmdindent;
@@ -4076,7 +4076,7 @@ redrawcmd(void)
     // when 'incsearch' is set there may be no command line while redrawing
     if (ccline.cmdbuff == NULL)
     {
-	windgoto(cmdline_row, 0);
+	windgoto(cmdline_row, cmdline_col_off);
 	msg_clr_eos();
 	return;
     }
@@ -4132,20 +4132,20 @@ cursorcmd(void)
     if (cmdmsg_rl)
     {
 	msg_row = cmdline_row  + (ccline.cmdspos / (int)(Columns - 1));
-	msg_col = (int)Columns - (ccline.cmdspos % (int)(Columns - 1)) - 1;
+	msg_col = cmdline_width - (ccline.cmdspos % (cmdline_width - 1)) - 1;
 	if (msg_row <= 0)
 	    msg_row = Rows - 1;
     }
     else
 #endif
     {
-	msg_row = cmdline_row + (ccline.cmdspos / (int)Columns);
-	msg_col = ccline.cmdspos % (int)Columns;
+	msg_row = cmdline_row + (ccline.cmdspos / cmdline_width);
+	msg_col = ccline.cmdspos % cmdline_width;
 	if (msg_row >= Rows)
 	    msg_row = Rows - 1;
     }
 
-    windgoto(msg_row, msg_col);
+    windgoto(msg_row, cmdline_col_off + msg_col);
 #if defined(FEAT_XIM) && defined(FEAT_GUI_GTK)
     if (p_imst == IM_ON_THE_SPOT)
 	redrawcmd_preedit();
@@ -4161,13 +4161,13 @@ gotocmdline(int clr)
     msg_start();
 #ifdef FEAT_RIGHTLEFT
     if (cmdmsg_rl)
-	msg_col = Columns - 1;
+	msg_col = cmdline_width - 1;
     else
 #endif
 	msg_col = 0;	    // always start in column 0
     if (clr)		    // clear the bottom line(s)
 	msg_clr_eos();	    // will reset clear_cmdline
-    windgoto(cmdline_row, 0);
+    windgoto(cmdline_row, cmdline_col_off);
 }
 
 /*

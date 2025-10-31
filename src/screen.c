@@ -2725,8 +2725,8 @@ give_up:
 	    msg_row = Rows - 1;		// put cursor at last row
 	else if (Rows > old_Rows)	// Rows got bigger
 	    msg_row += Rows - old_Rows; // put cursor in same place
-	if (msg_col >= Columns)		// Columns got smaller
-	    msg_col = Columns - 1;	// put cursor at last column
+	if (msg_col >= cmdline_width)	// cmdline_width got smaller
+	    msg_col = cmdline_width - 1;    // put cursor at last cmdline column
     }
 #endif
     clear_TabPageIdxs();

@@ -421,7 +421,7 @@ cmdline_pum_create(
     if (showtail)
 	prefix_len += vim_strsize(showmatches_gettail(matches[0]))
 	    - vim_strsize(matches[0]);
-    compl_startcol = MAX(0, compl_startcol - prefix_len);
+    compl_startcol = cmdline_col_off + MAX(0, compl_startcol - prefix_len);
 
     return EXPAND_OK;
 }
