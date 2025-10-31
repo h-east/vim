@@ -1375,8 +1375,8 @@ cmdline_left_right_mouse(int c, int *ignore_drag_release)
 	int	i;
 
 	i = cmdline_charsize(ccline.cmdpos);
-	if (mouse_row <= cmdline_row + ccline.cmdspos / Columns
-		&& mouse_col < ccline.cmdspos % Columns + i)
+	if (mouse_row <= cmdline_row + ccline.cmdspos / cmdline_width
+		&& mouse_col < ccline.cmdspos % cmdline_width + i)
 	    break;
 	if (has_mbyte)
 	{
@@ -2285,7 +2285,7 @@ getcmdline_int(
 		    if (ccline.cmdpos >= ccline.cmdlen)
 			break;
 		    i = cmdline_charsize(ccline.cmdpos);
-		    if (KeyTyped && ccline.cmdspos + i >= Columns * Rows)
+		    if (KeyTyped && ccline.cmdspos + i >= cmdline_width * Rows)
 			break;
 		    ccline.cmdspos += i;
 		    if (has_mbyte)
@@ -3010,8 +3010,8 @@ set_cmdspos_cursor(void)
     set_cmdspos();
     if (KeyTyped)
     {
-	m = Columns * Rows;
-	if (m < 0)	// overflow, Columns or Rows at weird value
+	m = cmdline_width * Rows;
+	if (m < 0)	// overflow, cmdline_width or Rows at weird value
 	    m = MAXCOL;
     }
     else
@@ -3043,7 +3043,7 @@ correct_cmdspos(int idx, int cells)
 {
     if ((*mb_ptr2len)(ccline.cmdbuff + idx) > 1
 		&& (*mb_ptr2cells)(ccline.cmdbuff + idx) > 1
-		&& ccline.cmdspos % Columns + cells > Columns)
+		&& ccline.cmdspos % cmdline_width + cells > cmdline_width)
 	ccline.cmdspos++;
 }
 
@@ -3432,7 +3432,7 @@ redrawcmd_preedit(void)
 	    cmdpos  += preedit_start_col;
 	}
 
-	msg_row = cmdline_row + (cmdspos / (int)Columns);
+	msg_row = cmdline_row + (cmdspos / cmdline_width);
 	msg_col = cmdspos % cmdline_width;
 	if (msg_row >= Rows)
 	    msg_row = Rows - 1;
@@ -3827,8 +3827,8 @@ put_on_cmdline(char_u *str, int len, int redraw)
 	}
 	if (KeyTyped)
 	{
-	    m = Columns * Rows;
-	    if (m < 0)	// overflow, Columns or Rows at weird value
+	    m = cmdline_width * Rows;
+	    if (m < 0)	// overflow, cmdline_width or Rows at weird value
 		m = MAXCOL;
 	}
 	else
@@ -4131,7 +4131,7 @@ cursorcmd(void)
 #ifdef FEAT_RIGHTLEFT
     if (cmdmsg_rl)
     {
-	msg_row = cmdline_row  + (ccline.cmdspos / (int)(Columns - 1));
+	msg_row = cmdline_row  + (ccline.cmdspos / (cmdline_width - 1));
 	msg_col = cmdline_width - (ccline.cmdspos % (cmdline_width - 1)) - 1;
 	if (msg_row <= 0)
 	    msg_row = Rows - 1;

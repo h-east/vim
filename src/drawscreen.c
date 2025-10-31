@@ -502,7 +502,7 @@ win_redr_status(win_T *wp, int ignore_pum UNUSED)
 	if (wp->w_buffer->b_p_ro)
 	    plen += vim_snprintf((char *)p + plen, MAXPATHL - plen, "%s", _("[RO]"));
 
-	this_ru_col = ru_col - (Columns - wp->w_width);
+	this_ru_col = ru_col - (cmdline_width - wp->w_width);
 	n = (wp->w_width + 1) / 2;
 	if (this_ru_col < n)
 	    this_ru_col = n;
@@ -721,7 +721,7 @@ win_redr_ruler(win_T *wp, int always, int ignore_pum)
 	    row = Rows - 1;
 	    fillchar = ' ';
 	    attr = 0;
-	    width = Columns;
+	    width = cmdline_width;
 	    off = 0;
 	}
 
@@ -755,7 +755,7 @@ win_redr_ruler(win_T *wp, int always, int ignore_pum)
 	if (wp->w_status_height == 0)	// can't use last char of screen
 	    ++n1;
 
-	this_ru_col = ru_col - (Columns - width);
+	this_ru_col = ru_col - (cmdline_width - width);
 	// Never use more than half the window/screen width, leave the other
 	// half for the filename.
 	n2 = (width + 1) / 2;
@@ -796,7 +796,7 @@ win_redr_ruler(win_T *wp, int always, int ignore_pum)
 	    buffer[bufferlen] = NUL;
 	}
 
-	screen_puts(buffer, row, this_ru_col + off, attr);
+	screen_puts(buffer, row, cmdline_col_off + this_ru_col + off, attr);
 	n1 = redraw_cmdline;
 	screen_fill(row, row + 1,
 		this_ru_col + off + bufferlen,
@@ -2609,7 +2609,7 @@ win_update(win_T *wp)
 			    FALSE);
 	    else
 		screen_char(LineOffset[k] + topframe->fr_width - 1, k,
-			Columns - 1);
+			cmdline_width - 1);
     }
 #endif
 

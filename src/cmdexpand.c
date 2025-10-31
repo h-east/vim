@@ -1374,7 +1374,7 @@ showmatches(expand_T *xp, int display_wildmenu, int display_list, int noselect)
 	{
 	    // compute the number of columns and lines for the listing
 	    maxlen += 2;    // two spaces between file names
-	    columns = ((int)Columns + 2) / maxlen;
+	    columns = (cmdline_width + 2) / maxlen;
 	    if (columns < 1)
 		columns = 1;
 	    lines = (numMatches + columns - 1) / columns;

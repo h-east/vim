@@ -4611,8 +4611,8 @@ comp_col(void)
 	if (!p_ru || last_has_status)	    // no need for separating space
 	    ++sc_col;
     }
-    sc_col = Columns - sc_col;
-    ru_col = Columns - ru_col;
+    sc_col = cmdline_width - sc_col;
+    ru_col = cmdline_width - ru_col;
     if (sc_col <= 0)		// screen too narrow, will become a mess
 	sc_col = 1;
     if (ru_col <= 0)

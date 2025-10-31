@@ -194,7 +194,7 @@ msg_attr_keep(
     retval = msg_end();
 
     if (keep && retval && vim_strsize((char_u *)s)
-			    < (int)(Rows - cmdline_row - 1) * Columns + sc_col)
+		    < (int)(Rows - cmdline_row - 1) * cmdline_width + sc_col)
 	set_keep_msg((char_u *)s, 0);
 
     need_fileinfo = FALSE;
@@ -228,10 +228,10 @@ msg_strtrunc(
 #endif
 		)
 	    // Use all the columns.
-	    room = (int)(Rows - msg_row) * Columns - 1;
+	    room = (int)(Rows - msg_row) * cmdline_width - 1;
 	else
 	    // Use up to 'showcmd' column.
-	    room = (int)(Rows - msg_row - 1) * Columns + sc_col - 1;
+	    room = (int)(Rows - msg_row - 1) * cmdline_width + sc_col - 1;
 	if (len > room && room > 0)
 	{
 	    if (enc_utf8)
@@ -989,7 +989,7 @@ msg_may_trunc(int force, char_u *s)
 
     // If 'cmdheight' is zero or something unexpected happened "room" may be
     // negative.
-    room = (int)(Rows - cmdline_row - 1) * Columns + sc_col - 1;
+    room = (int)(Rows - cmdline_row - 1) * cmdline_width + sc_col - 1;
     if (room > 0 && (force || (shortmess(SHM_TRUNC) && !exmode_active))
 	    && (n = (int)STRLEN(s) - room) > 0)
     {
@@ -1472,7 +1472,7 @@ wait_return(int redraw)
     lines_left = -1;		// reset lines_left at next msg_start()
     reset_last_sourcing();
     if (keep_msg != NULL && vim_strsize(keep_msg) >=
-				  (Rows - cmdline_row - 1) * Columns + sc_col)
+			    (Rows - cmdline_row - 1) * cmdline_width + sc_col)
 	VIM_CLEAR(keep_msg);	    // don't redisplay message, it's too long
 
     if (tmpState == MODE_SETWSIZE)  // got resize event while in vgetc()
