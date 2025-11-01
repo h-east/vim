@@ -6243,20 +6243,27 @@ shell_new_columns(void)
     win_comp_pos();		// recompute w_winrow and w_wincol
 
 #if defined(FEAT_TABPANEL)
-    if (tabpanel_width() != prev_tp_width && p_ea)
+    int tp_width = tabpanel_width();
+    int tp_onoff_changed = tp_width != prev_tp_width
+				&& (tp_width == 0 || prev_tp_width == 0);
+    // tabpanel on/off changed
+    if (tp_onoff_changed && p_ea)
 	win_equal(curwin, FALSE, 0);
-    if (tabpanel_width() != prev_tp_width
-	    || (tabpanel_width() > 0
-	    && (firstwin->w_wincol != prev_wincol
-		|| topframe->fr_width != prev_fr_width)))
+    // tabpanel layout changed
+    if (tp_onoff_changed
+	    || (tp_width > 0 && (firstwin->w_wincol != prev_wincol
+		    || topframe->fr_width != prev_fr_width)))
+    {
 	screen_fill(cmdline_row, (int)Rows, 0, (int)Columns, ' ', ' ', 0);
+	// Adjust offset for command line start column
+	cmdline_col_off = firstwin->w_wincol;
+	cmdline_width = topframe->fr_width;
+	comp_col();
+    }
     prev_tp_width = tabpanel_width();
     prev_wincol = firstwin->w_wincol;
     prev_fr_width = topframe->fr_width;
 #endif
-    // Adjust offset for command line start column
-    cmdline_col_off = firstwin->w_wincol;
-    cmdline_width = topframe->fr_width;
     if (!skip_win_fix_scroll)
 	win_fix_scroll(TRUE);
 
