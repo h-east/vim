@@ -1149,7 +1149,7 @@ win_redr_custom(
     for (n = 0; hltab[n].start != NULL; n++)
     {
 	len = (int)(hltab[n].start - p);
-	screen_puts_len(p, len, row, cmdline_col_off + col, curattr);
+	screen_puts_len(p, len, row, col, curattr);
 	col += vim_strnsize(p, len);
 	p = hltab[n].start;
 
@@ -1170,7 +1170,7 @@ win_redr_custom(
 	else
 	    curattr = highlight_user[hltab[n].userhl - 1];
     }
-    screen_puts(p, row, cmdline_col_off + col, curattr);
+    screen_puts(p, row, col, curattr);
 
     if (wp == NULL)
     {
