@@ -537,8 +537,8 @@ win_redr_status(win_T *wp, int ignore_pum UNUSED)
 	    plen = this_ru_col - 1;
 	}
 
-	screen_puts(p, row, wp->w_wincol, attr);
-	screen_fill(row, row + 1, plen + wp->w_wincol,
+	screen_puts(p, row, topframe->fr_width + wp->w_wincol, attr);
+	screen_fill(row, row + 1, topframe->fr_width + wp->w_wincol + plen,
 			this_ru_col + wp->w_wincol, fillchar, fillchar, attr);
 	if ((NameBufflen = get_keymap_str(wp, (char_u *)"<%s>", NameBuff, MAXPATHL)) > 0
 		&& (this_ru_col - plen) > (NameBufflen + 1))
