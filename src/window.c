@@ -6244,13 +6244,12 @@ shell_new_columns(void)
 
 #if defined(FEAT_TABPANEL)
     int tp_width = tabpanel_width();
-    int tp_onoff_changed = tp_width != prev_tp_width
-				&& (tp_width == 0 || prev_tp_width == 0);
-    // tabpanel on/off changed
-    if (tp_onoff_changed && p_ea)
+    int tp_width_changed = tp_width != prev_tp_width;
+    // tabpanel width changed
+    if (tp_width_changed && p_ea)
 	win_equal(curwin, FALSE, 0);
     // tabpanel layout changed
-    if (tp_onoff_changed
+    if (tp_width_changed
 	    || (tp_width > 0 && (firstwin->w_wincol != prev_wincol
 		    || topframe->fr_width != prev_fr_width)))
     {
