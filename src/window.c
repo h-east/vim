@@ -6249,17 +6249,14 @@ shell_new_columns(void)
 	    || (tabpanel_width() > 0
 	    && (firstwin->w_wincol != prev_wincol
 		|| topframe->fr_width != prev_fr_width)))
-    {
-	// Adjust offset for command line start column
-	cmdline_col_off = firstwin->w_wincol;
-	cmdline_width = topframe->fr_width;
 	screen_fill(cmdline_row, (int)Rows, 0, (int)Columns, ' ', ' ', 0);
-    }
-    comp_col();
     prev_tp_width = tabpanel_width();
     prev_wincol = firstwin->w_wincol;
     prev_fr_width = topframe->fr_width;
 #endif
+    // Adjust offset for command line start column
+    cmdline_col_off = firstwin->w_wincol;
+    cmdline_width = topframe->fr_width;
     if (!skip_win_fix_scroll)
 	win_fix_scroll(TRUE);
 

@@ -721,8 +721,8 @@ win_redr_ruler(win_T *wp, int always, int ignore_pum)
 	    row = Rows - 1;
 	    fillchar = ' ';
 	    attr = 0;
+	    off = cmdline_col_off;
 	    width = cmdline_width;
-	    off = 0;
 	}
 
 	// In list mode virtcol needs to be recomputed
@@ -796,7 +796,7 @@ win_redr_ruler(win_T *wp, int always, int ignore_pum)
 	    buffer[bufferlen] = NUL;
 	}
 
-	screen_puts(buffer, row, cmdline_col_off + this_ru_col + off, attr);
+	screen_puts(buffer, row, this_ru_col + off, attr);
 	n1 = redraw_cmdline;
 	screen_fill(row, row + 1,
 		this_ru_col + off + bufferlen,

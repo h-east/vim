@@ -1060,7 +1060,7 @@ win_redr_custom(
 	row = statusline_row(wp);
 	fillchar = fillchar_status(&attr, wp);
 	int in_status_line = wp->w_status_height != 0;
-	maxwidth = in_status_line ? wp->w_width : Columns;
+	maxwidth = in_status_line ? wp->w_width : cmdline_width;
 
 	if (draw_ruler)
 	{
@@ -1077,7 +1077,7 @@ win_redr_custom(
 		if (*stl++ != '(')
 		    stl = p_ruf;
 	    }
-	    col = ru_col - (Columns - maxwidth);
+	    col = ru_col - (cmdline_width - maxwidth);
 	    if (col < (maxwidth + 1) / 2)
 		col = (maxwidth + 1) / 2;
 	    maxwidth -= col;
@@ -1149,7 +1149,7 @@ win_redr_custom(
     for (n = 0; hltab[n].start != NULL; n++)
     {
 	len = (int)(hltab[n].start - p);
-	screen_puts_len(p, len, row, col, curattr);
+	screen_puts_len(p, len, row, cmdline_col_off + col, curattr);
 	col += vim_strnsize(p, len);
 	p = hltab[n].start;
 
@@ -1170,7 +1170,7 @@ win_redr_custom(
 	else
 	    curattr = highlight_user[hltab[n].userhl - 1];
     }
-    screen_puts(p, row, col, curattr);
+    screen_puts(p, row, cmdline_col_off + col, curattr);
 
     if (wp == NULL)
     {
@@ -2162,6 +2162,7 @@ screen_fill(
 	int	c2,
 	int	attr)
 {
+    HH_ch_log("In. row(%d - %d), col(%d - %d), c1:'%c', attr:%d", start_row, end_row, start_col, end_col, c1, attr);
     int	    row;
     int	    col;
     int	    off;
