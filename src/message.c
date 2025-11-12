@@ -2447,6 +2447,8 @@ msg_puts_display(
     win_T	*msg_win = NULL;
     linenr_T    lnum = 1;
 
+    HH_ch_log("in. str:\"%s\", maxlen:%d, attr:%d, recurse:%d", str, maxlen, attr, recurse);
+    HH_ch_log("in_echowindow:%d, msg_row:%d, msg_col:%d", in_echowindow, msg_row, msg_col);
     if (in_echowindow)
     {
 	msg_win = popup_get_message_win();
@@ -2483,6 +2485,8 @@ msg_puts_display(
     did_wait_return = FALSE;
     while ((maxlen < 0 || (int)(s - str) < maxlen) && *s != NUL)
     {
+	HH_ch_log("str:\"%.*s\", len:%d, maxlen:%d", (int)(s - str), str, (int)(s - str), maxlen);
+	HH_ch_log("*s:'%c', msg_row:%d, msg_col:%d, t_col:%d", *s, msg_row, msg_col, t_col);
 	/*
 	 * We are at the end of the screen line when:
 	 * - When outputting a newline.
@@ -2503,6 +2507,7 @@ msg_puts_display(
 		       || (has_mbyte && (*mb_ptr2cells)(s) > 1
 			   && msg_col + t_col >= cmdline_width - 2)))))
 	{
+	    HH_ch_log("msg_col:%d", msg_col);
 	    /*
 	     * The screen is scrolled up when at the last row (some terminals
 	     * scroll automatically, some don't.  To avoid problems we scroll
@@ -2514,6 +2519,7 @@ msg_puts_display(
 #ifdef HAS_MESSAGE_WINDOW
 		if (msg_win != NULL)
 		{
+		    HH_ch_log("where:%d, t_s:\"%.*s\", lnum:%ld", where, (int)(s-t_s), t_s, lnum);
 		    put_msg_win(msg_win, where, t_s, s, lnum);
 		    t_col = 0;
 		    where = PUT_BELOW;
@@ -2533,9 +2539,11 @@ msg_puts_display(
 		// Scroll the screen up one line.
 		msg_scroll_up();
 
+	    HH_ch_log("msg_col:%d", msg_col);
 	    msg_row = Rows - 2;
 	    if (msg_col >= cmdline_width)   // can happen after screen resize
 		msg_col = cmdline_width - 1;
+	    HH_ch_log("msg_col:%d", msg_col);
 
 	    // Display char in last column before showing more-prompt.
 	    if (*s >= ' '
@@ -2560,9 +2568,11 @@ msg_puts_display(
 	    else
 		did_last_char = FALSE;
 
+	    HH_ch_log("msg_col:%d", msg_col);
 	    if (p_more)
 		// store text for scrolling back
 		store_sb_text(&sb_str, s, attr, &sb_col, TRUE);
+	    HH_ch_log("msg_col:%d", msg_col);
 
 #ifdef HAS_MESSAGE_WINDOW
 	    if (msg_win == NULL)
@@ -2583,6 +2593,7 @@ msg_puts_display(
 #ifdef HAS_MESSAGE_WINDOW
 	    }
 #endif
+	    HH_ch_log("msg_col:%d", msg_col);
 	    if (p_more && lines_left == 0 && State != MODE_HITRETURN
 					    && !msg_no_more && !exmode_active)
 	    {
@@ -2595,6 +2606,7 @@ msg_puts_display(
 		if (quit_more)
 		    return;
 	    }
+	    HH_ch_log("msg_col:%d", msg_col);
 
 	    // When we displayed a char in last column need to check if there
 	    // is still more.
@@ -2606,6 +2618,7 @@ msg_puts_display(
 		    || msg_col + t_col >= cmdline_width
 		    || (has_mbyte && (*mb_ptr2cells)(s) > 1
 			    && msg_col + t_col >= cmdline_width - 1);
+	HH_ch_log("Wrap:%d, msg_col:%d", wrap, msg_col);
 	if (t_col > 0 && (wrap || *s == '\r' || *s == '\b'
 						 || *s == '\t' || *s == BELL))
 	{
@@ -2613,8 +2626,9 @@ msg_puts_display(
 #ifdef HAS_MESSAGE_WINDOW
 	    if (msg_win != NULL)
 	    {
+		HH_ch_log("where:%d, t_s:\"%.*s\", lnum:%ld", where, (int)(s-t_s), t_s, lnum);
 		put_msg_win(msg_win, where, t_s, s, lnum);
-		t_col = 0;
+		msg_col = t_col = 0;
 		where = PUT_BELOW;
 	    }
 	    else
@@ -2635,6 +2649,7 @@ msg_puts_display(
 		// up the text.
 		if ((msg_win->w_buffer->b_ml.ml_flags & ML_EMPTY) == 0)
 		{
+		    HH_ch_log("where:%d, t_s:\"%.*s\", lnum:%ld", PUT_BELOW, 1, t_s, lnum);
 		    put_msg_win(msg_win, PUT_BELOW, t_s, t_s, lnum);
 		    ++lnum;
 		}
@@ -2678,6 +2693,7 @@ msg_puts_display(
 	    vim_beep(BO_SH);
 	else
 	{
+	    HH_ch_log("msg_col:%d", msg_col);
 	    if (has_mbyte)
 	    {
 		cw = (*mb_ptr2cells)(s);
@@ -2693,6 +2709,7 @@ msg_puts_display(
 		l = 1;
 	    }
 
+	    HH_ch_log("msg_col:%d", msg_col);
 	    // When drawing from right to left or when a double-wide character
 	    // doesn't fit, draw a single character here.  Otherwise collect
 	    // characters and draw them all at once later.
@@ -2702,10 +2719,12 @@ msg_puts_display(
 # endif
 		    (cw > 1 && msg_col + t_col >= cmdline_width - 1))
 	    {
+		HH_ch_log("msg_col:%d", msg_col);
 		if (l > 1)
 		    s = screen_puts_mbyte(s, l, attr) - 1;
 		else
 		    msg_screen_putchar(*s, attr);
+		HH_ch_log("msg_col:%d", msg_col);
 	    }
 	    else
 	    {
@@ -2715,6 +2734,9 @@ msg_puts_display(
 		t_col += cw;
 		s += l - 1;
 	    }
+	    HH_ch_log("msg_col:%d", msg_col);
+	    if (t_col >= cmdline_width)
+		msg_col = 0;
 	}
 	++s;
     }
@@ -2724,7 +2746,10 @@ msg_puts_display(
     {
 #ifdef HAS_MESSAGE_WINDOW
 	if (msg_win != NULL)
+	{
+	    HH_ch_log("where:%d, t_s:\"%.*s\", lnum:%ld", where, (int)(s-t_s), t_s, lnum);
 	    put_msg_win(msg_win, where, t_s, s, lnum);
+	}
 	else
 #endif
 	    t_puts(&t_col, t_s, s, attr);

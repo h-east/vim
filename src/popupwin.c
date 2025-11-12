@@ -4850,6 +4850,7 @@ popup_show_message_win(void)
     if (message_win == NULL)
 	return;
 
+    HH_ch_log("message_win->w_popup_flags:0x%0x", message_win->w_popup_flags);
     if ((message_win->w_popup_flags & POPF_HIDDEN) != 0)
     {
 	// the highlight may have changed.
