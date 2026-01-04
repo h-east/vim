@@ -307,11 +307,17 @@ typedef struct
 #endif
 #ifdef FEAT_LINEBREAK
     char_u	*wo_sbr;
-#define w_p_sbr w_onebuf_opt.wo_sbr	// 'showbreak'
+# define w_p_sbr w_onebuf_opt.wo_sbr	// 'showbreak'
 #endif
 #ifdef FEAT_STL_OPT
     char_u	*wo_stl;
-#define w_p_stl w_onebuf_opt.wo_stl	// 'statusline'
+# define w_p_stl w_onebuf_opt.wo_stl	// 'statusline'
+    char_u	*wo_stlo;
+# define w_p_stlo w_onebuf_opt.wo_stlo	// 'statuslineopt'
+    int		wo_stlo_fh;
+# define w_p_stlo_fh w_onebuf_opt.wo_stlo_fh // "fixedheight" of 'statuslineopt'
+    int		wo_stlo_mh;
+# define w_p_stlo_mh w_onebuf_opt.wo_stlo_mh // "maxheight:" of 'statuslineopt'
 #endif
     int		wo_scb;
 #define w_p_scb w_onebuf_opt.wo_scb	// 'scrollbind'
@@ -4042,8 +4048,13 @@ struct window_S
 				    // status/command/winbar line(s)
     int		w_prev_winrow;	    // previous winrow used for 'splitkeep'
     int		w_prev_height;	    // previous height used for 'splitkeep'
-
-    int		w_status_height;    // number of status lines (0 or 1)
+    int		w_status_height;    // number of status lines.
+				    // If 'statuslineopt' was changed, this
+				    // member will be the previous value until
+				    // call function
+				    // frame_change_statusline_height().
+    int		w_stlh_desired;	    // desired statusline height
+				    // (Number of "%@" in 'stl' option + 1)
     int		w_wincol;	    // Leftmost column of window in screen.
     int		w_width;	    // Width of window, excluding separation.
     int		w_vsep_width;	    // Number of separator columns (0 or 1).
