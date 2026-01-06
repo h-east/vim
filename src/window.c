@@ -55,7 +55,8 @@ static void win_goto_hor(int left, long count);
 static void frame_add_height(frame_T *frp, int n);
 static void last_status_rec(frame_T *fr, int statusline);
 #if defined(FEAT_STL_OPT)
-static void frame_change_statusline_height_rec(frame_T *frp);
+static void frame_change_statusline_height_rec(frame_T *frp,
+	bool actual_change);
 #endif
 static void frame_flatten(frame_T *frp);
 static void winframe_restore(win_T *wp, int dir, frame_T *unflat_altfr);
@@ -99,9 +100,8 @@ static int close_disallowed = 0;
 static int frame_locked = 0;
 
 #if defined(FEAT_STL_OPT)
-static int stlh_desired = STATUS_HEIGHT;
-static int stlo_fh = TRUE; //FALSE;
 static int stlo_mh = STATUS_HEIGHT;
+static int stlh_effort;
 #endif
 
 /*
@@ -7683,49 +7683,6 @@ last_status_rec(frame_T *fr, int statusline)
 }
 
 #if defined(FEAT_STL_OPT)
-    void
-fitting_statusline_height_value(void)
-{
-    char_u *l_p_stl = *curwin->w_p_stl == NUL ? p_stl : curwin->w_p_stl;
-    int *l_stlh_desired;
-    int l_stlo_fh;
-    int l_stlo_mh;
-    char_u *opt_name = (char_u *)"statusline";
-    int opt_scope;
-
-    if (*curwin->w_p_stl == NUL)
-    {
-	l_p_stl = p_stl;
-	l_stlh_desired = &stlh_desired;
-	opt_scope = 0;
-    }
-    else
-    {
-	l_p_stl = curwin->w_p_stl;
-	l_stlh_desired = &curwin->w_stlh_desired;
-	opt_scope = OPT_LOCAL;
-    }
-
-    if (*curwin->w_p_stlo == NUL)
-    {
-	l_stlo_fh = stlo_fh;
-	l_stlo_mh = stlo_mh;
-    }
-    else
-    {
-	l_stlo_fh = curwin->w_p_stlo_fh;
-	l_stlo_mh = curwin->w_p_stlo_mh;
-    }
-
-    if (!l_stlo_fh && l_stlo_mh > 1)
-	*l_stlh_desired = get_stl_rendered_height(curwin, l_p_stl,
-		opt_name, opt_scope);
-    else
-	*l_stlh_desired = 1;
-
-    return;
-}
-
 /*
  * Set a status line height to windows at the bottom of "frp".
  * Note: Does not check if there is room!
@@ -7733,13 +7690,25 @@ fitting_statusline_height_value(void)
     void
 frame_change_statusline_height(void)
 {
-    frame_change_statusline_height_rec(topframe);
+    win_T	*wp;
+    tabpage_T	*tp;
+
+    stlh_effort = stlo_mh;
+
+    FOR_ALL_TABPAGES(tp)
+	FOR_ALL_WINDOWS_IN_TAB(tp, wp)
+	    frame_change_statusline_height_rec(tp->tp_topframe, false);
+
+    FOR_ALL_TABPAGES(tp)
+	FOR_ALL_WINDOWS_IN_TAB(tp, wp)
+	    frame_change_statusline_height_rec(tp->tp_topframe, true);
+
     comp_col();
     redraw_all_later(UPD_SOME_VALID);
 }
 
     static void
-frame_change_statusline_height_rec(frame_T *frp)
+frame_change_statusline_height_rec(frame_T *frp, bool actual_change)
 {
     if (frp->fr_layout == FR_LEAF)
     {
@@ -7747,62 +7716,57 @@ frame_change_statusline_height_rec(frame_T *frp)
 
 	if (wp->w_height > 0 && wp->w_status_height > 0)
 	{
-	    wp->w_status_height = statusline_height(wp);
-	    if (wp->w_status_height > frp->fr_height - wp->w_winbar_height
-		    - p_wmh)
+	    if (actual_change)
 	    {
-		wp->w_status_height = frp->fr_height - wp->w_winbar_height
-		    - p_wmh;
+		wp->w_status_height = stlh_effort;
+		if (wp->w_status_height > frp->fr_height - wp->w_winbar_height
+			- p_wmh)
+		{
+		    wp->w_status_height = frp->fr_height - wp->w_winbar_height
+			- p_wmh;
+		}
+		win_new_height(wp, frp->fr_height - wp->w_status_height
+			- wp->w_winbar_height);
 	    }
-	    win_new_height(wp, frp->fr_height - wp->w_status_height
-		    - wp->w_winbar_height);
+	    else
+	    {
+		if (frp->fr_height - wp->w_winbar_height - p_wmh < stlh_effort)
+		    stlh_effort = frp->fr_height - wp->w_winbar_height - p_wmh;
+	    }
 	}
     }
     else if (frp->fr_layout == FR_ROW)
     {
 	// Handle all the frames in the row.
 	for (frp = frp->fr_child; frp != NULL; frp = frp->fr_next)
-	    frame_change_statusline_height_rec(frp);
+	    frame_change_statusline_height_rec(frp, actual_change);
     }
     else // frp->fr_layout == FR_COL
     {
 	// Handle all the frames in the column.
 	for (frp = frp->fr_child; frp != NULL; frp = frp->fr_next)
-	    frame_change_statusline_height_rec(frp);
+	    frame_change_statusline_height_rec(frp, actual_change);
     }
 }
 
 /*
  * Check "stlopt" as 'statuslineopt' and update the members of "wp".
- * This is called when 'statuslineopt' is changed and when a window is
- * initialized.
+ * This is called when 'statuslineopt' is changed.
  * Returns FAIL for failure, OK otherwise.
  */
     int
 statuslineopt_changed(
-    char_u	*stlopt,	// when NULL: use "wp->w_p_stlo"
-    win_T	*wp)		// when NULL: only check "stlopt"
+    char_u	*stlopt
+    )
 {
     char_u	*p;
-    int		l_stlo_fh = TRUE; //FALSE;
     int		l_stlo_mh = 1;
 
-    if (stlopt != NULL)
-	p = stlopt;
-    else
-	p = wp->w_p_stlo;
+    p = stlopt;
 
     while (*p != NUL)
     {
 	// Note: Keep this in sync with p_stlo_values
-#if 0
-	if (STRNCMP(p, "fixedheight", 11) == 0)
-	{
-	    p += 11;
-	    l_stlo_fh = TRUE;
-	}
-	else
-#endif
 	if (STRNCMP(p, "maxheight:", 10) == 0 && VIM_ISDIGIT(p[10]))
 	{
 	    p += 10;
@@ -7816,16 +7780,7 @@ statuslineopt_changed(
 	    ++p;
     }
 
-    if (wp == NULL)
-    {
-	stlo_fh = l_stlo_fh;
-	stlo_mh = l_stlo_mh;
-    }
-    else
-    {
-	wp->w_p_stlo_fh = l_stlo_fh;
-	wp->w_p_stlo_mh = l_stlo_mh;
-    }
+    stlo_mh = l_stlo_mh;
 
     return OK;
 }
@@ -7837,40 +7792,9 @@ statuslineopt_changed(
     int
 statusline_height(win_T *wp UNUSED)
 {
-    int stl_height = 1;
+    int stl_height = STATUS_HEIGHT;
 #if defined(FEAT_STL_OPT)
-    bool fixed;
-
-    if (wp != NULL && *wp->w_p_stlo != NUL)
-    {
-	stl_height = wp->w_p_stlo_mh;
-	fixed = !!wp->w_p_stlo_fh;
-    }
-    else
-    {
-	stl_height = stlo_mh;
-	fixed = !!stlo_fh;
-    }
-
-    if (!fixed)
-    {
-	int l_stlh_desired;
-
-	if (wp != NULL && *wp->w_p_stl != NUL)
-	    l_stlh_desired = wp->w_stlh_desired;
-	else
-	    l_stlh_desired = stlh_desired;
-	stl_height = MAX(1, MIN(l_stlh_desired, stl_height));
-    }
-
-    if (wp == NULL)
-	wp = curwin;
-
-    if (wp->w_frame->fr_height - stl_height < p_wmh)
-	stl_height = MAX(stl_height, wp->w_frame->fr_height - p_wmh);
-
-    if (stl_height < 0)
-	stl_height = 0;
+    stl_height = stlh_effort;
 #endif
 
     return stl_height;

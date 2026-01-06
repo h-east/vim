@@ -94,7 +94,7 @@ static char *(p_ssop_values[]) = {"buffers", "winpos", "resize", "winsize",
     NULL};
 #endif
 #if defined(FEAT_STL_OPT)
-static char *(p_stlo_values[]) = {"fixedheight", "maxheight:", NULL};
+static char *(p_stlo_values[]) = {"maxheight:", NULL};
 #endif
 // Keep in sync with SWB_ flags in option.h
 static char *(p_swb_values[]) = {"useopen", "usetab", "split", "newtab", "vsplit", "uselast", NULL};
@@ -4193,7 +4193,6 @@ did_set_statusline(optset_T *args)
 
     if (ret != NULL)
 	return ret;
-    fitting_statusline_height_value();
     frame_change_statusline_height();
 
     return NULL;
@@ -4206,20 +4205,10 @@ did_set_statusline(optset_T *args)
 did_set_statuslineopt(optset_T *args)
 {
     char_u	**varp = (char_u **)args->os_varp;
-    win_T       *wp = varp == &curwin->w_p_stlo ? curwin : NULL;
 
-    if (statuslineopt_changed(*varp, wp) == FAIL)
+    if (statuslineopt_changed(*varp) == FAIL)
 	return e_invalid_argument;
 
-    if ((args->os_flags & (OPT_LOCAL | OPT_GLOBAL)) == 0)
-    {
-	// When using :set, clear the local values and flags.
-	clear_string_option(&curwin->w_p_stlo);
-	curwin->w_p_stlo_fh = -1;
-	curwin->w_p_stlo_mh = -1;
-    }
-
-    fitting_statusline_height_value();
     frame_change_statusline_height();
 
     return NULL;
