@@ -4394,7 +4394,7 @@ build_stl_str_hl_mline(
 	    opt_name, opt_scope, fillchar, maxwidth, hltab, tabtab, NULL);
 }
 
-#ifdef ENABLE_STL_MODE_MULTI_NL
+# ifdef ENABLE_STL_MODE_MULTI_NL
     int
 build_stl_str_hl_mline_nl(
     win_T	*wp,
@@ -4411,7 +4411,7 @@ build_stl_str_hl_mline_nl(
     return build_stl_str_hl_local(STL_MODE_MULTI_NL, wp, out, outlen, fmt,
 	    opt_name, opt_scope, fillchar, maxwidth, hltab, tabtab, NULL);
 }
-#endif
+# endif
 
     int
 get_stl_rendered_height(
@@ -4630,7 +4630,7 @@ build_stl_str_hl_local(
 	 * Handle up to the next '%' or the end.
 	 */
 	while (*s != NUL && *s != '%' && p + 1 < out + outlen)
-#ifdef ENABLE_STL_MODE_MULTI_NL
+# ifdef ENABLE_STL_MODE_MULTI_NL
 	{
 	    if (*s == '\n' || *s == '\r')
 	    {
@@ -4642,11 +4642,11 @@ build_stl_str_hl_local(
 		else if (mode == STL_MODE_GET_RENDERED_HEIGHT)
 		    rheight++;
 	    }
-#endif
+# endif
 	    *p++ = *s++;
-#ifdef ENABLE_STL_MODE_MULTI_NL
+# ifdef ENABLE_STL_MODE_MULTI_NL
 	}
-#endif
+# endif
 	if (*s == NUL || p + 1 >= out + outlen)
 	    break;
 
@@ -4660,9 +4660,9 @@ build_stl_str_hl_local(
 	if (*s == STL_LINEBREAK)
 	{
 	    if (mode == STL_MODE_MULTI
-#ifdef ENABLE_STL_MODE_MULTI_NL
+# ifdef ENABLE_STL_MODE_MULTI_NL
 		    || mode == STL_MODE_MULTI_NL
-#endif
+# endif
 	       )
 	    {
 		s++;
@@ -5334,9 +5334,9 @@ find_linebreak:
     itemcnt = curitem;
 
     if (mode == STL_MODE_MULTI
-#ifdef ENABLE_STL_MODE_MULTI_NL
+# ifdef ENABLE_STL_MODE_MULTI_NL
 		    || mode == STL_MODE_MULTI_NL
-#endif
+# endif
        )
     {
 # ifdef FEAT_EVAL
