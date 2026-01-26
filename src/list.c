@@ -1344,7 +1344,7 @@ list_slice_or_index(
 	clear_tv(rettv);
 	*rettv = var1;
 	if (rettv->v_type == VAR_OBJECT)
-	    HH_ch_log("out. rettv->{v_type:%d, v_object->obj_class->class_name:\"%s\"}", rettv->v_type, rettv->vval.v_object->obj_class->class_name);
+	    HH_ch_log("out. rettv->{v_type:%d, v_object->obj_class->class_name:\"%s\"}", rettv->v_type, rettv->vval.v_object->obj_class->class_name.string);
 	else
 	    HH_ch_log("out. rettv->{v_type:%d}", rettv->v_type);
     }

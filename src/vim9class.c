@@ -346,7 +346,7 @@ validate_extends_class(
 	++extends_cl->class_refcount;
 	*extends_clp = extends_cl;
 	success = TRUE;
-	HH_ch_log("extends_cl->class_name:\"%s\"", extends_cl->class_name);
+	HH_ch_log("extends_cl->class_name:\"%s\"", extends_cl->class_name.string);
     }
     clear_tv(&tv);
 
@@ -979,7 +979,7 @@ check_func_arg_names(
 	for (int fi = 0; fi < gap->ga_len; ++fi)
 	{
 	    ufunc_T *uf = ((ufunc_T **)gap->ga_data)[fi];
-	    char_u *cn = (uf->uf_class == NULL) ? (char_u *)"NULL" : uf->uf_class->class_name;
+	    char_u *cn = (uf->uf_class == NULL) ? (char_u *)"NULL" : uf->uf_class->class_name.string;
 
 	    HH_ch_log("uf->uf_classname:\"%s\", uf->uf_name:\"%s\", sid:%d", cn, uf->uf_name, uf->uf_script_ctx.sc_sid);
 	    for (int i = 0; i < uf->uf_args.ga_len; ++i)
