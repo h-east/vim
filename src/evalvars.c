@@ -4107,7 +4107,10 @@ set_var_const(
 	scriptitem_T	*si;
 	char_u		*auto_name = NULL;
 
-	HH_ch_log("sid is 0");
+	HH_ch_log("sid is 0. is_export:%d", is_export);
+	HH_ch_log("current_sctx.sc_sid:%d (%s).", current_sctx.sc_sid, SCRIPT_ID_VALID(current_sctx.sc_sid) ? "valid" : "invalid");
+	if (SCRIPT_ID_VALID(current_sctx.sc_sid))
+	    HH_ch_log("si->sn_autoload_prefix:\"%s\"", SCRIPT_ITEM(current_sctx.sc_sid)->sn_autoload_prefix);
 	if (in_vim9script()
 	    && SCRIPT_ID_VALID(current_sctx.sc_sid)
 	    && (si = SCRIPT_ITEM(current_sctx.sc_sid))
