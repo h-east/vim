@@ -16,18 +16,6 @@ def TearDown()
   :only
 enddef
 
-def s:get_statusline_str(winid: number): list<string>
-  if has('gui_running')
-    redraw!
-    sleep 1m
-  endif
-  var wi = getwininfo(winid)[0]
-  var winh = wi.winrow + wi.height
-  var lines = [winh, winh + wi.status_height - 1]
-  return map(g:ScreenLines(lines, &columns), (_, v) =>
-              v[wi.wincol - 1 : wi.wincol - 1 + wi.width - 1])
-enddef
-
 def s:Assert_match_statusline(winid: number, stlh: number, expect: list<string>): void
   if has('gui_running')
     redraw!

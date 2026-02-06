@@ -233,7 +233,7 @@ function Test_tabpanel_drawing()
     function MyTabPanel()
       let n = g:actual_curtabpage
       let hi = n == tabpagenr() ? 'TabLineSel' : 'TabLine'
-      let label = printf("\n%%#%sTabNumber#%d:%%#%s#", hi, n, hi)
+      let label = printf("%%@%%#%sTabNumber#%d:%%#%s#", hi, n, hi)
       let label ..= '%1*%f%*'
       return label
     endfunction
@@ -342,12 +342,16 @@ function Test_tabpanel_drawing_fill_tailing()
     let &tabpanel = "abc"
     redraw!
     " Check whether "abc" is cleared
-    let &tabpanel = "\nTOP\n%f\nBOTTOM"
+    let &tabpanel = "%@TOP%@%f%@BOTTOM"
   END
   call writefile(lines, 'XTest_tabpanel_fill_tailing', 'D')
 
   let buf = RunVimInTerminal('-S XTest_tabpanel_fill_tailing', {'rows': 10, 'cols': 45})
+  call VerifyScreenDump(buf, 'Test_tabpanel_drawing_fill_tailing_0', {})
 
+  " TODO: If line breaks within 'tabpanel' using "\n" are no longer supported,
+  " delete the following two lines:
+  call term_sendkeys(buf, ':let &tabpanel = "\nTOP\n%f\nBOTTOM"' .. "\<CR>")
   call VerifyScreenDump(buf, 'Test_tabpanel_drawing_fill_tailing_0', {})
 
   call StopVimInTerminal(buf)
@@ -643,8 +647,9 @@ function Test_tabpanel_eval_tabpanel_with_linebreaks()
   CheckScreendump
 
   let lines =<< trim END
+    let g:ExprRetVal = "top%@$%=[%f]%=$%@bottom"
     function Expr()
-      return "top\n$%=[%f]%=$\nbottom"
+      return g:ExprRetVal
     endfunction
     set showtabpanel=2
     set tabpanel=%!Expr()
@@ -659,6 +664,14 @@ function Test_tabpanel_eval_tabpanel_with_linebreaks()
   call writefile(lines, 'XTest_tabpanel_eval_tabpanel_with_linebreaks', 'D')
 
   let buf = RunVimInTerminal('-S XTest_tabpanel_eval_tabpanel_with_linebreaks', {'rows': 10, 'cols': 45})
+  call term_sendkeys(buf, "\<C-L>")   " Clear cmdline area
+  call VerifyScreenDump(buf, 'Test_tabpanel_eval_tabpanel_with_linebreaks_0', {})
+  call term_sendkeys(buf, ":set tabpanelopt+=align:right\<CR>")
+  call VerifyScreenDump(buf, 'Test_tabpanel_eval_tabpanel_with_linebreaks_1', {})
+  " TODO: If line breaks within 'tabpanel' using "\n" are no longer supported,
+  " delete the following five lines:
+  call term_sendkeys(buf, ':let g:ExprRetVal = "top\n$%=[%f]%=$\nbottom"' .. "\<CR>")
+  call term_sendkeys(buf, ":set tabpanelopt=columns:10\<CR>")
   call VerifyScreenDump(buf, 'Test_tabpanel_eval_tabpanel_with_linebreaks_0', {})
   call term_sendkeys(buf, ":set tabpanelopt+=align:right\<CR>")
   call VerifyScreenDump(buf, 'Test_tabpanel_eval_tabpanel_with_linebreaks_1', {})
