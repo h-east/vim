@@ -1135,7 +1135,6 @@ win_redr_custom(
 			&stl_tmp,
 			opt_name, opt_scope,
 			fillchar, maxwidth, &hltab, &tabtab);
-	ewp->w_p_crb = p_crb_save;
 
 	// Make all characters printable.
 	p = transstr(buf);
@@ -1186,6 +1185,7 @@ win_redr_custom(
 	}
 	screen_puts(p, row + i, col, curattr);
     }
+    ewp->w_p_crb = p_crb_save;
     if (stl != NULL)
 	vim_free(stl_tmp);
 
