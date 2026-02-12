@@ -498,7 +498,12 @@ do_by_tplmode(
 		    break;
 
 		buf[0] = NUL;
-		(void)build_stl_str_hl_mline_nl(args.cwp, buf, sizeof(buf),
+#ifdef ENABLE_STL_MODE_MULTI_NL
+		(void)build_stl_str_hl_mline_nl
+#else
+		(void)build_stl_str_hl_mline
+#endif
+			(args.cwp, buf, sizeof(buf),
 			&usefmt, opt_name, opt_scope, TPL_FILLCHAR,
 			args.col_end - args.col_start, &hltab, &tabtab);
 
