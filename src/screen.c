@@ -1125,9 +1125,11 @@ win_redr_custom(
     // might change the option value and free the memory.
     stl = vim_strsave(stl);
     char_u *stl_tmp = (stl == NULL) ? (char_u *)"" : stl;
+    int col_save = col;
 
     for (int i = 0; i < stlh_cnt; i++)
     {
+	col = col_save;
 	buf[0] = NUL;
 	width = build_stl_str_hl_mline(ewp, buf, sizeof(buf),
 			&stl_tmp,
@@ -1155,13 +1157,13 @@ win_redr_custom(
 
 	/*
 	 * Draw each snippet with the specified highlighting.
-	i */
+	 */
 	curattr = attr;
 	p = buf;
 	for (n = 0; hltab[n].start != NULL; n++)
 	{
 	    len = (int)(hltab[n].start - p);
-	    screen_puts_len(p, len, row, col, curattr);
+	    screen_puts_len(p, len, row + i, col, curattr);
 	    col += vim_strnsize(p, len);
 	    p = hltab[n].start;
 

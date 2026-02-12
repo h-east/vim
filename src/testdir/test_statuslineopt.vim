@@ -117,6 +117,36 @@ def Test_statuslineopt_expr()
 
   &statusline = "%{%StloStatusLine()%}"
   s:Assert_match_statusline(wid, stlh, ['^A001 *', '^A002 *', '^bbb\.txt *'])
+  g:StloStatusVar = 'B00001%@B002'
+  s:Assert_match_statusline(wid, stlh, ['^B00001 *', '^B002 *', '^ *'])
 enddef
+
+func Test_multistatusline_highlight()
+  CheckScreendump
+
+  let lines =<< trim END
+    func MyStatusLine()
+      return 'L1A01%=%#Search#L1A02%*%=%2*L1A03%*%@'
+        \ .. '%2*L2B01%*%=L2B02%=%#Search#L2B03%*%@'
+        \ .. '%#Search#L3C01%*%=%2*L3C02%*%=L3C03%@'
+    endfunc
+
+    set laststatus=2
+    set statuslineopt=maxheight:3
+    set statusline=%!MyStatusLine()
+  END
+  call writefile(lines, 'XTest_multistatusline_highlight', 'D')
+
+  let buf = g:RunVimInTerminal('-S XTest_multistatusline_highlight', {'rows': 6})
+  call term_sendkeys(buf, "\<C-L>")
+  call VerifyScreenDump(buf, 'Test_multistatusline_highlight_01', {})
+  call term_sendkeys(buf, ":hi link User2 Error\<CR>\<C-L>")
+  call VerifyScreenDump(buf, 'Test_multistatusline_highlight_02', {})
+  call term_sendkeys(buf, ":hi link User2 NONE\<CR>\<C-L>")
+  call VerifyScreenDump(buf, 'Test_multistatusline_highlight_01', {})
+
+  call StopVimInTerminal(buf)
+endfunc
+
 
 " vim: shiftwidth=2 sts=2 expandtab
