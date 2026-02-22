@@ -97,7 +97,9 @@ update_screen(int type_arg)
 #endif
     int		no_update = FALSE;
     int		save_pum_will_redraw = pum_will_redraw;
+#ifdef FEAT_PROP_POPUP
     int		did_redraw_window = FALSE;
+#endif
 
     // Don't do anything if the screen structures are (not yet) valid.
     if (!screen_valid(TRUE))
@@ -320,7 +322,9 @@ update_screen(int type_arg)
 	if (wp->w_redr_type != 0)
 	{
 	    cursor_off();
+#ifdef FEAT_PROP_POPUP
 	    did_redraw_window = TRUE;
+#endif
 #ifdef FEAT_GUI
 	    if (!did_one)
 	    {
