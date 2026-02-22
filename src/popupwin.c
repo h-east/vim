@@ -852,14 +852,12 @@ apply_general_options(win_T *wp, dict_T *dict)
 	    int		i;
 
 	    CHECK_LIST_MATERIALIZE(list);
+	    wp->w_border_highlight_isset = TRUE;
 	    // Clear all highlights if list is empty
 	    if (list->lv_len == 0)
 	    {
 		for (i = 0; i < 4; ++i)
-		{
-		    vim_free(wp->w_border_highlight[i]);
-		    wp->w_border_highlight[i] = NULL;
-		}
+		    VIM_CLEAR(wp->w_border_highlight[i]);
 	    }
 	    else
 	    {
@@ -2488,6 +2486,7 @@ popup_create(typval_T *argvars, typval_T *rettv, create_type_T type)
 
     for (i = 0; i < 4; ++i)
 	VIM_CLEAR(wp->w_border_highlight[i]);
+    wp->w_border_highlight_isset = FALSE;
     for (i = 0; i < 8; ++i)
 	wp->w_border_char[i] = 0;
 
@@ -3507,7 +3506,9 @@ get_borderhighlight(dict_T *dict, win_T *wp)
     for (i = 0; i < 4; ++i)
 	if (wp->w_border_highlight[i] != NULL)
 	    break;
-    if (i == 4)
+    // Only include "borderhighlight" if it was explicitly set (even if empty)
+    // or if at least one highlight is set.
+    if (i == 4 && !wp->w_border_highlight_isset)
 	return;
 
     list = list_alloc();
@@ -3515,6 +3516,9 @@ get_borderhighlight(dict_T *dict, win_T *wp)
 	return;
 
     dict_add_list(dict, "borderhighlight", list);
+    // When all highlights are NULL (cleared to empty list), return empty list.
+    if (i == 4)
+	return;
     for (i = 0; i < 4; ++i)
 	list_append_string(list, wp->w_border_highlight[i], -1);
 }
