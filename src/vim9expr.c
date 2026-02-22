@@ -1440,7 +1440,6 @@ compile_call(
     else
 	*arg += varlen + 1;
 
-    *arg = skipwhite(*arg);
     if (compile_arguments(arg, cctx, &argcount, special_fn) == FAIL)
 	goto theend;
 

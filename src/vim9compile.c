@@ -4715,6 +4715,7 @@ compile_def_function_body(
 
 	    case CMD_eval:
 		    line = compile_eval(p, cctx);
+		    HH_ch_log("CMD_eval: line:\"%s\"", line);
 		    break;
 
 	    case CMD_defer:

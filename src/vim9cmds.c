@@ -2005,6 +2005,9 @@ compile_eval(char_u *arg, cctx_T *cctx)
     // that something follows on the next line.  Check that something actually
     // follows, otherwise it's probably a misplaced command.
     name_only = cmd_is_name_only(arg);
+    HH_ch_log("in. arg:\"%s\", name_only:%d", arg, name_only);
+    if (STRCMP(arg, "printf( # comment") == 0)
+	HH_ch_log("BINGO");
 
     if (compile_expr0(&p, cctx) == FAIL)
 	return NULL;
@@ -2015,6 +2018,7 @@ compile_eval(char_u *arg, cctx_T *cctx)
 	return NULL;
     }
 
+    HH_ch_log("p: \"%s\"", p);
     // drop the result
     generate_instr_drop(cctx, ISN_DROP, 1);
 
