@@ -409,6 +409,8 @@ test_override({name}, {val})				*test_override()*
 		redraw       disable the redrawing() function.
 		redraw_flag  ignore the RedrawingDisabled flag.
 		starting     reset the "starting" variable, see below.
+		syn_stack_hint	disable the search hint for the saved syntax
+				state, so the list is scanned from the start.
 		term_props   reset all terminal properties when the version
 			     string is detected.
 		ui_delay     time in msec to use in ui_delay(); overrules a

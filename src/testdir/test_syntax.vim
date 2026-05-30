@@ -689,6 +689,49 @@ func Test_syn_zsub()
   bw!
 endfunc
 
+" Collect the syntax id name of every cell of a freshly highlighted buffer.
+func s:SynDumpBuffer(ft, lines)
+  new
+  syntax on
+  execute 'setfiletype ' .. a:ft
+  call setline(1, a:lines)
+  let l:result = []
+  for lnum in range(1, line('$'))
+    for col in range(1, max([1, len(getline(lnum))]))
+      call add(l:result, synIDattr(synID(lnum, col, 1), 'name'))
+    endfor
+  endfor
+  bwipe!
+  return l:result
+endfunc
+
+" The saved-state search hint is a speed optimization only: highlighting must
+" be identical whether syn_stack_find_entry() starts from the cached last entry
+" (default) or scans from the start.  Use tall buffers so the state stack holds
+" many entries and the hint is exercised, evicted and rebuilt while looking up
+" lines in increasing order.
+func Test_syntax_stack_hint_unchanged()
+  let samples = {
+        \ 'c': ['#define M 0x1F', "char c = '\\n';",
+        \       'int f(int a) { return a + 0xAB; }', '/* a comment',
+        \       '   that spans lines */', 'L"wide"'],
+        \ 'vim': ['func <SID>Foo() abort', '  let x = [1, 2] + {"k": 0z1f}',
+        \         '  " a comment', 'endfunc'],
+        \ }
+  for ft in sort(keys(samples))
+    let lines = []
+    for i in range(40)
+      call extend(lines, samples[ft])
+    endfor
+    call test_override('syn_stack_hint', 0)
+    let l:on = s:SynDumpBuffer(ft, lines)
+    call test_override('syn_stack_hint', 1)
+    let l:off = s:SynDumpBuffer(ft, lines)
+    call test_override('ALL', 0)
+    call assert_equal(l:off, l:on, 'filetype ' .. ft)
+  endfor
+endfunc
+
 " Using \z() in a region with NFA failing should not crash.
 func Test_syn_wrong_z_one()
   new
