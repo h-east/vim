@@ -114,7 +114,12 @@ func Test_syntime()
 
   view ../memfile_test.c
   setfiletype cpp
-  redraw
+  " Highlight the whole buffer, not just the visible screen: the first lines
+  " hold no numeric literal, so the required-byte prefilter would skip cppNumber
+  " there and it would be missing from the report.
+  for lnum in range(1, line('$'))
+    call synID(lnum, max([1, len(getline(lnum))]), 1)
+  endfor
   let a = execute('syntime report')
   call assert_match('^  TOTAL *COUNT *MATCH *SLOWEST *AVERAGE *NAME *PATTERN', a)
   call assert_match(' \d*\.\d* \+[^0]\d* .* cppRawString ', a)
@@ -687,6 +692,158 @@ func Test_syn_zsub()
 
   set re&
   bw!
+endfunc
+
+" The internal required-byte prefilter skips patterns that cannot match in a
+" line.  It must never skip a pattern that can match: each item below is checked
+" on a line where it does match, exercising alternation, groups, ignore-case, an
+" inline \c flag, a leading class and a look-around.
+func Test_syntax_required_byte_prefilter()
+  new
+  syntax clear
+  syntax case match
+
+  syntax match Tier1 "ab\|cd"
+  syntax match Tier2 "\%(foo\|bar\)baz"
+  syntax match Tier3 "\cWORD"
+  syntax match Tier4 "[Uu]niq"
+  syntax match Tier5 "\\\@<!|tag|"
+  syntax match Tier6 "0[xX]\x\+"
+  " a multibyte literal makes the analyzer bail, so it must still be tried
+  let mb = nr2char(0xe9)	" 'e' with acute accent
+  execute 'syntax match Tier7 "x' .. mb .. 'y"'
+
+  call setline(1, ['cd', 'barbaz', 'word', 'uniq', '|tag|', '0XAB',
+        \ 'x' .. mb .. 'y'])
+
+  call assert_equal('Tier1', synIDattr(synID(1, 1, 1), 'name'))
+  call assert_equal('Tier2', synIDattr(synID(2, 1, 1), 'name'))
+  call assert_equal('Tier3', synIDattr(synID(3, 1, 1), 'name'))
+  call assert_equal('Tier4', synIDattr(synID(4, 1, 1), 'name'))
+  call assert_equal('Tier5', synIDattr(synID(5, 1, 1), 'name'))
+  call assert_equal('Tier6', synIDattr(synID(6, 1, 1), 'name'))
+  call assert_equal('Tier7', synIDattr(synID(7, 1, 1), 'name'))
+
+  syntax clear
+  bwipe!
+endfunc
+
+" Collect the syntax id name of every cell of a freshly highlighted buffer.
+func s:SynDumpBuffer(ft, lines)
+  new
+  syntax on
+  execute 'setfiletype ' .. a:ft
+  call setline(1, a:lines)
+  let l:result = []
+  for lnum in range(1, line('$'))
+    for col in range(1, max([1, len(getline(lnum))]))
+      call add(l:result, synIDattr(synID(lnum, col, 1), 'name'))
+    endfor
+  endfor
+  bwipe!
+  return l:result
+endfunc
+
+" The required-byte prefilter is a speed optimization only: highlighting must be
+" identical whether it is active or not.  Compare the full-buffer synID()
+" output with the prefilter on (default) and forced off across several
+" filetypes, so a future analyzer bug that wrongly skips a pattern is caught.
+func Test_syntax_prefilter_unchanged()
+  let samples = {
+        \ 'c': ['#define M 0x1F', "char c = '\\n';", 'int i = 42; // x', 'L"wide"'],
+        \ 'vim': ['func <SID>Foo() abort', '  let x = 0z1f2e', 'endfunc', '" a'],
+        \ 'python': ['def f(x): return 0xAB', 'a = "s" + r"\d+"  # c'],
+        \ 'sh': ['for i in $(seq 1 3); do echo "v=${i}"; done'],
+        \ }
+  for ft in sort(keys(samples))
+    call test_override('syn_prefilter', 0)
+    let l:on = s:SynDumpBuffer(ft, samples[ft])
+    call test_override('syn_prefilter', 1)
+    let l:off = s:SynDumpBuffer(ft, samples[ft])
+    call test_override('ALL', 0)
+    call assert_equal(l:off, l:on, 'filetype ' .. ft)
+  endfor
+endfunc
+
+func s:SynDumpCustomSyntax(lines, syncmds)
+  new
+  syntax clear
+  for cmd in a:syncmds
+    execute cmd
+  endfor
+  call setline(1, a:lines)
+  let l:result = []
+  for lnum in range(1, line('$'))
+    for col in range(1, max([1, len(getline(lnum))]))
+      call add(l:result, synIDattr(synID(lnum, col, 1), 'name'))
+    endfor
+  endfor
+  bwipe!
+  return l:result
+endfunc
+
+func Test_syntax_prefilter_classes()
+  " The required-byte prefilter analyzer does not enumerate any character
+  " class's byte set: every class (\a \d \f \h \i \k \l \o \p \s \u \w \x and
+  " their negated/uppercase forms) is consuming but requires no specific byte.
+  " It bails on unknown escapes (e.g. \g) and treats an escaped punctuation as
+  " a literal.  It also bails on backslash escapes inside a [...] collection
+  " (\t \e \r \b \n, the numeric \d \o \x \u \U forms, and "\s" meaning
+  " backslash-or-s), which it cannot model soundly.
+  " Highlighting must be identical with the prefilter on and off for each.
+  let cases = [
+        \ ['\i\+', 'abc_123'],
+        \ ['\k\+', 'word42'],
+        \ ['\f\+', 'a/b.c'],
+        \ ['\p\+', 'hello!'],
+        \ ['\I\+', 'name'],
+        \ ['\D\+', 'xyz.'],
+        \ ['\W\+', '!!!'],
+        \ ['\S\+', 'foo'],
+        \ ['\g\+', 'gggg'],
+        \ ['a\.b', 'a.b'],
+        \ ['[\t]x', "\tx"],
+        \ ['[\d65]x', 'Ax'],
+        \ ['[\s]x', "\\x"],
+        \ ]
+  for [pat, line] in cases
+    let cmds = ['syntax match Special /' .. escape(pat, '/') .. '/']
+    call test_override('syn_prefilter', 0)
+    let l:on = s:SynDumpCustomSyntax([line], cmds)
+    call test_override('syn_prefilter', 1)
+    let l:off = s:SynDumpCustomSyntax([line], cmds)
+    call test_override('ALL', 0)
+    call assert_equal(l:off, l:on, 'pattern ' .. pat)
+  endfor
+endfunc
+
+func Test_syntax_prefilter_quantifiers()
+  " The analyzer does not model the \{n,m} repeat at all: it bails, because the
+  " bound syntax has subtle corner cases (Vim silently swaps out-of-order
+  " bounds so \{42,0} acts like \{0,42}, \{} means *, a leading "-" is
+  " non-greedy).  Each line below deliberately lacks the quantified byte, where
+  " a wrong "mandatory" guess would drop the highlight.  Highlighting must be
+  " identical with the prefilter on and off for every form.
+  let cases = [
+        \ ['x\{42,0}zap', 'zap'],
+        \ ['x\{-42,0}zap', 'zap'],
+        \ ['x\{0,3}zap', 'zap'],
+        \ ['x\{,3}zap', 'zap'],
+        \ ['x\{}zap', 'zap'],
+        \ ['x\{0}zap', 'zap'],
+        \ ['x\{2,3}zap', 'zap'],
+        \ ['x\{2,3}zap', 'xxzap'],
+        \ ['x\{3,}zap', 'xxxzap'],
+        \ ]
+  for [pat, line] in cases
+    let cmds = ['syntax match Special /' .. escape(pat, '/') .. '/']
+    call test_override('syn_prefilter', 0)
+    let l:on = s:SynDumpCustomSyntax([line], cmds)
+    call test_override('syn_prefilter', 1)
+    let l:off = s:SynDumpCustomSyntax([line], cmds)
+    call test_override('ALL', 0)
+    call assert_equal(l:off, l:on, 'pattern ' .. pat .. ' on ' .. line)
+  endfor
 endfunc
 
 " Using \z() in a region with NFA failing should not crash.
