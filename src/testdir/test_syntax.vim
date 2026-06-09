@@ -734,14 +734,14 @@ func s:SynDumpBuffer(ft, lines)
   syntax on
   execute 'setfiletype ' .. a:ft
   call setline(1, a:lines)
-  let l:result = []
+  let result = []
   for lnum in range(1, line('$'))
     for col in range(1, max([1, len(getline(lnum))]))
-      call add(l:result, synIDattr(synID(lnum, col, 1), 'name'))
+      call add(result, synIDattr(synID(lnum, col, 1), 'name'))
     endfor
   endfor
   bwipe!
-  return l:result
+  return result
 endfunc
 
 " The required-byte prefilter is a speed optimization only: highlighting must be
@@ -757,11 +757,11 @@ func Test_syntax_prefilter_unchanged()
         \ }
   for ft in sort(keys(samples))
     call test_override('syn_prefilter', 0)
-    let l:on = s:SynDumpBuffer(ft, samples[ft])
+    let on = s:SynDumpBuffer(ft, samples[ft])
     call test_override('syn_prefilter', 1)
-    let l:off = s:SynDumpBuffer(ft, samples[ft])
+    let off = s:SynDumpBuffer(ft, samples[ft])
     call test_override('ALL', 0)
-    call assert_equal(l:off, l:on, 'filetype ' .. ft)
+    call assert_equal(off, on, 'filetype ' .. ft)
   endfor
 endfunc
 
@@ -772,14 +772,14 @@ func s:SynDumpCustomSyntax(lines, syncmds)
     execute cmd
   endfor
   call setline(1, a:lines)
-  let l:result = []
+  let result = []
   for lnum in range(1, line('$'))
     for col in range(1, max([1, len(getline(lnum))]))
-      call add(l:result, synIDattr(synID(lnum, col, 1), 'name'))
+      call add(result, synIDattr(synID(lnum, col, 1), 'name'))
     endfor
   endfor
   bwipe!
-  return l:result
+  return result
 endfunc
 
 func Test_syntax_prefilter_classes()
@@ -809,11 +809,11 @@ func Test_syntax_prefilter_classes()
   for [pat, line] in cases
     let cmds = ['syntax match Special /' .. escape(pat, '/') .. '/']
     call test_override('syn_prefilter', 0)
-    let l:on = s:SynDumpCustomSyntax([line], cmds)
+    let on = s:SynDumpCustomSyntax([line], cmds)
     call test_override('syn_prefilter', 1)
-    let l:off = s:SynDumpCustomSyntax([line], cmds)
+    let off = s:SynDumpCustomSyntax([line], cmds)
     call test_override('ALL', 0)
-    call assert_equal(l:off, l:on, 'pattern ' .. pat)
+    call assert_equal(off, on, 'pattern ' .. pat)
   endfor
 endfunc
 
@@ -838,11 +838,11 @@ func Test_syntax_prefilter_quantifiers()
   for [pat, line] in cases
     let cmds = ['syntax match Special /' .. escape(pat, '/') .. '/']
     call test_override('syn_prefilter', 0)
-    let l:on = s:SynDumpCustomSyntax([line], cmds)
+    let on = s:SynDumpCustomSyntax([line], cmds)
     call test_override('syn_prefilter', 1)
-    let l:off = s:SynDumpCustomSyntax([line], cmds)
+    let off = s:SynDumpCustomSyntax([line], cmds)
     call test_override('ALL', 0)
-    call assert_equal(l:off, l:on, 'pattern ' .. pat .. ' on ' .. line)
+    call assert_equal(off, on, 'pattern ' .. pat .. ' on ' .. line)
   endfor
 endfunc
 
