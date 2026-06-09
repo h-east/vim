@@ -1057,6 +1057,180 @@ regnext(char_u *p)
 	return p + offset;
 }
 
+#if defined(FEAT_SYN_HL) || defined(PROTO)
+/*
+ * PROTOTYPE (experiment for PR #20371): walk a compiled BT program read-only
+ * and accumulate the set of bytes that must occur in any match (the
+ * required-byte union).  Concatenation unions, alternation intersects, and any
+ * construct that is not obviously sound bails (so the caller always tries the
+ * pattern).  "req" is a 32-byte (256-bit) set.
+ */
+#define REQ_BSET_SIZE 32
+#define REQ_ADD(set, b) ((set)[((b) & 0xff) >> 3] |= 1 << ((b) & 7))
+
+    static void
+req_bset_and(char_u *dst, char_u *src)
+{
+    for (int i = 0; i < REQ_BSET_SIZE; ++i)
+	dst[i] &= src[i];
+}
+
+    static void
+req_bset_or(char_u *dst, char_u *src)
+{
+    for (int i = 0; i < REQ_BSET_SIZE; ++i)
+	dst[i] |= src[i];
+}
+
+    static void
+req_add_exactly(char_u *s, int ic, char_u *req, int *bail)
+{
+    for ( ; *s != NUL; ++s)
+    {
+	if (*s >= 0x80)			// multibyte literal: not modeled
+	{
+	    *bail = TRUE;
+	    return;
+	}
+	if (!ic || TOUPPER_LOC(*s) == TOLOWER_LOC(*s))
+	    REQ_ADD(req, *s);
+    }
+}
+
+    static void
+req_chain(char_u *scan, char_u *stop, char_u *req, int ic, int depth, int *bail)
+{
+    while (scan != NULL && scan != stop && !*bail)
+    {
+	int	op = OP(scan);
+	char_u	*next = regnext(scan);
+
+	// One character matched, but no specific byte is required.
+	if ((op >= ANY && op <= NUPPER)
+		|| (op >= ANY + ADD_NL && op <= NUPPER + ADD_NL))
+	{
+	    scan = next;
+	    continue;
+	}
+
+	switch (op)
+	{
+	    case END:
+		return;
+
+	    // zero-width / pass-through: no required byte
+	    case BOL: case EOL: case BOW: case EOW:
+	    case RE_BOF: case RE_EOF:
+	    case NOTHING: case BACK:
+	    case MOPEN + 0: case MOPEN + 1: case MOPEN + 2: case MOPEN + 3:
+	    case MOPEN + 4: case MOPEN + 5: case MOPEN + 6: case MOPEN + 7:
+	    case MOPEN + 8: case MOPEN + 9:
+	    case MCLOSE + 0: case MCLOSE + 1: case MCLOSE + 2: case MCLOSE + 3:
+	    case MCLOSE + 4: case MCLOSE + 5: case MCLOSE + 6: case MCLOSE + 7:
+	    case MCLOSE + 8: case MCLOSE + 9:
+		break;
+
+	    case EXACTLY:
+		req_add_exactly(OPERAND(scan), ic, req, bail);
+		if (*bail)
+		    return;
+		break;
+
+	    case STAR:
+	    case BRACE_SIMPLE:
+		break;			// 0 or more: operand optional
+
+	    case PLUS:			// 1 or more: operand matched once
+		if (OP(OPERAND(scan)) == EXACTLY)
+		{
+		    req_add_exactly(OPERAND(OPERAND(scan)), ic, req, bail);
+		    if (*bail)
+			return;
+		}
+		break;
+
+	    case BRANCH:
+		{
+		    char_u	acc[REQ_BSET_SIZE];
+		    char_u	tmp[REQ_BSET_SIZE];
+		    char_u	*lastb = scan;
+		    char_u	*join;
+		    char_u	*b;
+		    int		first = TRUE;
+
+		    if (depth >= 12)
+		    {
+			*bail = TRUE;
+			return;
+		    }
+		    for (b = scan; b != NULL && OP(b) == BRANCH; b = regnext(b))
+			lastb = b;
+		    join = regnext(lastb);
+
+		    for (b = scan; b != NULL && OP(b) == BRANCH; b = regnext(b))
+		    {
+			vim_memset(tmp, 0, REQ_BSET_SIZE);
+			req_chain(OPERAND(b), join, tmp, ic, depth + 1, bail);
+			if (*bail)
+			    return;
+			if (first)
+			{
+			    mch_memmove(acc, tmp, REQ_BSET_SIZE);
+			    first = FALSE;
+			}
+			else
+			    req_bset_and(acc, tmp);
+		    }
+		    if (!first)
+			req_bset_or(req, acc);
+		    scan = join;
+		    continue;
+		}
+
+	    default:
+		// BRACE_LIMITS/COMPLEX, BEHIND, MATCH, NOMATCH, SUBPAT,
+		// BACKREF, NEWL, MULTIBYTECODE, RE_COMPOSING, RE_LNUM, ...
+		*bail = TRUE;
+		return;
+	}
+	scan = next;
+    }
+}
+
+/*
+ * PROTOTYPE entry point: compile "pattern" with the BT engine and derive its
+ * required-byte set from the compiled program.  Returns OK with "bset" (32
+ * bytes) filled, or FAIL when the analysis bails.
+ */
+    int
+bt_prog_required_bytes(char_u *pattern, int re_flags, int ic, char_u *bset)
+{
+    bt_regprog_T	*prog;
+    int			bail = FALSE;
+    char_u		*pat = pattern;
+
+    vim_memset(bset, 0, REQ_BSET_SIZE);
+    // Skip an engine-selection prefix "\%#=N"; the BT engine cannot parse it.
+    if (pat[0] == '\\' && pat[1] == '%' && pat[2] == '#' && pat[3] == '='
+							      && pat[4] != NUL)
+	pat += 5;
+    rex.reg_buf = curbuf;
+    ++emsg_off;			// a pattern the BT engine rejects just bails
+    prog = (bt_regprog_T *)bt_regengine.regcomp(pat, re_flags);
+    --emsg_off;
+    if (prog == NULL)
+	return FAIL;
+    // Inline "\c"/"\C" override the syntax-level case setting.
+    if (prog->regflags & RF_ICASE)
+	ic = TRUE;
+    else if (prog->regflags & RF_NOICASE)
+	ic = FALSE;
+    req_chain(prog->program + 1, NULL, bset, ic, 0, &bail);
+    vim_regfree((regprog_T *)prog);
+    return bail ? FAIL : OK;
+}
+#endif // FEAT_SYN_HL
+
 /*
  * Set the next-pointer at the end of a node chain.
  */

@@ -5937,6 +5937,11 @@ syn_fa_alt(char_u *p, int ic, int depth, syn_fa_T *out)
  * sp_req.  On any unsupported construct the analysis bails out, leaving
  * sp_filter_active false so the pattern is always tried.
  */
+// PROTOTYPE (experiment for PR #20371): when env var SYN_REQ_PROG is set,
+// derive the required-byte set from the compiled BT program instead of the
+// source-level pattern analyzer, to compare speedup and correctness.
+int bt_prog_required_bytes(char_u *pattern, int re_flags, int ic, char_u *bset);
+
     static void
 syn_compute_required_bytes(synpat_T *ci)
 {
@@ -5948,6 +5953,29 @@ syn_compute_required_bytes(synpat_T *ci)
 
     if (ci->sp_pattern == NULL || *ci->sp_pattern == NUL)
 	return;
+
+    static int	use_prog = -1;
+    if (use_prog < 0)
+	use_prog = mch_getenv((char_u *)"SYN_REQ_PROG") != NULL;
+    if (use_prog)
+    {
+	char_u	bset[SYN_BSET_SIZE];
+
+	if (bt_prog_required_bytes(ci->sp_pattern, RE_MAGIC, ci->sp_ic, bset)
+								      == FAIL)
+	    return;
+	for (int i = 0; i < SYN_BSET_SIZE; ++i)
+	    if (bset[i])
+	    {
+		have_req = true;
+		break;
+	    }
+	if (!have_req)
+	    return;
+	mch_memmove(ci->sp_req, bset, SYN_BSET_SIZE);
+	ci->sp_filter_active = true;
+	return;
+    }
 
     (void)syn_fa_alt(ci->sp_pattern, ci->sp_ic, 0, &res);
     if (res.bail)
