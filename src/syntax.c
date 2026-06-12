@@ -1034,6 +1034,7 @@ syn_stack_free_block(synblock_T *block)
 	clear_syn_state(p);
     VIM_CLEAR(block->b_sst_array);
     block->b_sst_first = NULL;
+    block->b_sst_lastfound = NULL;
     block->b_sst_len = 0;
 }
 /*
@@ -1125,6 +1126,8 @@ syn_stack_alloc(void)
 	    syn_block->b_sst_first = NULL;
 	    syn_block->b_sst_freecount = len;
 	}
+	// The entries moved to a new array, drop the stale search hint.
+	syn_block->b_sst_lastfound = NULL;
 
 	// Create the list of free entries.
 	syn_block->b_sst_firstfree = to + 1;
@@ -1275,6 +1278,8 @@ syn_stack_cleanup(void)
 syn_stack_free_entry(synblock_T *block, synstate_T *p)
 {
     clear_syn_state(p);
+    if (block->b_sst_lastfound == p)
+	block->b_sst_lastfound = NULL;	// don't keep a freed search hint
     p->sst_next = block->b_sst_firstfree;
     block->b_sst_firstfree = p;
     ++block->b_sst_freecount;
@@ -1288,15 +1293,29 @@ syn_stack_free_entry(synblock_T *block, synstate_T *p)
 syn_stack_find_entry(linenr_T lnum)
 {
     synstate_T	*p, *prev;
+    synstate_T	*start = syn_block->b_sst_first;
+
+    // The list is sorted by line number, so when the last found entry is at or
+    // before "lnum" the wanted entry cannot be before it: start searching there
+    // instead of at the head.
+    if (!disable_syn_stack_hint_for_testing
+	    && syn_block->b_sst_lastfound != NULL
+	    && syn_block->b_sst_lastfound->sst_lnum <= lnum)
+	start = syn_block->b_sst_lastfound;
 
     prev = NULL;
-    for (p = syn_block->b_sst_first; p != NULL; prev = p, p = p->sst_next)
+    for (p = start; p != NULL; prev = p, p = p->sst_next)
     {
 	if (p->sst_lnum == lnum)
+	{
+	    syn_block->b_sst_lastfound = p;
 	    return p;
+	}
 	if (p->sst_lnum > lnum)
 	    break;
     }
+    if (prev != NULL)
+	syn_block->b_sst_lastfound = prev;
     return prev;
 }
 

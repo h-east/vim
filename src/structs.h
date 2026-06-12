@@ -3191,6 +3191,9 @@ typedef struct {
     synstate_T	*b_sst_first;
     synstate_T	*b_sst_firstfree;
     int		b_sst_freecount;
+    synstate_T	*b_sst_lastfound;	// last entry returned by
+					// syn_stack_find_entry(), used as a
+					// search hint; NULL when invalid
     linenr_T	b_sst_check_lnum;
     short_u	b_sst_lasttick;	// last display tick
 #endif // FEAT_SYN_HL
