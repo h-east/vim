@@ -132,6 +132,11 @@ func RunVimInTerminal(arguments, options)
     let cols = term_getsize(buf)[1]
   endif
 
+  " TEMPORARY diagnostic, do not merge. Record the shell size and what the
+  " terminal actually got, to find out where the columns are lost.
+  let diagmsg = printf('%-44s columns=%d lines=%d winwidth=%d want=%s got=%s', get(g:, 'testfunc', '?'), &columns, &lines, winwidth(0), string([rows, cols]), string(term_getsize(buf)))
+  silent! call writefile([diagmsg], '/tmp/Xrvit.log', 'a')
+
   call TermWait(buf)
 
   if get(a:options, 'wait_for_ruler', 1) && empty(get(a:options, 'cmd', ''))

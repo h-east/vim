@@ -108,7 +108,21 @@ jobs:
 
       - name: Test
         timeout-minutes: 30
-        run: make ${SHADOWOPT} ${TEST}
+        run: |
+          # TEMPORARY diagnostic, do not merge. Run one test file under the
+          # GTK4 GUI so the job finishes, then show the recorded sizes.
+          if ${{ contains(matrix.extra, 'use_gtk4') }}; then
+            rm -f /tmp/Xrvit.log /tmp/Xgtk4size.log
+            make -C src test_popupwin GUI_FLAG=-g || true
+            echo '===== RunVimInTerminal sizes'
+            cat /tmp/Xrvit.log || true
+            echo '===== gvim shell sizes'
+            cat /tmp/Xgtk4size.log || true
+            echo '===== messages'
+            cat src/testdir/messages || true
+          else
+            make ${SHADOWOPT} ${TEST}
+          fi
 
       # Enable to debug failing tests live and ssh into the CI runners
       # - name: Setup tmate session

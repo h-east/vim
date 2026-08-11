@@ -931,6 +931,27 @@ gui_mch_settitle(char_u *title, char_u *icon UNUSED)
 	gtk_window_set_title(GTK_WINDOW(gui.mainwin), (const char *)title);
 }
 
+// TEMPORARY diagnostic, do not merge. Record what size is asked for and what
+// the widgets actually end up with, to find out whether the resize request is
+// honoured by the compositor.
+    static void
+gtk4_size_log(const char *what, int req_w, int req_h)
+{
+    FILE *fp = fopen("/tmp/Xgtk4size.log", "a");
+
+    if (fp == NULL)
+	return;
+    fprintf(fp, "%-14s req %4d x %4d  mainwin %4d x %4d  formwin %4d x %4d"
+	    "  base_w %3d  Columns %3d Rows %3d\n",
+	    what, req_w, req_h,
+	    gui.mainwin == NULL ? -1 : gtk_widget_get_width(gui.mainwin),
+	    gui.mainwin == NULL ? -1 : gtk_widget_get_height(gui.mainwin),
+	    gui.formwin == NULL ? -1 : gtk_widget_get_width(gui.formwin),
+	    gui.formwin == NULL ? -1 : gtk_widget_get_height(gui.formwin),
+	    gui_get_base_width(), (int)Columns, (int)Rows);
+    fclose(fp);
+}
+
 /*
  * Get height of window decorations, that we cannot determine directly. For
  * example, the GtkHeaderBar widget. This is called in gui_resize_shell(), we
@@ -951,6 +972,9 @@ gui_gtk_init_decor_height(void)
     h -= gtk_widget_get_height(gui.formwin);
 
     gui.decor_height = h;
+
+    // TEMPORARY diagnostic, do not merge.
+    gtk4_size_log("resize_shell", -1, -1);
 }
 
     void
@@ -966,9 +990,13 @@ gui_mch_set_shellsize(int width, int height,
     // include it also.
     height += gui.decor_height;
 
+    gtk4_size_log("set_shell_pre", width, height);
+
     gtk_window_set_default_size(GTK_WINDOW(gui.mainwin), width, height);
 
     gui_mch_update();
+
+    gtk4_size_log("set_shell_post", width, height);
 }
 
     void
