@@ -3038,6 +3038,79 @@ func Test_lsp_incomplete_message_while_blocked()
   call job_stop(job)
 endfunc
 
+" Temporary: report the channel log of the busy Vim, to find out why the
+" second half of the notification is not read in time on macOS.  This fails
+" on purpose, the log is the result.
+func Test_lsp_blocked_log()
+  if has('win32') && has('gui_running')
+    throw 'Skipped: gvim.exe cannot run without the GUI'
+  endif
+  let g:test_is_flaky = 0
+  let lines =<< trim END
+    func OnMessage(ch, msg)
+      if a:msg.method == 'quick'
+        call timer_start(10, {-> ch_sendexpr(a:ch, #{id: a:msg.id, result: 1})})
+      endif
+    endfunc
+    call ch_open('stdio', #{mode: 'lsp', callback: 'OnMessage'})
+  END
+  call writefile(lines, 'Xstdio_child.vim', 'D')
+  let lines =<< trim END
+    call ch_logfile('busylog.txt', 'w')
+    let notes = 0
+    let child = job_start([v:progpath, '--clean', '--stdio-channel',
+          \ '-S', 'Xstdio_child.vim'], #{in_mode: 'lsp', out_mode: 'lsp'})
+    func Block(timer)
+      for i in range(30)
+        call ch_evalexpr(g:child, #{method: 'quick'}, #{timeout: 5000})
+      endfor
+    endfunc
+    func OnMessage(ch, msg)
+      if a:msg.method == 'note'
+        let g:notes += 1
+      elseif a:msg.method == 'count'
+        call ch_sendexpr(a:ch, #{id: a:msg.id, result: g:notes})
+      elseif a:msg.method == 'block'
+        call ch_sendexpr(a:ch, #{id: a:msg.id, result: 'ok'})
+        call timer_start(10, 'Block')
+      endif
+    endfunc
+    call ch_open('stdio', #{mode: 'lsp', callback: 'OnMessage'})
+  END
+  call writefile(lines, 'Xstdio_busy.vim', 'D')
+  let job = job_start([GetVimProg(), '--clean', '--stdio-channel',
+        \ '-S', 'Xstdio_busy.vim'], #{in_mode: 'lsp', out_mode: 'lsp'})
+  call assert_equal('run', job_status(job))
+
+  let sent = reltime()
+  call ch_evalexpr(job, #{method: 'block'}, #{timeout: 5000})
+  let body = json_encode(#{method: 'note', jsonrpc: '2.0',
+        \ params: #{text: repeat('x', 1000)}})
+  let framed = 'Content-Length: ' .. strlen(body) .. "\r\n\r\n" .. body
+  let half = strlen(framed) / 2
+  call ch_sendraw(job, framed[: half - 1])
+  let first = reltimestr(reltime(sent))
+  sleep 20m
+  call ch_sendraw(job, framed[half :])
+  let second = reltimestr(reltime(sent))
+  sleep 500m
+  let resp = ch_evalexpr(job, #{method: 'count'}, #{timeout: 5000})
+  let asked = reltimestr(reltime(sent))
+
+  call ch_close(job)
+  call WaitForAssert({-> assert_equal('dead', job_status(job))})
+  call job_stop(job)
+
+  " The times are seconds since "block" was sent, the log counts from the
+  " start of the busy Vim.
+  let log = readfile('busylog.txt')
+        \ ->map({_, l -> substitute(l, 'x\{20,}', 'x...', 'g')})
+  call assert_report(printf("count: %s\nfirst half: %s\nsecond half: %s\n"
+        \ .. "asked: %s\n%s", string(resp), first, second, asked,
+        \ join(log, "\n")))
+  call delete('busylog.txt')
+endfunc
+
 func Test_channel_lsp_mode()
   " The channel lsp mode test is flaky and gives the same error.
   let g:giveup_same_error = 0
