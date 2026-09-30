@@ -7889,10 +7889,12 @@ item_copy(
 		++to->vval.v_list->lv_refcount;
 	    }
 	    else
+	    {
 		to->vval.v_list = list_copy(from->vval.v_list,
 							    deep, top, copyID);
-	    if (to->vval.v_list == NULL)
-		ret = FAIL;
+		if (to->vval.v_list == NULL)
+		    ret = FAIL;
+	    }
 	    break;
 	case VAR_TUPLE:
 	    to->v_type = VAR_TUPLE;
@@ -7906,10 +7908,12 @@ item_copy(
 		++to->vval.v_tuple->tv_refcount;
 	    }
 	    else
+	    {
 		to->vval.v_tuple = tuple_copy(from->vval.v_tuple,
 							    deep, top, copyID);
-	    if (to->vval.v_tuple == NULL)
-		ret = FAIL;
+		if (to->vval.v_tuple == NULL)
+		    ret = FAIL;
+	    }
 	    break;
 	case VAR_BLOB:
 	    to->v_type = VAR_BLOB;
@@ -7935,10 +7939,12 @@ item_copy(
 		++to->vval.v_dict->dv_refcount;
 	    }
 	    else
+	    {
 		to->vval.v_dict = dict_copy(from->vval.v_dict,
 							    deep, top, copyID);
-	    if (to->vval.v_dict == NULL)
-		ret = FAIL;
+		if (to->vval.v_dict == NULL)
+		    ret = FAIL;
+	    }
 	    break;
 	case VAR_UNKNOWN:
 	case VAR_ANY:
