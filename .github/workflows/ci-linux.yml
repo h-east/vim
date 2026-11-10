@@ -92,17 +92,24 @@ jobs:
       - name: Checkout repository from GitHub
         uses: actions/checkout@v7.0.1
 
-      - name: Build
-        timeout-minutes: 15
-        uses: ./.github/actions/build_vim_on_linux
+      - name: Install packages
+        timeout-minutes: 30
+        uses: ./.github/actions/install_packages_on_linux
         with:
           features: ${{ matrix.features }}
           compiler: ${{ matrix.compiler }}
           architecture: ${{ matrix.architecture }}
           extra: ${{ toJSON(matrix.extra) }}
+          lua_ver: ${{ matrix.lua_ver }}
+
+      - name: Build
+        timeout-minutes: 15
+        uses: ./.github/actions/build_vim_on_linux
+        with:
+          features: ${{ matrix.features }}
+          extra: ${{ toJSON(matrix.extra) }}
           shadow: ${{ matrix.shadow }}
           interface: ${{ matrix.interface }}
-          lua_ver: ${{ matrix.lua_ver }}
           python3: ${{ matrix.python3 }}
           coverage: ${{ matrix.coverage }}
 

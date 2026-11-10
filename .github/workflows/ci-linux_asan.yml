@@ -42,9 +42,9 @@ jobs:
       - name: Checkout repository from GitHub
         uses: actions/checkout@v7.0.1
 
-      - name: Build
-        timeout-minutes: 15
-        uses: ./.github/actions/build_vim_on_linux
+      - name: Install packages
+        timeout-minutes: 30
+        uses: ./.github/actions/install_packages_on_linux
         with:
           features: huge
           compiler: clang
@@ -52,6 +52,13 @@ jobs:
           # Lua5.1 is the most widely used version (since it's what LuaJIT is
           # compatible with), so ensure it works
           lua_ver: "5.1"
+
+      - name: Build
+        timeout-minutes: 15
+        uses: ./.github/actions/build_vim_on_linux
+        with:
+          features: huge
+          extra: '["asan"]'
 
       - name: Test (tinytests)
         if: matrix.testset == 'tinytests'

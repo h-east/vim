@@ -1,0 +1,131 @@
+name: Install packages on Linux
+description: Install the packages for building and testing Vim on Linux
+
+inputs:
+  features:
+    description: Vim features
+    required: true
+  compiler:
+    description: Compiler
+    required: true
+  architecture:
+    description: Architecture
+    required: false
+  extra:
+    description: Extra flags
+    required: true
+  lua_ver:
+    description: Lua version
+    required: false
+
+runs:
+  using: "composite"
+  steps:
+    - name: Add i386 packages to dpkg
+      if: inputs.architecture == 'i386'
+      shell: bash
+      run: |
+        echo '::group::Add i386 packages to dpkg'
+        sudo dpkg --add-architecture i386
+        echo '::endgroup::'
+
+    - name: Uninstall snap
+      shell: bash
+      run: |
+        echo '::group::Uninstall snap'
+        sudo bash ci/remove_snap.sh
+        echo '::endgroup::'
+
+    - name: Install packages
+      shell: bash
+      run: |
+        echo '::group::Install packages'
+        # This is added by default, and it is often broken, but we don't need anything from it
+        sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
+        PKGS=( \
+          gettext \
+          x11-utils \
+          labwc \
+          wl-clipboard \
+          wayland-utils \
+          libgtk-3-dev:${{ inputs.architecture }} \
+          libgtk-3-bin:${{ inputs.architecture }} \
+          libgtk-4-dev:${{ inputs.architecture }} \
+          libgtk-4-bin:${{ inputs.architecture }} \
+          desktop-file-utils \
+          libc6-dbgsym:${{ inputs.architecture }} \
+          libtool-bin \
+          libncurses-dev:${{ inputs.architecture }} \
+          libxt-dev:${{ inputs.architecture }} \
+          libegl-mesa0:${{ inputs.architecture }} \
+          libegl1:${{ inputs.architecture }} \
+          libegl1-mesa-dev:${{ inputs.architecture }} \
+          libepoxy-dev:${{ inputs.architecture }} \
+          libwayland-egl1:${{ inputs.architecture }} \
+          libwayland-client0:${{ inputs.architecture }} \
+          libwayland-cursor0:${{ inputs.architecture }} \
+          locales-all \
+          software-properties-common \
+        )
+        if ${{ inputs.features == 'huge' }}; then
+          LUA_VER=${{ inputs.lua_ver || '5.4' }}
+          PKGS+=( \
+            autoconf \
+            gdb \
+            lcov \
+            libcanberra-dev \
+            libperl-dev \
+            python3-dev \
+            liblua${LUA_VER}-dev \
+            lua${LUA_VER} \
+            ruby-dev \
+            tcl-dev \
+            cscope \
+            libsodium-dev \
+            attr \
+            libattr1-dev
+          )
+        fi
+        if ${{ contains(fromJSON(inputs.extra), 'proto') }}; then
+          PKGS+=( python3-clang )
+        fi
+        sudo apt-get update
+        # The i386 packages need the amd64 packages at the same version.
+        if ${{ inputs.architecture == 'i386' }}; then
+          sudo apt-get upgrade -y --allow-downgrades
+        fi
+        sudo apt-get install -y --allow-downgrades "${PKGS[@]}"
+
+    - name: Install gcc-${{ env.GCC_VER }}
+      if: inputs.compiler == 'gcc'
+      shell: bash
+      run: |
+        echo '::group::Install gcc-${{ env.GCC_VER }}'
+        # ubuntu-toolchain-r/test PPA for gcc-13 compiler
+        # disabled because the installation failed, causing test failures
+        # sudo add-apt-repository ppa:ubuntu-toolchain-r/test -y
+        sudo apt-get update -y
+        sudo apt-get install -y gcc-${{ env.GCC_VER }}:${{ inputs.architecture }}
+        sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-${{ env.GCC_VER }} 100
+        sudo update-alternatives --set gcc /usr/bin/gcc-${{ env.GCC_VER }}
+        echo '::endgroup::'
+
+    - name: Install clang-${{ env.CLANG_VER }}
+      if: inputs.compiler == 'clang'
+      shell: bash
+      run: |
+        echo '::group::Install clang-${{ env.CLANG_VER }}'
+        . /etc/lsb-release
+        curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor | sudo tee /usr/share/keyrings/llvm-archive-keyring.gpg > /dev/null
+        echo "Types: deb
+        URIs: https://apt.llvm.org/${DISTRIB_CODENAME}/
+        Suites: llvm-toolchain-${DISTRIB_CODENAME}-${{ env.CLANG_VER }}
+        Components: main
+        Signed-By: /usr/share/keyrings/llvm-archive-keyring.gpg" | sudo tee /etc/apt/sources.list.d/llvm-toolchain.sources > /dev/null
+        sudo apt-get update -y
+        sudo apt-get install -y clang-${{ env.CLANG_VER }} llvm-${{ env.CLANG_VER }}
+        sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-${{ env.CLANG_VER }} 100
+        sudo update-alternatives --set clang /usr/bin/clang-${{ env.CLANG_VER }}
+        sudo update-alternatives --install /usr/bin/llvm-cov llvm-cov /usr/bin/llvm-cov-${{ env.CLANG_VER }} 100
+        sudo update-alternatives --install /usr/bin/asan_symbolize asan_symbolize /usr/bin/asan_symbolize-${{ env.CLANG_VER }} 100
+        echo '::endgroup::'

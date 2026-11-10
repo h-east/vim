@@ -19,6 +19,7 @@ SRC_ALL =	\
 		.github/workflows/coverity.yml \
 		.github/workflows/link-check.yml \
 		.github/actions/build_vim_on_linux/action.yml \
+		.github/actions/install_packages_on_linux/action.yml \
 		.github/actions/test_artifacts/action.yml \
 		.github/dependabot.yml \
 		.gitignore \
